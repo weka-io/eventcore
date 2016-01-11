@@ -1,0 +1,3 @@
+name "eventcore"
+description "Callback based abstraction layer over operating system asynchronous I/O facilities."
+
