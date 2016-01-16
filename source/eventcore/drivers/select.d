@@ -1,7 +1,7 @@
-module eventcore.select;
+module eventcore.drivers.select;
 @safe: /*@nogc:*/ nothrow:
 
-public import eventcore.posix;
+public import eventcore.drivers.posix;
 import eventcore.internal.utils;
 
 import core.time : Duration;

@@ -1,9 +1,9 @@
-module eventcore.epoll;
+module eventcore.drivers.epoll;
 @safe: /*@nogc:*/ nothrow:
 
 version (linux):
 
-public import eventcore.posix;
+public import eventcore.drivers.posix;
 import eventcore.internal.utils;
 
 import core.time : Duration;

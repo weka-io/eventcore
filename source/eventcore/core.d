@@ -2,8 +2,8 @@ module eventcore.core;
 
 public import eventcore.driver;
 
-import eventcore.epoll;
-import eventcore.select;
+import eventcore.drivers.epoll;
+import eventcore.drivers.select;
 
 alias NativeEventDriver = SelectEventDriver;
 

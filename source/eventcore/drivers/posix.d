@@ -1,8 +1,8 @@
-module eventcore.posix;
+module eventcore.drivers.posix;
 @safe: /*@nogc:*/ nothrow:
 
 public import eventcore.driver;
-import eventcore.timer;
+import eventcore.drivers.timer;
 import eventcore.internal.utils;
 
 import std.socket : Address, AddressFamily, UnknownAddress;

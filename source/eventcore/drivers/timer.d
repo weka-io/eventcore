@@ -1,4 +1,4 @@
-module eventcore.timer;
+module eventcore.drivers.timer;
 
 import eventcore.driver;
 
