@@ -5,8 +5,15 @@ public import eventcore.posix;
 import eventcore.internal.utils;
 
 import core.time : Duration;
-import core.sys.posix.sys.time : timeval;
-import core.sys.posix.sys.select;
+
+version (Posix) {
+	import core.sys.posix.sys.time : timeval;
+	import core.sys.posix.sys.select;
+}
+
+version (Windows) {
+	import core.sys.windows.winsock2;
+}
 
 
 final class SelectEventDriver : PosixEventDriver {

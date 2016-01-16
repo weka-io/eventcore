@@ -6,12 +6,17 @@ import eventcore.timer;
 import eventcore.internal.utils;
 
 import std.socket : Address, AddressFamily, UnknownAddress;
-import core.sys.posix.netinet.in_;
-import core.sys.posix.netinet.tcp;
-import core.sys.posix.unistd : close;
-import core.stdc.errno : errno, EAGAIN, EINPROGRESS;
-import core.sys.posix.fcntl;
-version (Windows) import core.sys.windows.winsock;
+version (Posix) {
+	import core.sys.posix.netinet.in_;
+	import core.sys.posix.netinet.tcp;
+	import core.sys.posix.unistd : close;
+	import core.stdc.errno : errno, EAGAIN, EINPROGRESS;
+	import core.sys.posix.fcntl;
+}
+version (Windows) {
+	import core.sys.windows.winsock2;
+	alias EAGAIN = WSAEWOULDBLOCK;
+}
 
 
 private long currStdTime()
@@ -65,7 +70,7 @@ abstract class PosixEventDriver : EventDriver {
 		auto sock = cast(StreamSocketFD)createSocket(address.addressFamily);
 		if (sock == -1) return StreamSocketFD.invalid;
 
-		void invalidateSocket() @nogc @trusted nothrow { close(sock); sock = StreamSocketFD.invalid; }
+		void invalidateSocket() @nogc @trusted nothrow { closeSocket(sock); sock = StreamSocketFD.invalid; }
 
 		scope bind_addr = new UnknownAddress;
 		bind_addr.name.sa_family = cast(ushort)address.addressFamily;
@@ -82,7 +87,7 @@ abstract class PosixEventDriver : EventDriver {
 		if (ret == 0) {
 			on_connect(sock, ConnectStatus.connected);
 		} else {
-			auto err = errno;
+			auto err = getSocketError();
 			if (err == EINPROGRESS) {
 				with (m_fds[sock]) {
 					connectCallback = on_connect;
@@ -115,7 +120,7 @@ abstract class PosixEventDriver : EventDriver {
 	{
 		auto sock = cast(StreamListenSocketFD)createSocket(address.addressFamily);
 
-		void invalidateSocket() @nogc @trusted nothrow { close(sock); sock = StreamSocketFD.invalid; }
+		void invalidateSocket() @nogc @trusted nothrow { closeSocket(sock); sock = StreamSocketFD.invalid; }
 
 		() @trusted {
 			int tmp_reuse = 1;
@@ -148,10 +153,12 @@ abstract class PosixEventDriver : EventDriver {
 		scope addr = new UnknownAddress;
 		foreach (i; 0 .. 20) {
 			int sockfd;
-			uint addr_len = addr.nameLen;
+			version (Windows) int addr_len = addr.nameLen;
+			else uint addr_len = addr.nameLen;
 			() @trusted { sockfd = accept(listenfd, addr.name, &addr_len); } ();
 			if (sockfd == -1) break;
-			() @trusted { fcntl(sockfd, F_SETFL, O_NONBLOCK, 1); } ();
+
+			setSocketNonBlocking(cast(SocketFD)sockfd);
 			auto fd = cast(StreamSocketFD)sockfd;
 			registerFD(fd, EventMask.read|EventMask.write|EventMask.status);
 			addFD(fd);
@@ -172,7 +179,7 @@ abstract class PosixEventDriver : EventDriver {
 		() @trusted { ret = recv(socket, buffer.ptr, buffer.length, 0); } ();
 
 		if (ret < 0) {
-			auto err = errno;
+			auto err = getSocketError();
 			if (err != EAGAIN) {
 				print("sock error %s!", err);
 				on_read_finish(socket, IOStatus.error, 0);
@@ -226,7 +233,7 @@ abstract class PosixEventDriver : EventDriver {
 		sizediff_t ret;
 		() @trusted { ret = recv(socket, slot.readBuffer.ptr, slot.readBuffer.length, 0); } ();
 		if (ret < 0) {
-			auto err = errno;
+			auto err = getSocketError();
 			if (err != EAGAIN) {
 				finalize(IOStatus.error);
 				return;
@@ -254,7 +261,7 @@ abstract class PosixEventDriver : EventDriver {
 		() @trusted { ret = send(socket, buffer.ptr, buffer.length, 0); } ();
 
 		if (ret < 0) {
-			auto err = errno;
+			auto err = getSocketError();
 			if (err != EAGAIN) {
 				on_write_finish(socket, IOStatus.error, 0);
 				return;
@@ -301,7 +308,7 @@ abstract class PosixEventDriver : EventDriver {
 		() @trusted { ret = send(socket, slot.writeBuffer.ptr, slot.writeBuffer.length, 0); } ();
 
 		if (ret < 0) {
-			auto err = errno;
+			auto err = getSocketError();
 			if (err != EAGAIN) {
 				setNotifyCallback!(EventType.write)(socket, null);
 				slot.readCallback(socket, IOStatus.error, slot.bytesRead);
@@ -333,7 +340,7 @@ abstract class PosixEventDriver : EventDriver {
 		() @trusted { ret = recv(socket, &dummy, 1, MSG_PEEK); } ();
 
 		if (ret < 0) {
-			auto err = errno;
+			auto err = getSocketError();
 			if (err != EAGAIN) {
 				on_data_available(socket, IOStatus.error, 0);
 				return;
@@ -378,7 +385,7 @@ abstract class PosixEventDriver : EventDriver {
 		ubyte tmp;
 		() @trusted { ret = recv(socket, &tmp, 1, MSG_PEEK); } ();
 		if (ret < 0) {
-			auto err = errno;
+			auto err = getSocketError();
 			if (err != EAGAIN) finalize(IOStatus.error);
 		} else finalize(ret ? IOStatus.ok : IOStatus.disconnected);
 	}
@@ -432,7 +439,7 @@ abstract class PosixEventDriver : EventDriver {
 		if (--m_fds[fd].refCount == 0) {
 			unregisterFD(fd);
 			clearFD(fd);
-			close(fd);
+			closeSocket(fd);
 		}
 	}
 
@@ -502,8 +509,7 @@ abstract class PosixEventDriver : EventDriver {
 		int sock;
 		() @trusted { sock = socket(family, SOCK_STREAM, 0); } ();
 		if (sock == -1) return SocketFD.invalid;
-		int on = 1;
-		() @trusted { fcntl(sock, F_SETFL, O_NONBLOCK, on); } ();
+		setSocketNonBlocking(cast(SocketFD)sock);
 		return cast(SocketFD)sock;
 	}
 
@@ -559,6 +565,28 @@ enum EventMask {
 	read = 1<<0,
 	write = 1<<1,
 	status = 1<<2
+}
+
+private void closeSocket(SocketFD sockfd)
+@nogc {
+	version (Windows) () @trusted { closesocket(sockfd); } ();
+	else close(sockfd);
+}
+
+private void setSocketNonBlocking(SocketFD sockfd)
+{
+	version (Windows) {
+		size_t enable = 1;
+		() @trusted { ioctlsocket(sockfd, FIONBIO, &enable); } ();
+	} else {
+		() @trusted { fcntl(sockfd, F_SETFL, O_NONBLOCK, 1); } ();
+	}
+}
+
+private int getSocketError()
+@nogc {
+	version (Windows) return WSAGetLastError();
+	else return errno;
 }
 
 
