@@ -1,6 +1,8 @@
 module eventcore.epoll;
 @safe: /*@nogc:*/ nothrow:
 
+version (linux):
+
 public import eventcore.posix;
 import eventcore.internal.utils;
 
