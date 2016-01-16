@@ -1,3 +1,6 @@
+/**
+	Efficient generic management of large numbers of timers.
+*/
 module eventcore.drivers.timer;
 
 import eventcore.driver;

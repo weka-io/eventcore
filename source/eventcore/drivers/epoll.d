@@ -1,3 +1,9 @@
+/**
+	Linux epoll based event driver implementation.
+
+	Epoll is an efficient API for asynchronous I/O on Linux, suitable for large
+	numbers of concurrently open sockets.
+*/
 module eventcore.drivers.epoll;
 @safe: /*@nogc:*/ nothrow:
 

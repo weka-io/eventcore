@@ -1,3 +1,10 @@
+/**
+	A `select` based event driver implementation.
+
+	This driver works on all BSD socket compatible operating systems, including
+	Windows. It has a good performance for small numbers of cuncurrently open
+	files/sockets, but is not suited for larger amounts.
+*/
 module eventcore.drivers.select;
 @safe: /*@nogc:*/ nothrow:
 
