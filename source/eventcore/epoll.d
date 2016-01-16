@@ -70,6 +70,7 @@ final class EpollEventDriver : PosixEventDriver {
 	{
 		//print("update %s %s", fd, mask);
 		epoll_event ev;
+		ev.events |= EPOLLET;
 		//ev.events = EPOLLONESHOT;
 		if (mask & EventMask.read) ev.events |= EPOLLIN;
 		if (mask & EventMask.write) ev.events |= EPOLLOUT;
