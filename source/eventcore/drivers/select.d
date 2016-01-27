@@ -24,7 +24,7 @@ version (Windows) {
 
 
 final class SelectEventDriver : PosixEventDriver {
-	override void doProcessEvents(Duration timeout)
+	override bool doProcessEvents(Duration timeout)
 	{
 		//assert(Fiber.getThis() is null, "processEvents may not be called from within a fiber!");
 //scope (failure) assert(false); import std.stdio; writefln("%.3f: process %s ms", Clock.currAppTick.usecs * 1e-3, timeout.total!"msecs");
@@ -61,7 +61,8 @@ final class SelectEventDriver : PosixEventDriver {
 				if (FD_ISSET(fd, &statusfds))
 					notify!(EventType.status)(fd);
 			});
-		}
+			return true;
+		} else return false;
 	}
 
 	override void dispose()

@@ -29,7 +29,7 @@ final class EpollEventDriver : PosixEventDriver {
 		m_events.length = 100;
 	}
 
-	override void doProcessEvents(Duration timeout)
+	override bool doProcessEvents(Duration timeout)
 	@trusted {
 		import std.algorithm : min;
 		//assert(Fiber.getThis() is null, "processEvents may not be called from within a fiber!");
@@ -49,7 +49,8 @@ final class EpollEventDriver : PosixEventDriver {
 				if (evt.events & EPOLLERR) notify!(EventType.status)(fd);
 				else if (evt.events & EPOLLHUP) notify!(EventType.status)(fd);
 			}
-		}
+			return true;
+		} else return false;
 	}
 
 	override void dispose()

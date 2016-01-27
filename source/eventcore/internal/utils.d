@@ -34,7 +34,7 @@ struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
 	import core.stdc.stdlib : calloc, free, malloc, realloc;
 	import std.traits : hasElaborateDestructor;
 
-	static assert(!hasElaborateDestructor!T);
+	static assert(!hasElaborateDestructor!T, "Cannot store element with elaborate destructor in ChoppedVector.");
 
 	alias chunkSize = CHUNK_SIZE;
 

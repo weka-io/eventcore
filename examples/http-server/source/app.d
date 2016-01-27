@@ -49,7 +49,7 @@ struct ClientHandler {
 	{
 		onLine = on_line;
 		if (linefill >= 2) onReadData(client, IOStatus.ok, 0);
-		else eventDriver.readSocket(client, linebuf[linefill .. $], &onReadData, IOMode.once);
+		else eventDriver.readSocket(client, linebuf[linefill .. $], IOMode.once, &onReadData);
 	}
 
 	void onRequestLine(ubyte[] ln)
@@ -68,7 +68,7 @@ struct ClientHandler {
 	{
 		if (ln.length == 0) {
 			auto reply = cast(const(ubyte)[])"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\nKeep-Alive: timeout=10\r\n\r\nHello, World!";
-			eventDriver.writeSocket(client, reply, &onWriteFinished, IOMode.all);
+			eventDriver.writeSocket(client, reply, IOMode.all, &onWriteFinished);
 		} else readLine(&onHeaderLine);
 	}
 
@@ -101,7 +101,7 @@ struct ClientHandler {
 
 			onLine(linebuf[linefill + idx + 2 .. linefill + idx + 2 + idx]);
 		} else if (linebuf.length - linefill > 0) {
-			eventDriver.readSocket(client, linebuf[linefill .. $], &onReadData, IOMode.once);
+			eventDriver.readSocket(client, linebuf[linefill .. $], IOMode.once, &onReadData);
 		} else {
 			// ERROR: header line too long
 			print("Header line too long");

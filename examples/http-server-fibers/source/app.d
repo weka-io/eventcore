@@ -98,7 +98,7 @@ struct StreamConnectionImpl {
 	{
 		reader.start();
 		if (m_readBufferFill >= 2) onReadLineData(m_socket, IOStatus.ok, 0);
-		else eventDriver.readSocket(m_socket, m_readBuffer[m_readBufferFill .. $], &onReadLineData, IOMode.once);
+		else eventDriver.readSocket(m_socket, m_readBuffer[m_readBufferFill .. $], IOMode.once, &onReadLineData);
 		reader.wait();
 		auto ln = m_line;
 		m_line = null;
@@ -108,7 +108,7 @@ struct StreamConnectionImpl {
 	void write(const(ubyte)[] data)
 	{
 		writer.start();
-		eventDriver.writeSocket(m_socket, data, &onWrite, IOMode.all);
+		eventDriver.writeSocket(m_socket, data, IOMode.all, &onWrite);
 		writer.wait();
 	}
 
@@ -159,7 +159,7 @@ struct StreamConnectionImpl {
 
 			reader.finish();
 		} else if (m_readBuffer.length - m_readBufferFill > 0) {
-			eventDriver.readSocket(m_socket, m_readBuffer[m_readBufferFill .. $], &onReadLineData, IOMode.once);
+			eventDriver.readSocket(m_socket, m_readBuffer[m_readBufferFill .. $], IOMode.once, &onReadLineData);
 		} else {
 			reader.finish(exh);
 		}
@@ -174,9 +174,9 @@ void main()
 	auto listener = eventDriver.listenStream(addr, toDelegate(&onClientConnect));
 	enforce(listener != StreamListenSocketFD.invalid, "Failed to listen for connections.");
 
-	import core.time : msecs;
+	/*import core.time : msecs;
 	eventDriver.setTimer(eventDriver.createTimer((tm) { print("timer 1"); }), 1000.msecs, 1000.msecs);
-	eventDriver.setTimer(eventDriver.createTimer((tm) { print("timer 2"); }), 250.msecs, 500.msecs);
+	eventDriver.setTimer(eventDriver.createTimer((tm) { print("timer 2"); }), 250.msecs, 500.msecs);*/
 
 	print("Listening for requests on port 8080...");
 	while (eventDriver.waiterCount)
@@ -209,7 +209,7 @@ struct ClientHandler {
 
 		auto conn = StreamConnection(client, linebuf);
 		try {
-			while (!conn.empty) {
+			while (true) {
 				conn.readLine();
 
 				ubyte[] ln;

@@ -36,7 +36,17 @@ interface EventDriver {
 				the default duration of `Duration.max`, if necessary, will wait
 				indefinitely until an event arrives.
 	*/
-	void processEvents(Duration timeout = Duration.max);
+	ExitReason processEvents(Duration timeout = Duration.max);
+
+	/**
+		Causes `processEvents` to return with `ExitReason.exited` as soon as
+		possible.
+
+		A call to `processEvents` that is currently in progress will be notfied
+		so that it returns immediately. If no call is in progress, the next call
+		to `processEvents` will immediately return with `ExitReason.exited`.
+	*/
+	void exit();
 
 	//
 	// TCP
@@ -46,8 +56,8 @@ interface EventDriver {
 	void waitForConnections(StreamListenSocketFD sock, AcceptCallback on_accept);
 
 	void setTCPNoDelay(StreamSocketFD socket, bool enable);
-	void readSocket(StreamSocketFD socket, ubyte[] buffer, IOCallback on_read_finish, IOMode mode = IOMode.once);
-	void writeSocket(StreamSocketFD socket, const(ubyte)[] buffer, IOCallback on_write_finish, IOMode mode = IOMode.once);
+	void readSocket(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish);
+	void writeSocket(StreamSocketFD socket, const(ubyte)[] buffer, IOMode mode, IOCallback on_write_finish);
 	void waitSocketData(StreamSocketFD socket, IOCallback on_data_available);
 	void shutdownSocket(StreamSocketFD socket, bool shut_read = true, bool shut_write = true);
 
@@ -56,6 +66,7 @@ interface EventDriver {
 	//
 	EventID createEvent();
 	void triggerEvent(EventID event, bool notify_all = true);
+	void triggerEvent(EventID event, bool notify_all = true) shared;
 	EventWaitID waitForEvent(EventID event, EventCallback on_event);
 	void stopWaitingForEvent(EventID event, EventWaitID wait_id);
 
@@ -104,6 +115,13 @@ alias AcceptCallback = void delegate(StreamListenSocketFD, StreamSocketFD);
 alias IOCallback = void delegate(StreamSocketFD, IOStatus, size_t);
 alias EventCallback = void delegate(EventID);
 alias TimerCallback = void delegate(TimerID);
+
+enum ExitReason {
+	timeout,
+	idle,
+	outOfWaiters,
+	exited
+}
 
 enum ConnectStatus {
 	connected,
@@ -155,8 +173,6 @@ alias SocketFD = Handle!FD;
 alias StreamSocketFD = Handle!SocketFD;
 alias StreamListenSocketFD = Handle!SocketFD;
 alias FileFD = Handle!FD;
-
+alias EventID = Handle!FD;
 alias TimerID = Handle!int;
-alias EventID = Handle!int;
 alias EventWaitID = Handle!int;
-

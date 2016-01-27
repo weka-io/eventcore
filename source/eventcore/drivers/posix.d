@@ -14,13 +14,17 @@ import std.socket : Address, AddressFamily, UnknownAddress;
 version (Posix) {
 	import core.sys.posix.netinet.in_;
 	import core.sys.posix.netinet.tcp;
-	import core.sys.posix.unistd : close;
+	import core.sys.posix.unistd : close, write;
 	import core.stdc.errno : errno, EAGAIN, EINPROGRESS;
 	import core.sys.posix.fcntl;
 }
 version (Windows) {
 	import core.sys.windows.winsock2;
 	alias EAGAIN = WSAEWOULDBLOCK;
+}
+version (linux) {
+	extern (C) int eventfd(uint initval, int flags);
+	enum EFD_NONBLOCK = 0x800;
 }
 
 
@@ -37,6 +41,16 @@ abstract class PosixEventDriver : EventDriver {
 	private {
 		ChoppedVector!FDSlot m_fds;
 		size_t m_waiterCount = 0;
+		bool m_exit = false;
+		FD m_wakeupEvent;
+	}
+
+	protected this()
+	{
+		m_wakeupEvent = eventfd(0, EFD_NONBLOCK);
+		initFD(m_wakeupEvent);
+		registerFD(m_wakeupEvent, EventMask.read);
+		//startNotify!(EventType.read)(m_wakeupEvent, null); // should already be caught by registerFD
 	}
 
 	mixin DefaultTimerImpl!();
@@ -45,29 +59,53 @@ abstract class PosixEventDriver : EventDriver {
 
 	@property size_t waiterCount() const { return m_waiterCount; }
 
-	final override void processEvents(Duration timeout)
+	final override ExitReason processEvents(Duration timeout)
 	{
 		import std.algorithm : min;
 		import core.time : seconds;
 
+		if (m_exit) {
+			m_exit = false;
+			return ExitReason.exited;
+		}
+
+		if (!waiterCount) return ExitReason.outOfWaiters;
+
+		bool got_events;
+
 		if (timeout <= 0.seconds) {
-			doProcessEvents(0.seconds);
+			got_events = doProcessEvents(0.seconds);
 			processTimers(currStdTime);
 		} else {
 			long now = currStdTime;
 			do {
 				auto nextto = min(getNextTimeout(now), timeout);
-				doProcessEvents(nextto);
+				got_events = doProcessEvents(nextto);
 				long prev_step = now;
 				now = currStdTime;
 				processTimers(now);
 				if (timeout != Duration.max)
 					timeout -= (now - prev_step).hnsecs;
-			} while (timeout > 0.seconds);
+			} while (timeout > 0.seconds && !m_exit && !got_events);
 		}
+
+		if (m_exit) {
+			m_exit = false;
+			return ExitReason.exited;
+		}
+		if (!waiterCount) return ExitReason.outOfWaiters;
+		if (got_events) return ExitReason.idle;
+		return ExitReason.timeout;
 	}
 
-	protected abstract void doProcessEvents(Duration dur);
+	final override void exit()
+	{
+		m_exit = true;
+		int one = 1;
+		() @trusted { write(m_wakeupEvent, &one, one.sizeof); } ();
+	}
+
+	protected abstract bool doProcessEvents(Duration dur);
 	abstract void dispose();
 
 	final override StreamSocketFD connectStream(scope Address address, ConnectCallback on_connect)
@@ -105,7 +143,7 @@ abstract class PosixEventDriver : EventDriver {
 			}
 		}
 
-		addFD(sock);
+		initFD(sock);
 
 		return sock;
 	}
@@ -148,7 +186,7 @@ abstract class PosixEventDriver : EventDriver {
 	final override void waitForConnections(StreamListenSocketFD sock, AcceptCallback on_accept)
 	{
 		registerFD(sock, EventMask.read);
-		addFD(sock);
+		initFD(sock);
 		m_fds[sock].acceptCallback = on_accept;
 		startNotify!(EventType.read)(sock, &onAccept);
 	}
@@ -166,7 +204,7 @@ abstract class PosixEventDriver : EventDriver {
 			setSocketNonBlocking(cast(SocketFD)sockfd);
 			auto fd = cast(StreamSocketFD)sockfd;
 			registerFD(fd, EventMask.read|EventMask.write|EventMask.status);
-			addFD(fd);
+			initFD(fd);
 			//print("accept %d", sockfd);
 			m_fds[listenfd].acceptCallback(cast(StreamListenSocketFD)listenfd, fd);
 		}
@@ -178,7 +216,7 @@ abstract class PosixEventDriver : EventDriver {
 		() @trusted { setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, cast(char*)&opt, opt.sizeof); } ();
 	}
 
-	final override void readSocket(StreamSocketFD socket, ubyte[] buffer, IOCallback on_read_finish, IOMode mode = IOMode.all)
+	final override void readSocket(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish)
 	{
 		sizediff_t ret;
 		() @trusted { ret = recv(socket, buffer.ptr, buffer.length, 0); } ();
@@ -260,7 +298,7 @@ abstract class PosixEventDriver : EventDriver {
 		}
 	}
 
-	final override void writeSocket(StreamSocketFD socket, const(ubyte)[] buffer, IOCallback on_write_finish, IOMode mode = IOMode.all)
+	final override void writeSocket(StreamSocketFD socket, const(ubyte)[] buffer, IOMode mode, IOCallback on_write_finish)
 	{
 		sizediff_t ret;
 		() @trusted { ret = send(socket, buffer.ptr, buffer.length, 0); } ();
@@ -402,22 +440,45 @@ abstract class PosixEventDriver : EventDriver {
 
 	final override EventID createEvent()
 	{
-		assert(false);
+		auto id = cast(EventID)eventfd(0, EFD_NONBLOCK);
+		initFD(id);
+		registerFD(id, EventMask.read);
+		startNotify!(EventType.read)(id, &onEvent);
+		return id;
 	}
 
 	final override void triggerEvent(EventID event, bool notify_all = true)
 	{
+		foreach (w; m_fds[event].waiters.consume)
+			w(event);
+	}
+
+	final override void triggerEvent(EventID event, bool notify_all = true)
+	shared {
+		/*int one = 1;
+		if (notify_all) atomicStore(m_fds[event].triggerAll, true);
+		() @trusted { write(event, &one, one.sizeof); } ();*/
 		assert(false);
 	}
 
 	final override EventWaitID waitForEvent(EventID event, EventCallback on_event)
 	{
+		//return m_fds[event].waiters.put(on_event);
 		assert(false);
 	}
 
 	final override void stopWaitingForEvent(EventID event, EventWaitID wait_id)
 	{
 		assert(false);
+		//m_fds[event].waiters.remove(wait_id);
+	}
+
+	private void onEvent(FD event)
+	{
+		assert(false);
+		/*auto all = atomicLoad(m_fds[event].triggerAll);
+		atomicStore(m_fds[event].triggerAll, false);
+		triggerEvent(cast(EventID)event, all);*/
 	}
 
 	final override void addRef(SocketFD fd)
@@ -434,7 +495,9 @@ abstract class PosixEventDriver : EventDriver {
 
 	final override void addRef(EventID descriptor)
 	{
-		assert(false);
+		auto pfd = &m_fds[descriptor];
+		assert(pfd.refCount > 0);
+		m_fds[descriptor].refCount++;
 	}
 
 	final override void releaseRef(SocketFD fd)
@@ -460,7 +523,13 @@ abstract class PosixEventDriver : EventDriver {
 	
 	final override void releaseRef(EventID descriptor)
 	{
-		assert(false);
+		auto pfd = &m_fds[descriptor];
+		assert(pfd.refCount > 0);
+		if (--m_fds[descriptor].refCount == 0) {
+			unregisterFD(descriptor);
+			clearFD(descriptor);
+			close(descriptor);
+		}
 	}
 	
 
@@ -490,7 +559,6 @@ abstract class PosixEventDriver : EventDriver {
 	{
 		//assert(m_fds[fd].callback[evt] is null, "Waiting for event which is already being waited for.");
 		m_fds[fd].callback[evt] = callback;
-		assert(m_fds[0].callback[evt] is null);
 		m_waiterCount++;
 		updateFD(fd, m_fds[fd].eventMask);
 	}
@@ -518,7 +586,7 @@ abstract class PosixEventDriver : EventDriver {
 		return cast(SocketFD)sock;
 	}
 
-	private void addFD(FD fd)
+	private void initFD(FD fd)
 	{
 		m_fds[fd].refCount = 1;
 	}
@@ -534,6 +602,8 @@ alias FDEnumerateCallback = void delegate(FD);
 alias FDSlotCallback = void delegate(FD);
 
 private struct FDSlot {
+	import eventcore.internal.consumablequeue;
+
 	FDSlotCallback[EventType.max+1] callback;
 
 	uint refCount;
@@ -550,6 +620,7 @@ private struct FDSlot {
 
 	ConnectCallback connectCallback;
 	AcceptCallback acceptCallback;
+	ConsumableQueue!EventCallback waiters;
 
 	@property EventMask eventMask() const nothrow {
 		EventMask ret = cast(EventMask)0;
