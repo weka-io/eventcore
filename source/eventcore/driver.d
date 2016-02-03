@@ -67,8 +67,7 @@ interface EventDriver {
 	EventID createEvent();
 	void triggerEvent(EventID event, bool notify_all = true);
 	void triggerEvent(EventID event, bool notify_all = true) shared;
-	EventWaitID waitForEvent(EventID event, EventCallback on_event);
-	void stopWaitingForEvent(EventID event, EventWaitID wait_id);
+	void waitForEvent(EventID event, EventCallback on_event);
 
 	//
 	// Timers
@@ -78,6 +77,7 @@ interface EventDriver {
 	void stopTimer(TimerID timer);
 	bool isTimerPending(TimerID timer);
 	bool isTimerPeriodic(TimerID timer);
+	void waitTimer(TimerID timer, TimerCallback callback);
 
 	//
 	// Resource ownership
@@ -98,7 +98,7 @@ interface EventDriver {
 		Decrements the reference count of the given resource.
 
 		Once the reference count reaches zero, all associated resources will be
-		freed and the descriptor gets invalidated.
+		freed and the resource descriptor gets invalidated.
 	*/
 	void releaseRef(SocketFD descriptor);
 	/// ditto

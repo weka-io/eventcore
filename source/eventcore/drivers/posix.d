@@ -449,36 +449,34 @@ abstract class PosixEventDriver : EventDriver {
 
 	final override void triggerEvent(EventID event, bool notify_all = true)
 	{
-		foreach (w; m_fds[event].waiters.consume)
-			w(event);
+		if (notify_all) {
+			foreach (w; m_fds[event].waiters.consume)
+				w(event);
+		} else {
+			if (!m_fds[event].waiters.empty)
+				m_fds[event].waiters.consumeOne();
+		}
 	}
 
 	final override void triggerEvent(EventID event, bool notify_all = true)
-	shared {
-		/*int one = 1;
-		if (notify_all) atomicStore(m_fds[event].triggerAll, true);
-		() @trusted { write(event, &one, one.sizeof); } ();*/
-		assert(false);
+	shared @trusted {
+		import core.atomic : atomicStore;
+		auto thisus = cast(PosixEventDriver)this;
+		int one = 1;
+		if (notify_all) atomicStore(thisus.m_fds[event].triggerAll, true);
+		() @trusted { write(event, &one, one.sizeof); } ();
 	}
 
-	final override EventWaitID waitForEvent(EventID event, EventCallback on_event)
+	final override void waitForEvent(EventID event, EventCallback on_event)
 	{
-		//return m_fds[event].waiters.put(on_event);
-		assert(false);
-	}
-
-	final override void stopWaitingForEvent(EventID event, EventWaitID wait_id)
-	{
-		assert(false);
-		//m_fds[event].waiters.remove(wait_id);
+		return m_fds[event].waiters.put(on_event);
 	}
 
 	private void onEvent(FD event)
-	{
-		assert(false);
-		/*auto all = atomicLoad(m_fds[event].triggerAll);
-		atomicStore(m_fds[event].triggerAll, false);
-		triggerEvent(cast(EventID)event, all);*/
+	@trusted {
+		import core.atomic : cas;
+		auto all = cas(&m_fds[event].triggerAll, true, false);
+		triggerEvent(cast(EventID)event, all);
 	}
 
 	final override void addRef(SocketFD fd)
@@ -621,6 +619,7 @@ private struct FDSlot {
 	ConnectCallback connectCallback;
 	AcceptCallback acceptCallback;
 	ConsumableQueue!EventCallback waiters;
+	shared bool triggerAll;
 
 	@property EventMask eventMask() const nothrow {
 		EventMask ret = cast(EventMask)0;

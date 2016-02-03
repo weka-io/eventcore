@@ -4,6 +4,7 @@ module eventcore.internal.consumablequeue;
 */
 class ConsumableQueue(T)
 {
+	@safe:
 	nothrow:
 
 	private {
@@ -19,6 +20,8 @@ class ConsumableQueue(T)
 	}
 
 	@property size_t length() const { return m_pendingCount; }
+
+	@property bool empty() const { return length == 0; }
 
 	/** Inserts a single element into the queue.
 	*/
@@ -62,6 +65,15 @@ class ConsumableQueue(T)
 		m_first += count;
 		m_pendingCount = 0;
 		return ConsumedRange(this, first, count);
+	}
+
+	T consumeOne()
+	{
+		assert(!empty);
+		auto ret = m_storage[(m_first + m_consumedCount) & m_capacityMask].value;
+		if (m_consumedCount) m_consumedCount++;
+		else m_first = (m_first + 1) & m_capacityMask;
+		return ret;
 	}
 
 	static struct ConsumedRange {

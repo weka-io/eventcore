@@ -124,6 +124,11 @@ mixin template DefaultTimerImpl() {
 		return m_timers[descriptor].repeatDuration > 0;
 	}
 
+	final override void waitTimer(TimerID timer, TimerCallback callback)
+	{
+		assert(false);
+	}
+
 	final override void addRef(TimerID descriptor)
 	{
 		m_timers[descriptor].refCount++;
