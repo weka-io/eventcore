@@ -55,6 +55,7 @@ final class EpollEventDriver : PosixEventDriver {
 
 	override void dispose()
 	{
+		import core.sys.posix.unistd : close;
 		close(m_epoll);
 	}
 

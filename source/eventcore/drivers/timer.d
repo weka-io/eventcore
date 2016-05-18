@@ -14,7 +14,7 @@ mixin template DefaultTimerImpl() {
 	import std.container.array;
 	import std.datetime : Clock;
 	import std.range : SortedRange, assumeSorted, take;
-	import core.time : hnsecs;
+	import core.time : hnsecs, Duration;
 
 	private {
 		static FreeList!(Mallocator, TimerSlot.sizeof) ms_allocator;
@@ -59,7 +59,8 @@ mixin template DefaultTimerImpl() {
 		m_timerQueue.linearRemove(elems);
 
 		foreach (tm; m_firedTimers)
-			tm.callback(tm.id);
+			foreach (cb; tm.callbacks)
+				cb(tm.id);
 		
 		m_firedTimers.length = 0;
 		m_firedTimers.assumeSafeAppend();
@@ -74,7 +75,7 @@ mixin template DefaultTimerImpl() {
 		assert(tm !is null);
 		tm.id = id;
 		tm.refCount = 1;
-		tm.callback = callback;
+		tm.callbacks ~= callback;
 		m_timers[id] = tm;
 		return id;
 	}
@@ -98,7 +99,7 @@ mixin template DefaultTimerImpl() {
 		auto tm = m_timers[timer];
 		if (!tm.pending) return;
 		tm.pending = false;
-		tm.callback = null;
+		tm.callbacks.length = 0;
 
 		TimerSlot cmp = void;
 		cmp.timeout = tm.timeout-1;
@@ -126,7 +127,7 @@ mixin template DefaultTimerImpl() {
 
 	final override void waitTimer(TimerID timer, TimerCallback callback)
 	{
-		assert(false);
+		m_timers[timer].callbacks ~= callback;
 	}
 
 	final override void addRef(TimerID descriptor)
@@ -151,5 +152,5 @@ struct TimerSlot {
 	bool pending;
 	long timeout; // stdtime
 	long repeatDuration;
-	TimerCallback callback;
+	TimerCallback[] callbacks; // TODO: use a list with small-value optimization
 }
