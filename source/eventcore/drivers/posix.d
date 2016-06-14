@@ -161,6 +161,7 @@ abstract class PosixEventDriver : EventDriver {
 
 	final override StreamListenSocketFD listenStream(scope Address address, AcceptCallback on_accept)
 	{
+		log("Listen stream");
 		auto sock = cast(StreamListenSocketFD)createSocket(address.addressFamily);
 
 		void invalidateSocket() @nogc @trusted nothrow { closeSocket(sock); sock = StreamSocketFD.invalid; }
@@ -169,12 +170,15 @@ abstract class PosixEventDriver : EventDriver {
 			int tmp_reuse = 1;
 			// FIXME: error handling!
 			if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &tmp_reuse, tmp_reuse.sizeof) != 0) {
+				log("setsockopt failed.");
 				invalidateSocket();
 			} else if (bind(sock, address.name, address.nameLen) != 0) {
+				log("bind failed.");
 				invalidateSocket();
 			} else if (listen(sock, 128) != 0) {
+				log("listen failed.");
 				invalidateSocket();
-			} else { scope (failure) assert(false); import std.stdio; writeln("Success!"); }
+			} else log("Success!");
 		} ();
 
 		if (on_accept && sock != StreamListenSocketFD.invalid)
@@ -185,6 +189,7 @@ abstract class PosixEventDriver : EventDriver {
 
 	final override void waitForConnections(StreamListenSocketFD sock, AcceptCallback on_accept)
 	{
+		log("wait for conn");
 		registerFD(sock, EventMask.read);
 		initFD(sock);
 		m_fds[sock].acceptCallback = on_accept;
@@ -210,6 +215,11 @@ abstract class PosixEventDriver : EventDriver {
 		}
 	}
 
+	ConnectionState getConnectionState(StreamSocketFD sock)
+	{
+		assert(false);
+	}
+
 	final override void setTCPNoDelay(StreamSocketFD socket, bool enable)
 	{
 		int opt = enable;
@@ -218,6 +228,11 @@ abstract class PosixEventDriver : EventDriver {
 
 	final override void readSocket(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish)
 	{
+		if (buffer.length == 0) {
+			on_read_finish(socket, IOStatus.ok, 0);
+			return;
+		}
+
 		sizediff_t ret;
 		() @trusted { ret = recv(socket, buffer.ptr, buffer.length, 0); } ();
 
@@ -261,6 +276,16 @@ abstract class PosixEventDriver : EventDriver {
 		setNotifyCallback!(EventType.read)(socket, &onSocketRead);
 	}
 
+	override void cancelRead(StreamSocketFD socket)
+	{
+		assert(m_fds[socket].readCallback !is null, "Cancelling read when there is no read in progress.");
+		setNotifyCallback!(EventType.read)(socket, null);
+		with (m_fds[socket]) {
+			readBuffer = null;
+			readCallback(socket, IOStatus.cancelled, bytesRead);
+		}
+	}
+
 	private void onSocketRead(FD fd)
 	{
 		auto slot = &m_fds[fd];
@@ -300,6 +325,11 @@ abstract class PosixEventDriver : EventDriver {
 
 	final override void writeSocket(StreamSocketFD socket, const(ubyte)[] buffer, IOMode mode, IOCallback on_write_finish)
 	{
+		if (buffer.length == 0) {
+			on_write_finish(socket, IOStatus.ok, 0);
+			return;
+		}
+
 		sizediff_t ret;
 		() @trusted { ret = send(socket, buffer.ptr, buffer.length, 0); } ();
 
@@ -340,6 +370,16 @@ abstract class PosixEventDriver : EventDriver {
 		}
 
 		setNotifyCallback!(EventType.write)(socket, &onSocketWrite);
+	}
+
+	override void cancelWrite(StreamSocketFD socket)
+	{
+		assert(m_fds[socket].readCallback !is null, "Cancelling write when there is no read in progress.");
+		setNotifyCallback!(EventType.write)(socket, null);
+		with (m_fds[socket]) {
+			writeBuffer = null;
+			writeCallback(socket, IOStatus.cancelled, bytesWritten);
+		}
 	}
 
 	private void onSocketWrite(FD fd)
@@ -530,6 +570,20 @@ abstract class PosixEventDriver : EventDriver {
 		}
 	}
 	
+	final override void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+	@system {
+		FDSlot* fds = &m_fds[descriptor];
+		assert(fds.userDataDestructor is null || fds.userDataDestructor is destroy,
+			"Requesting user data with differing type (destructor).");
+		assert(size <= FDSlot.userData.length, "Requested user data is too large.");
+		if (size > FDSlot.userData.length) assert(false);
+		if (!fds.userDataDestructor) {
+			initialize(fds.userData.ptr);
+			fds.userDataDestructor = destroy;
+		}
+		return m_fds[descriptor].userData.ptr;
+	}
+
 
 	/// Registers the FD for general notification reception.
 	protected abstract void registerFD(FD fd, EventMask mask);
@@ -555,6 +609,7 @@ abstract class PosixEventDriver : EventDriver {
 
 	private void startNotify(EventType evt)(FD fd, FDSlotCallback callback)
 	{
+import std.stdio : writefln; try writefln("start notify %s %s", evt, fd); catch(Exception) {}
 		//assert(m_fds[fd].callback[evt] is null, "Waiting for event which is already being waited for.");
 		m_fds[fd].callback[evt] = callback;
 		m_waiterCount++;
@@ -563,6 +618,7 @@ abstract class PosixEventDriver : EventDriver {
 
 	private void stopNotify(EventType evt)(FD fd)
 	{
+import std.stdio : writefln; try writefln("stop notify %s %s", evt, fd); catch(Exception) {}
 		//ssert(m_fds[fd].callback[evt] !is null, "Stopping waiting for event which is not being waited for.");
 		m_fds[fd].callback[evt] = null;
 		m_waiterCount--;
@@ -591,6 +647,8 @@ abstract class PosixEventDriver : EventDriver {
 
 	private void clearFD(FD fd)
 	{
+		if (m_fds[fd].userDataDestructor)
+			() @trusted { m_fds[fd].userDataDestructor(m_fds[fd].userData.ptr); } ();
 		m_fds[fd] = FDSlot.init;
 	}
 }
@@ -619,6 +677,10 @@ private struct FDSlot {
 	ConnectCallback connectCallback;
 	AcceptCallback acceptCallback;
 	ConsumableQueue!EventCallback waiters;
+
+	DataInitializer userDataDestructor;
+	ubyte[16*size_t.sizeof] userData;
+
 	shared bool triggerAll;
 
 	@property EventMask eventMask() const nothrow {
@@ -662,6 +724,13 @@ private int getSocketError()
 @nogc {
 	version (Windows) return WSAGetLastError();
 	else return errno;
+}
+
+void log(ARGS...)(string fmt, ARGS args)
+{
+	import std.stdio;
+	try writefln(fmt, args);
+	catch (Exception) {}
 }
 
 

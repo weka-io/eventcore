@@ -130,6 +130,16 @@ mixin template DefaultTimerImpl() {
 		m_timers[timer].callbacks ~= callback;
 	}
 
+	final override void cancelTimerWait(TimerID timer, TimerCallback callback)
+	{
+		import std.algorithm.mutation : remove;
+		import std.algorithm.searching : countUntil;
+
+		auto pt = m_timers[timer];
+		auto idx = pt.callbacks.countUntil(callback);
+		if (idx >= 0) pt.callbacks = pt.callbacks.remove(idx);
+	}
+
 	final override void addRef(TimerID descriptor)
 	{
 		m_timers[descriptor].refCount++;

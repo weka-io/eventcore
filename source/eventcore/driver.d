@@ -54,12 +54,20 @@ interface EventDriver {
 	StreamSocketFD connectStream(scope Address peer_address, ConnectCallback on_connect);
 	StreamListenSocketFD listenStream(scope Address bind_address, AcceptCallback on_accept);
 	void waitForConnections(StreamListenSocketFD sock, AcceptCallback on_accept);
-
+	ConnectionState getConnectionState(StreamSocketFD sock);
 	void setTCPNoDelay(StreamSocketFD socket, bool enable);
 	void readSocket(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish);
 	void writeSocket(StreamSocketFD socket, const(ubyte)[] buffer, IOMode mode, IOCallback on_write_finish);
 	void waitSocketData(StreamSocketFD socket, IOCallback on_data_available);
 	void shutdownSocket(StreamSocketFD socket, bool shut_read = true, bool shut_write = true);
+	void cancelRead(StreamSocketFD socket);
+	void cancelWrite(StreamSocketFD socket);
+
+	//
+	// Files
+	//
+	//FileFD openFile(string path, FileOpenMode mode);
+	//FileFD createTempFile();
 
 	//
 	// Manual events
@@ -78,6 +86,7 @@ interface EventDriver {
 	bool isTimerPending(TimerID timer);
 	bool isTimerPeriodic(TimerID timer);
 	void waitTimer(TimerID timer, TimerCallback callback);
+	void cancelTimerWait(TimerID timer, TimerCallback callback);
 
 	//
 	// Resource ownership
@@ -107,6 +116,20 @@ interface EventDriver {
 	void releaseRef(TimerID descriptor);
 	/// ditto
 	void releaseRef(EventID descriptor);
+
+
+	/// Low-level user data access. Use `getUserData` instead.
+	protected void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
+
+	/** Retrieves a reference to a user-defined value associated with a descriptor.
+	*/
+	@property final ref T userData(T, FD)(FD descriptor)
+	@trusted {
+		import std.conv : emplace;
+		static void init(void* ptr) { emplace(cast(T*)ptr); }
+		static void destr(void* ptr) { destroy(*cast(T*)ptr); }
+		return *cast(T*)rawUserData(descriptor, T.sizeof, &init, &destr);
+	}
 }
 
 
@@ -115,6 +138,7 @@ alias AcceptCallback = void delegate(StreamListenSocketFD, StreamSocketFD);
 alias IOCallback = void delegate(StreamSocketFD, IOStatus, size_t);
 alias EventCallback = void delegate(EventID);
 alias TimerCallback = void delegate(TimerID);
+@system alias DataInitializer = void function(void*);
 
 enum ExitReason {
 	timeout,
@@ -131,6 +155,15 @@ enum ConnectStatus {
 	unknownError
 }
 
+enum ConnectionState {
+	initialized,
+	connecting,
+	connected,
+	passiveClose,
+	activeClose,
+	closed
+}
+
 enum IOMode {
 	immediate, /// Process only as much as possible without waiting
 	once,      /// Process as much as possible with a single call
@@ -141,6 +174,7 @@ enum IOMode {
 enum IOStatus {
 	ok,           /// The data has been transferred normally
 	disconnected, /// The connection was closed before all data could be transterred
+	cancelled,    /// The operation was cancelled manually
 	error,        /// An error occured while transferring the data
 	wouldBlock    /// Returned for `IOMode.immediate` when no data is readily readable/writable
 }
