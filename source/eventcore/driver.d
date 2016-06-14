@@ -80,7 +80,7 @@ interface EventDriver {
 	//
 	// Timers
 	//
-	TimerID createTimer(TimerCallback callback);
+	TimerID createTimer();
 	void setTimer(TimerID timer, Duration timeout, Duration repeat = Duration.zero);
 	void stopTimer(TimerID timer);
 	bool isTimerPending(TimerID timer);

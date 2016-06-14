@@ -66,7 +66,7 @@ mixin template DefaultTimerImpl() {
 		m_firedTimers.assumeSafeAppend();
 	}
 
-	final override TimerID createTimer(TimerCallback callback)
+	final override TimerID createTimer()
 	@trusted {
 		auto id = cast(TimerID)(m_lastTimerID + 1);
 		TimerSlot* tm;
@@ -75,7 +75,6 @@ mixin template DefaultTimerImpl() {
 		assert(tm !is null);
 		tm.id = id;
 		tm.refCount = 1;
-		tm.callbacks ~= callback;
 		m_timers[id] = tm;
 		return id;
 	}
