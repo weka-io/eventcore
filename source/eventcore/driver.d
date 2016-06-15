@@ -76,6 +76,7 @@ interface EventDriver {
 	void triggerEvent(EventID event, bool notify_all = true);
 	void triggerEvent(EventID event, bool notify_all = true) shared;
 	void waitForEvent(EventID event, EventCallback on_event);
+	void cancelWaitForEvent(EventID event, EventCallback on_event);
 
 	//
 	// Timers
@@ -174,7 +175,6 @@ enum IOMode {
 enum IOStatus {
 	ok,           /// The data has been transferred normally
 	disconnected, /// The connection was closed before all data could be transterred
-	cancelled,    /// The operation was cancelled manually
 	error,        /// An error occured while transferring the data
 	wouldBlock    /// Returned for `IOMode.immediate` when no data is readily readable/writable
 }
