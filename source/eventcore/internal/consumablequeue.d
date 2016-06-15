@@ -56,8 +56,10 @@ class ConsumableQueue(T)
 	{
 		foreach (i; 0 .. m_pendingCount)
 			if (getPendingAt(i) == item) {
-				getPendingAt(i) = getPendingAt(m_pendingCount-1);
+				if (m_pendingCount > 1)
+					getPendingAt(i) = getPendingAt(m_pendingCount-1);
 				m_pendingCount--;
+				break;
 			}
 	}
 
