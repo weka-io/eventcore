@@ -34,10 +34,10 @@ mixin template DefaultTimerImpl() {
 		return m_timerQueue.length ? (m_timerQueue.front.timeout - stdtime).hnsecs : Duration.max;
 	}
 
-	final protected void processTimers(long stdtime)
-	@trusted {
+	final protected bool processTimers(long stdtime)
+	@trusted nothrow {
 		assert(m_firedTimers.length == 0);
-		if (m_timerQueue.empty) return;
+		if (m_timerQueue.empty) return false;
 
 		TimerSlot ts = void;
 		ts.timeout = stdtime+1;
@@ -62,8 +62,12 @@ mixin template DefaultTimerImpl() {
 			foreach (cb; tm.callbacks)
 				cb(tm.id);
 		
+		bool any_fired = m_firedTimers.length > 0;
+
 		m_firedTimers.length = 0;
 		m_firedTimers.assumeSafeAppend();
+
+		return any_fired;
 	}
 
 	final override TimerID createTimer()

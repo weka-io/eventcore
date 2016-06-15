@@ -84,7 +84,7 @@ abstract class PosixEventDriver : EventDriver {
 				got_events = doProcessEvents(nextto);
 				long prev_step = now;
 				now = currStdTime;
-				processTimers(now);
+				got_events |= processTimers(now);
 				if (timeout != Duration.max)
 					timeout -= (now - prev_step).hnsecs;
 			} while (timeout > 0.seconds && !m_exit && !got_events);
