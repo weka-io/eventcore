@@ -106,6 +106,11 @@ abstract class PosixEventDriver : EventDriver {
 		() @trusted { write(m_wakeupEvent, &one, one.sizeof); } ();
 	}
 
+	final override void clearExitFlag()
+	{
+		m_exit = false;
+	}
+
 	protected abstract bool doProcessEvents(Duration dur);
 	abstract void dispose();
 
@@ -491,8 +496,11 @@ abstract class PosixEventDriver : EventDriver {
 	{
 		assert(event < m_fds.length, "Invalid event ID passed to triggerEvent.");
 		if (notify_all) {
-			foreach (w; m_fds[event].waiters.consume)
+			log("emitting");
+			foreach (w; m_fds[event].waiters.consume) {
+				log("emitting %s %s", cast(void*)w.funcptr, w.ptr);
 				w(event);
+			}
 		} else {
 			if (!m_fds[event].waiters.empty)
 				m_fds[event].waiters.consumeOne();
@@ -505,6 +513,7 @@ abstract class PosixEventDriver : EventDriver {
 		auto thisus = cast(PosixEventDriver)this;
 		assert(event < thisus.m_fds.length, "Invalid event ID passed to shared triggerEvent.");
 		int one = 1;
+		log("emitting thread");
 		if (notify_all) atomicStore(thisus.m_fds[event].triggerAll, true);
 		() @trusted { write(event, &one, one.sizeof); } ();
 	}

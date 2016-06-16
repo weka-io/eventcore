@@ -48,6 +48,15 @@ interface EventDriver {
 	*/
 	void exit();
 
+	/** Resets the exit flag.
+
+		`processEvents` will automatically reset the exit flag before it returns
+		with `ExitReason.exited`. However, if `exit` is called outside of
+		`processEvents`, the next call to `processEvents` will return with
+		`ExitCode.exited` immediately. This function can be used to avoid this.
+	*/
+	void clearExitFlag();
+
 	//
 	// TCP
 	//
