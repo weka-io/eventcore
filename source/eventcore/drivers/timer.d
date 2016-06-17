@@ -72,7 +72,7 @@ mixin template DefaultTimerImpl() {
 
 	final override TimerID createTimer()
 	@trusted {
-		auto id = cast(TimerID)(m_lastTimerID + 1);
+		auto id = cast(TimerID)(++m_lastTimerID);
 		TimerSlot* tm;
 		try tm = ms_allocator.make!TimerSlot;
 		catch (Exception e) return TimerID.invalid;
@@ -145,11 +145,19 @@ mixin template DefaultTimerImpl() {
 
 	final override void addRef(TimerID descriptor)
 	{
+		assert(descriptor != TimerID.init, "Invalid timer ID.");
+		assert(descriptor in m_timers, "Unknown timer ID.");
+		if (descriptor !in m_timers) return;
+
 		m_timers[descriptor].refCount++;
 	}
 
 	final override void releaseRef(TimerID descriptor)
 	{
+		assert(descriptor != TimerID.init, "Invalid timer ID.");
+		assert(descriptor in m_timers, "Unknown timer ID.");
+		if (descriptor !in m_timers) return;
+
 		auto tm = m_timers[descriptor];
 		if (!--tm.refCount) {
 			if (tm.pending) stopTimer(tm.id);
