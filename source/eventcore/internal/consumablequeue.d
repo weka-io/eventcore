@@ -99,7 +99,7 @@ class ConsumableQueue(T)
 
 		this(ConsumableQueue queue, size_t first, size_t count)
 		{
-			if (m_count) {
+			if (count) {
 				m_queue = queue;
 				m_first = first;
 				m_count = count;
@@ -148,11 +148,11 @@ class ConsumableQueue(T)
 	private void consumed(size_t first, bool shift_up)
 	{
 		if (shift_up) {
+			m_storage[(first+1) & m_capacityMask].rc++;
 			if (!--m_storage[first].rc && first == m_first) {
 				m_first++;
 				m_consumedCount--;
 			}
-			m_storage[(first+1) & m_capacityMask].rc++;
 		} else {
 			m_storage[first].rc--;
 			if (first == m_first)
