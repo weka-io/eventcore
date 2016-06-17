@@ -102,7 +102,7 @@ abstract class PosixEventDriver : EventDriver {
 	final override void exit()
 	{
 		m_exit = true;
-		int one = 1;
+		long one = 1;
 		() @trusted { write(m_wakeupEvent, &one, one.sizeof); } ();
 	}
 
@@ -496,9 +496,9 @@ abstract class PosixEventDriver : EventDriver {
 	{
 		assert(event < m_fds.length, "Invalid event ID passed to triggerEvent.");
 		if (notify_all) {
-			log("emitting");
+			log("emitting only for this thread (%s waiters)", m_fds[event].waiters.length);
 			foreach (w; m_fds[event].waiters.consume) {
-				log("emitting %s %s", cast(void*)w.funcptr, w.ptr);
+				log("emitting waiter %s %s", cast(void*)w.funcptr, w.ptr);
 				w(event);
 			}
 		} else {
@@ -512,8 +512,8 @@ abstract class PosixEventDriver : EventDriver {
 		import core.atomic : atomicStore;
 		auto thisus = cast(PosixEventDriver)this;
 		assert(event < thisus.m_fds.length, "Invalid event ID passed to shared triggerEvent.");
-		int one = 1;
-		log("emitting thread");
+		long one = 1;
+		log("emitting for all threads");
 		if (notify_all) atomicStore(thisus.m_fds[event].triggerAll, true);
 		() @trusted { write(event, &one, one.sizeof); } ();
 	}
@@ -625,7 +625,7 @@ abstract class PosixEventDriver : EventDriver {
 
 	private void startNotify(EventType evt)(FD fd, FDSlotCallback callback)
 	{
-import std.stdio : writefln; try writefln("start notify %s %s", evt, fd); catch(Exception) {}
+		//log("start notify %s %s", evt, fd);
 		//assert(m_fds[fd].callback[evt] is null, "Waiting for event which is already being waited for.");
 		m_fds[fd].callback[evt] = callback;
 		m_waiterCount++;
@@ -634,7 +634,7 @@ import std.stdio : writefln; try writefln("start notify %s %s", evt, fd); catch(
 
 	private void stopNotify(EventType evt)(FD fd)
 	{
-import std.stdio : writefln; try writefln("stop notify %s %s", evt, fd); catch(Exception) {}
+		//log("stop notify %s %s", evt, fd);
 		//ssert(m_fds[fd].callback[evt] !is null, "Stopping waiting for event which is not being waited for.");
 		m_fds[fd].callback[evt] = null;
 		m_waiterCount--;
