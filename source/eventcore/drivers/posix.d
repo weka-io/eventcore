@@ -496,9 +496,9 @@ abstract class PosixEventDriver : EventDriver {
 	{
 		assert(event < m_fds.length, "Invalid event ID passed to triggerEvent.");
 		if (notify_all) {
-			log("emitting only for this thread (%s waiters)", m_fds[event].waiters.length);
+			//log("emitting only for this thread (%s waiters)", m_fds[event].waiters.length);
 			foreach (w; m_fds[event].waiters.consume) {
-				log("emitting waiter %s %s", cast(void*)w.funcptr, w.ptr);
+				//log("emitting waiter %s %s", cast(void*)w.funcptr, w.ptr);
 				w(event);
 			}
 		} else {
@@ -513,7 +513,7 @@ abstract class PosixEventDriver : EventDriver {
 		auto thisus = cast(PosixEventDriver)this;
 		assert(event < thisus.m_fds.length, "Invalid event ID passed to shared triggerEvent.");
 		long one = 1;
-		log("emitting for all threads");
+		//log("emitting for all threads");
 		if (notify_all) atomicStore(thisus.m_fds[event].triggerAll, true);
 		() @trusted { write(event, &one, one.sizeof); } ();
 	}

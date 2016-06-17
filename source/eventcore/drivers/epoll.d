@@ -39,7 +39,7 @@ final class EpollEventDriver : PosixEventDriver {
 		if (timeout == Duration.max) tomsec = long.max;
 		else tomsec = (timeout.total!"hnsecs" + 9999) / 10_000;
 		auto ret = epoll_wait(m_epoll, m_events.ptr, cast(int)m_events.length, tomsec > int.max ? -1 : cast(int)tomsec);
-		print("wait done %s", ret);
+		//print("wait done %s", ret);
 
 		if (ret > 0) {
 			foreach (ref evt; m_events[0 .. ret]) {
