@@ -15,7 +15,7 @@ import std.socket : Address, AddressFamily, UnknownAddress;
 version (Posix) {
 	import core.sys.posix.netinet.in_;
 	import core.sys.posix.netinet.tcp;
-	import core.sys.posix.unistd : close, write;
+	import core.sys.posix.unistd : close, read, write;
 	import core.stdc.errno : errno, EAGAIN, EINPROGRESS;
 	import core.sys.posix.fcntl;
 }
@@ -535,6 +535,8 @@ abstract class PosixEventDriver : EventDriver {
 
 	private void onEvent(FD event)
 	@trusted {
+		ulong cnt;
+		() @trusted { read(event, &cnt, cnt.sizeof); } ();
 		import core.atomic : cas;
 		auto all = cas(&m_fds[event].triggerAll, true, false);
 		triggerEvent(cast(EventID)event, all);
