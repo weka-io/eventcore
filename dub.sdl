@@ -1,4 +1,4 @@
 name "eventcore"
-description "Callback based abstraction layer over operating system asynchronous I/O facilities."
+description "Experimental callback based abstraction layer over operating system asynchronous I/O facilities."
 license "MIT"
 copyright "Copyright © 2012-2016 rejectedsoftware e.K."
