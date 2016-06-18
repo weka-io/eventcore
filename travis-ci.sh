@@ -3,14 +3,14 @@
 set -e -x -o pipefail
 
 # test for successful release build
-dub build --combined -b release --compiler=$DC --config=${VIBED_DRIVER=libevent}
+dub build --combined -b release --compiler=$DC
 
 # test for successful 32-bit build
 if [ "$DC" == "dmd" ]; then
 	dub build --combined --arch=x86
 fi
 
-dub test --combined --compiler=$DC --config=${VIBED_DRIVER=libevent}
+dub test --combined --compiler=$DC
 
 if [ ${BUILD_EXAMPLE=1} -eq 1 ]; then
     for ex in $(\ls -1 examples/); do

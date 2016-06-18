@@ -7,7 +7,7 @@ d:
   # catching most DMD version related build failures early
   - dmd-2.071.0
   - ldc-1.0.0
-  - dmd-2.070.0
+  - dmd-2.070.2
 
 script: ./travis-ci.sh
 
