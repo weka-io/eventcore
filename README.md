@@ -9,25 +9,27 @@ This is a high-performance native event loop abstraction for D, focused on async
 Supported drivers and operating systems
 ---------------------------------------
 
-                  | Linux | Windows | OS X | FreeBSD
+Driver            | Linux | Windows | OS X | FreeBSD
 ------------------|-------|---------|------|--------
-SelectEventDriver | yes   | yes     | yes  | yes    
-EpollEventDriver  | yes   | no      | no   | no     
-IOCPEventDriver   | no    | yes     | no   | no     
-KqueueEventDriver | no    | no      | yes  |        
+SelectEventDriver | yes   | yes¹    | yes¹ | yes¹
+EpollEventDriver  | yes   | no      | no   | no
+IOCPEventDriver   | no    | yes¹    | no   | no
+KqueueEventDriver | no    | no      | yes¹ |
+
+¹ planned, but not currenly implemented
 
 
 Driver development status
 -------------------------
 
-                 | SelectEventDriver | EpollEventDriver | IOCPEventDriver | KqueueEventDriver
+Feature          | SelectEventDriver | EpollEventDriver | IOCPEventDriver | KqueueEventDriver
 -----------------|-------------------|------------------|-----------------|------------------
 TCP Sockets      | yes               | yes              | no              | no               
 UDP Sockets      | no                | no               | no              | no               
 USDS             | no                | no               | no              | no               
 DNS              | no                | no               | no              | no               
 Timers           | yes               | yes              | no              | no               
-Events           | no                | no               | no              | no               
+Events           | yes               | yes              | no              | no               
 Signals          | no                | no               | no              | no               
 Files            | no                | no               | no              | no               
 UI Integration   | no                | no               | no              | no               
