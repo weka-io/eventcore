@@ -267,8 +267,8 @@ struct FileChange {
 	string path;
 }
 
-struct Handle(T, T invalid_value = T.init, int MAGIC = __LINE__) {
-	static if (is(T : Handle!(V, M), V, int M)) alias BaseType = T.BaseType;
+struct Handle(string NAME, T, T invalid_value = T.init) {
+	static if (is(T : Handle!(N, V, M), string N, V, int M)) alias BaseType = T.BaseType;
 	else alias BaseType = T;
 
 	enum invalid = Handle.init;
@@ -290,12 +290,12 @@ struct Handle(T, T invalid_value = T.init, int MAGIC = __LINE__) {
 	alias value this;
 }
 
-alias FD = Handle!(int, -1);
-alias SocketFD = Handle!FD;
-alias StreamSocketFD = Handle!SocketFD;
-alias StreamListenSocketFD = Handle!SocketFD;
-alias FileFD = Handle!FD;
-alias EventID = Handle!FD;
-alias TimerID = Handle!int;
-alias WatcherID = Handle!int;
-alias EventWaitID = Handle!int;
+alias FD = Handle!("FD", int, -1);
+alias SocketFD = Handle!("Socket", FD);
+alias StreamSocketFD = Handle!("Stream", SocketFD);
+alias StreamListenSocketFD = Handle!("StreamListen", SocketFD);
+alias FileFD = Handle!("File", FD);
+alias EventID = Handle!("Event", FD);
+alias TimerID = Handle!("Timer", int);
+alias WatcherID = Handle!("Watcher", int);
+alias EventWaitID = Handle!("EventWait", int);
