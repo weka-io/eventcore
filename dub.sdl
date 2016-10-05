@@ -2,3 +2,12 @@ name "eventcore"
 description "Experimental callback based abstraction layer over operating system asynchronous I/O facilities."
 license "MIT"
 copyright "Copyright © 2012-2016 rejectedsoftware e.K."
+
+targetType "library"
+
+configuration "native" {
+}
+
+configuration "libasync" {
+	dependency "libasync" version="~>0.7.9"
+}

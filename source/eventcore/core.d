@@ -3,9 +3,11 @@ module eventcore.core;
 public import eventcore.driver;
 
 import eventcore.drivers.epoll;
+import eventcore.drivers.libasync;
 import eventcore.drivers.select;
 
-alias NativeEventDriver = SelectEventDriver;
+version (Have_libasync) alias NativeEventDriver = LibasyncEventDriver;
+else alias NativeEventDriver = SelectEventDriver;
 
 @property EventDriver eventDriver()
 @safe @nogc nothrow {
