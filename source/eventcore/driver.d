@@ -12,6 +12,7 @@ interface EventDriver {
 	@property EventDriverSockets sockets();
 	@property EventDriverTimers udp();
 	@property EventDriverEvents events();
+	@property EventDriverSignals signals();
 	@property EventDriverWatchers watchers();
 }
 
@@ -143,6 +144,12 @@ interface EventDriverEvents {
 	void cancelWaitForEvent(EventID event, EventCallback on_event);
 }
 
+interface EventDriverSignals {
+@safe: /*@nogc:*/ nothrow:
+	//void waitForSignal(int sig, SignalCallback on_signal);
+	//void cancelWaitForSignal(sig);
+}
+
 interface EventDriverTimers {
 @safe: /*@nogc:*/ nothrow:
 	/**
@@ -168,7 +175,9 @@ interface EventDriverTimers {
 
 interface EventDriverWatchers {
 @safe: /*@nogc:*/ nothrow:
-	
+	//WatcherID watchDirectory(Path path, bool recursive);
+	//void waitForChanges(WatcherID watcher, FileChangesCallback callback);
+	//void cancelWaitForChanges(WatcherID watcher);
 }
 
 

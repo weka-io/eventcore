@@ -36,8 +36,11 @@ private long currStdTime()
 	return Clock.currStdTime;
 }
 
-abstract class PosixEventDriver : EventDriver, EventDriverCore, EventDriverFiles, EventDriverSockets, EventDriverTimers, EventDriverEvents, EventDriverWatchers {
-	@safe: /*@nogc:*/ nothrow:
+abstract class PosixEventDriver : EventDriver,
+		EventDriverCore, EventDriverFiles, EventDriverSockets, EventDriverTimers,
+		EventDriverEvents, EventDriverSignals, EventDriverWatchers
+{
+@safe: /*@nogc:*/ nothrow:
 
 	private {
 		ChoppedVector!FDSlot m_fds;
@@ -54,12 +57,14 @@ abstract class PosixEventDriver : EventDriver, EventDriverCore, EventDriverFiles
 		//startNotify!(EventType.read)(m_wakeupEvent, null); // should already be caught by registerFD
 	}
 
-	@property PosixEventDriver core() { return this; }
-	@property PosixEventDriver files() { return this; }
-	@property PosixEventDriver sockets() { return this; }
-	@property PosixEventDriver udp() { return this; }
-	@property PosixEventDriver events() { return this; }
-	@property PosixEventDriver watchers() { return this; }
+	// force overriding these in the (final) sub classes to avoid virtual calls
+	abstract override @property PosixEventDriver core();
+	abstract override @property PosixEventDriver files();
+	abstract override @property PosixEventDriver sockets();
+	abstract override @property PosixEventDriver udp();
+	abstract override @property PosixEventDriver events();
+	abstract override @property PosixEventDriver signals();
+	abstract override @property PosixEventDriver watchers();
 
 	mixin DefaultTimerImpl!();
 
