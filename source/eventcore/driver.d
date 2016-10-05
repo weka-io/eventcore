@@ -7,10 +7,16 @@ import std.socket : Address;
 
 interface EventDriver {
 @safe: /*@nogc:*/ nothrow:
-	//
-	// General functionality
-	//
+	@property EventDriverCore core();
+	@property EventDriverFiles files();
+	@property EventDriverSockets sockets();
+	@property EventDriverTimers udp();
+	@property EventDriverEvents events();
+	@property EventDriverWatchers watchers();
+}
 
+interface EventDriverCore {
+@safe: /*@nogc:*/ nothrow:
 	/// Releases all resources associated with the driver
 	void dispose();
 
@@ -57,77 +63,6 @@ interface EventDriver {
 	*/
 	void clearExitFlag();
 
-	//
-	// TCP
-	//
-	StreamSocketFD connectStream(scope Address peer_address, ConnectCallback on_connect);
-	StreamListenSocketFD listenStream(scope Address bind_address, AcceptCallback on_accept);
-	void waitForConnections(StreamListenSocketFD sock, AcceptCallback on_accept);
-	ConnectionState getConnectionState(StreamSocketFD sock);
-	void setTCPNoDelay(StreamSocketFD socket, bool enable);
-	void readSocket(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish);
-	void writeSocket(StreamSocketFD socket, const(ubyte)[] buffer, IOMode mode, IOCallback on_write_finish);
-	void waitSocketData(StreamSocketFD socket, IOCallback on_data_available);
-	void shutdownSocket(StreamSocketFD socket, bool shut_read = true, bool shut_write = true);
-	void cancelRead(StreamSocketFD socket);
-	void cancelWrite(StreamSocketFD socket);
-
-	//
-	// Files
-	//
-	//FileFD openFile(string path, FileOpenMode mode);
-	//FileFD createTempFile();
-
-	//
-	// Manual events
-	//
-	EventID createEvent();
-	void triggerEvent(EventID event, bool notify_all = true);
-	void triggerEvent(EventID event, bool notify_all = true) shared;
-	void waitForEvent(EventID event, EventCallback on_event);
-	void cancelWaitForEvent(EventID event, EventCallback on_event);
-
-	//
-	// Timers
-	//
-	TimerID createTimer();
-	void setTimer(TimerID timer, Duration timeout, Duration repeat = Duration.zero);
-	void stopTimer(TimerID timer);
-	bool isTimerPending(TimerID timer);
-	bool isTimerPeriodic(TimerID timer);
-	void waitTimer(TimerID timer, TimerCallback callback);
-	void cancelTimerWait(TimerID timer, TimerCallback callback);
-
-	//
-	// Resource ownership
-	//
-
-	/**
-		Increments the reference count of the given resource.
-	*/
-	void addRef(SocketFD descriptor);
-	/// ditto
-	void addRef(FileFD descriptor);
-	/// ditto
-	void addRef(TimerID descriptor);
-	/// ditto
-	void addRef(EventID descriptor);
-
-	/**
-		Decrements the reference count of the given resource.
-
-		Once the reference count reaches zero, all associated resources will be
-		freed and the resource descriptor gets invalidated.
-	*/
-	void releaseRef(SocketFD descriptor);
-	/// ditto
-	void releaseRef(FileFD descriptor);
-	/// ditto
-	void releaseRef(TimerID descriptor);
-	/// ditto
-	void releaseRef(EventID descriptor);
-
-
 	/// Low-level user data access. Use `getUserData` instead.
 	protected void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
 
@@ -140,6 +75,100 @@ interface EventDriver {
 		static void destr(void* ptr) { destroy(*cast(T*)ptr); }
 		return *cast(T*)rawUserData(descriptor, T.sizeof, &init, &destr);
 	}
+}
+
+interface EventDriverSockets {
+@safe: /*@nogc:*/ nothrow:
+	/**
+		Increments the reference count of the given resource.
+	*/
+	void addRef(SocketFD descriptor);
+	/**
+		Decrements the reference count of the given resource.
+
+		Once the reference count reaches zero, all associated resources will be
+		freed and the resource descriptor gets invalidated.
+	*/
+	void releaseRef(SocketFD descriptor);
+
+	StreamSocketFD connectStream(scope Address peer_address, ConnectCallback on_connect);
+	StreamListenSocketFD listenStream(scope Address bind_address, AcceptCallback on_accept);
+	void waitForConnections(StreamListenSocketFD sock, AcceptCallback on_accept);
+	ConnectionState getConnectionState(StreamSocketFD sock);
+	void setTCPNoDelay(StreamSocketFD socket, bool enable);
+	void readSocket(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish);
+	void writeSocket(StreamSocketFD socket, const(ubyte)[] buffer, IOMode mode, IOCallback on_write_finish);
+	void waitSocketData(StreamSocketFD socket, IOCallback on_data_available);
+	void shutdownSocket(StreamSocketFD socket, bool shut_read = true, bool shut_write = true);
+	void cancelRead(StreamSocketFD socket);
+	void cancelWrite(StreamSocketFD socket);
+}
+
+interface EventDriverFiles {
+@safe: /*@nogc:*/ nothrow:
+	/**
+		Increments the reference count of the given resource.
+	*/
+	void addRef(FileFD descriptor);
+	/**
+		Decrements the reference count of the given resource.
+
+		Once the reference count reaches zero, all associated resources will be
+		freed and the resource descriptor gets invalidated.
+	*/
+	void releaseRef(FileFD descriptor);
+
+	//FileFD openFile(string path, FileOpenMode mode);
+	//FileFD createTempFile();
+}
+
+interface EventDriverEvents {
+@safe: /*@nogc:*/ nothrow:
+	/**
+		Increments the reference count of the given resource.
+	*/
+	void addRef(EventID descriptor);
+	/**
+		Decrements the reference count of the given resource.
+
+		Once the reference count reaches zero, all associated resources will be
+		freed and the resource descriptor gets invalidated.
+	*/
+	void releaseRef(EventID descriptor);
+
+	EventID createEvent();
+	void triggerEvent(EventID event, bool notify_all = true);
+	void triggerEvent(EventID event, bool notify_all = true) shared;
+	void waitForEvent(EventID event, EventCallback on_event);
+	void cancelWaitForEvent(EventID event, EventCallback on_event);
+}
+
+interface EventDriverTimers {
+@safe: /*@nogc:*/ nothrow:
+	/**
+		Increments the reference count of the given resource.
+	*/
+	void addRef(TimerID descriptor);
+	/**
+		Decrements the reference count of the given resource.
+
+		Once the reference count reaches zero, all associated resources will be
+		freed and the resource descriptor gets invalidated.
+	*/
+	void releaseRef(TimerID descriptor);
+
+	TimerID createTimer();
+	void setTimer(TimerID timer, Duration timeout, Duration repeat = Duration.zero);
+	void stopTimer(TimerID timer);
+	bool isTimerPending(TimerID timer);
+	bool isTimerPeriodic(TimerID timer);
+	void waitTimer(TimerID timer, TimerCallback callback);
+	void cancelTimerWait(TimerID timer, TimerCallback callback);
+}
+
+interface EventDriverWatchers {
+@safe: /*@nogc:*/ nothrow:
+	
 }
 
 

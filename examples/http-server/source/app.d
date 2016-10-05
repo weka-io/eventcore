@@ -9,12 +9,12 @@ void main()
 {
 	print("Starting up...");
 	auto addr = new InternetAddress("127.0.0.1", 8080);
-	auto listener = eventDriver.listenStream(addr, toDelegate(&onClientConnect));
+	auto listener = eventDriver.sockets.listenStream(addr, toDelegate(&onClientConnect));
 	enforce(listener != StreamListenSocketFD.invalid, "Failed to listen for connections.");
 
 	print("Listening for requests on port 8080...");
-	while (eventDriver.waiterCount)
-		eventDriver.processEvents();
+	while (eventDriver.core.waiterCount)
+		eventDriver.core.processEvents();
 }
 
 void onClientConnect(StreamListenSocketFD listener, StreamSocketFD client)
@@ -49,7 +49,7 @@ struct ClientHandler {
 	{
 		onLine = on_line;
 		if (linefill >= 2) onReadData(client, IOStatus.ok, 0);
-		else eventDriver.readSocket(client, linebuf[linefill .. $], IOMode.once, &onReadData);
+		else eventDriver.sockets.readSocket(client, linebuf[linefill .. $], IOMode.once, &onReadData);
 	}
 
 	void onRequestLine(ubyte[] ln)
@@ -57,8 +57,8 @@ struct ClientHandler {
 		//print("Request: %s", cast(char[])ln);
 		if (ln.length == 0) {
 			//print("Error: empty request line");
-			eventDriver.shutdownSocket(client);
-			eventDriver.releaseRef(client);
+			eventDriver.sockets.shutdownSocket(client);
+			eventDriver.sockets.releaseRef(client);
 		}
 
 		readLine(&onHeaderLine);
@@ -68,7 +68,7 @@ struct ClientHandler {
 	{
 		if (ln.length == 0) {
 			auto reply = cast(const(ubyte)[])"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\nKeep-Alive: timeout=10\r\n\r\nHello, World!";
-			eventDriver.writeSocket(client, reply, IOMode.all, &onWriteFinished);
+			eventDriver.sockets.writeSocket(client, reply, IOMode.all, &onWriteFinished);
 		} else readLine(&onHeaderLine);
 	}
 
@@ -83,8 +83,8 @@ struct ClientHandler {
 
 		if (status != IOStatus.ok) {
 			print("Client disconnect");
-			eventDriver.shutdownSocket(client);
-			eventDriver.releaseRef(client);
+			eventDriver.sockets.shutdownSocket(client);
+			eventDriver.sockets.releaseRef(client);
 			return;
 		}
 
@@ -101,12 +101,12 @@ struct ClientHandler {
 
 			onLine(linebuf[linefill + idx + 2 .. linefill + idx + 2 + idx]);
 		} else if (linebuf.length - linefill > 0) {
-			eventDriver.readSocket(client, linebuf[linefill .. $], IOMode.once, &onReadData);
+			eventDriver.sockets.readSocket(client, linebuf[linefill .. $], IOMode.once, &onReadData);
 		} else {
 			// ERROR: header line too long
 			print("Header line too long");
-			eventDriver.shutdownSocket(client);
-			eventDriver.releaseRef(client);
+			eventDriver.sockets.shutdownSocket(client);
+			eventDriver.sockets.releaseRef(client);
 		}
 	}
 }

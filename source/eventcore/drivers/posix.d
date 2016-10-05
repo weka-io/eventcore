@@ -36,7 +36,7 @@ private long currStdTime()
 	return Clock.currStdTime;
 }
 
-abstract class PosixEventDriver : EventDriver {
+abstract class PosixEventDriver : EventDriver, EventDriverCore, EventDriverFiles, EventDriverSockets, EventDriverTimers, EventDriverEvents, EventDriverWatchers {
 	@safe: /*@nogc:*/ nothrow:
 
 	private {
@@ -53,6 +53,13 @@ abstract class PosixEventDriver : EventDriver {
 		registerFD(m_wakeupEvent, EventMask.read);
 		//startNotify!(EventType.read)(m_wakeupEvent, null); // should already be caught by registerFD
 	}
+
+	@property PosixEventDriver core() { return this; }
+	@property PosixEventDriver files() { return this; }
+	@property PosixEventDriver sockets() { return this; }
+	@property PosixEventDriver udp() { return this; }
+	@property PosixEventDriver events() { return this; }
+	@property PosixEventDriver watchers() { return this; }
 
 	mixin DefaultTimerImpl!();
 

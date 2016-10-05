@@ -83,13 +83,13 @@ struct StreamConnectionImpl {
 	~this()
 	nothrow {
 		if (m_socket != StreamSocketFD.invalid)
-			eventDriver.releaseRef(m_socket);
+			eventDriver.sockets.releaseRef(m_socket);
 	}
 
 	@property bool empty()
 	{
 		reader.start();
-		eventDriver.waitSocketData(m_socket, &onData);
+		eventDriver.sockets.waitSocketData(m_socket, &onData);
 		reader.wait();
 		return m_empty;
 	}
@@ -98,7 +98,7 @@ struct StreamConnectionImpl {
 	{
 		reader.start();
 		if (m_readBufferFill >= 2) onReadLineData(m_socket, IOStatus.ok, 0);
-		else eventDriver.readSocket(m_socket, m_readBuffer[m_readBufferFill .. $], IOMode.once, &onReadLineData);
+		else eventDriver.sockets.readSocket(m_socket, m_readBuffer[m_readBufferFill .. $], IOMode.once, &onReadLineData);
 		reader.wait();
 		auto ln = m_line;
 		m_line = null;
@@ -108,13 +108,13 @@ struct StreamConnectionImpl {
 	void write(const(ubyte)[] data)
 	{
 		writer.start();
-		eventDriver.writeSocket(m_socket, data, IOMode.all, &onWrite);
+		eventDriver.sockets.writeSocket(m_socket, data, IOMode.all, &onWrite);
 		writer.wait();
 	}
 
 	void close()
 	nothrow {
-		eventDriver.releaseRef(m_socket);
+		eventDriver.sockets.releaseRef(m_socket);
 		m_socket = StreamSocketFD.invalid;
 		m_readBuffer = null;
 	}
@@ -159,7 +159,7 @@ struct StreamConnectionImpl {
 
 			reader.finish();
 		} else if (m_readBuffer.length - m_readBufferFill > 0) {
-			eventDriver.readSocket(m_socket, m_readBuffer[m_readBufferFill .. $], IOMode.once, &onReadLineData);
+			eventDriver.sockets.readSocket(m_socket, m_readBuffer[m_readBufferFill .. $], IOMode.once, &onReadLineData);
 		} else {
 			reader.finish(exh);
 		}
@@ -171,16 +171,16 @@ void main()
 {
 	print("Starting up...");
 	auto addr = new InternetAddress("127.0.0.1", 8080);
-	auto listener = eventDriver.listenStream(addr, toDelegate(&onClientConnect));
+	auto listener = eventDriver.sockets.listenStream(addr, toDelegate(&onClientConnect));
 	enforce(listener != StreamListenSocketFD.invalid, "Failed to listen for connections.");
 
 	/*import core.time : msecs;
-	eventDriver.setTimer(eventDriver.createTimer((tm) { print("timer 1"); }), 1000.msecs, 1000.msecs);
-	eventDriver.setTimer(eventDriver.createTimer((tm) { print("timer 2"); }), 250.msecs, 500.msecs);*/
+	eventDriver.setTimer(eventDriver.timers.createTimer((tm) { print("timer 1"); }), 1000.msecs, 1000.msecs);
+	eventDriver.setTimer(eventDriver.timers.createTimer((tm) { print("timer 2"); }), 250.msecs, 500.msecs);*/
 
 	print("Listening for requests on port 8080...");
-	while (eventDriver.waiterCount)
-		eventDriver.processEvents();
+	while (eventDriver.core.waiterCount)
+		eventDriver.core.processEvents();
 }
 
 void onClientConnect(StreamListenSocketFD listener, StreamSocketFD client)
