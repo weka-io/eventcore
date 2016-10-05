@@ -14,7 +14,7 @@ Driver            | Linux | Windows | OS X | FreeBSD
 SelectEventDriver | yes   | yes¹    | yes¹ | yes¹
 EpollEventDriver  | yes   | no      | no   | no
 IOCPEventDriver   | no    | yes¹    | no   | no
-KqueueEventDriver | no    | no      | yes¹ |
+KqueueEventDriver | no    | no      | yes¹ | yes¹
 
 ¹ planned, but not currenly implemented
 
