@@ -21,8 +21,7 @@ interface EventDriverCore {
 	/// Releases all resources associated with the driver
 	void dispose();
 
-	/**
-		The number of pending callbacks.
+	/** The number of pending callbacks.
 
 		When this number drops to zero, the event loop can safely be quit. It is
 		guaranteed that no callbacks will be made anymore, unless new callbacks
@@ -30,8 +29,7 @@ interface EventDriverCore {
 	*/
 	size_t waiterCount();
 
-	/**
-		Runs the event loop to process a chunk of events.
+	/** Runs the event loop to process a chunk of events.
 
 		This method optionally waits for an event to arrive if none are present
 		in the event queue. The function will return after either the specified
@@ -45,8 +43,7 @@ interface EventDriverCore {
 	*/
 	ExitReason processEvents(Duration timeout = Duration.max);
 
-	/**
-		Causes `processEvents` to return with `ExitReason.exited` as soon as
+	/** Causes `processEvents` to return with `ExitReason.exited` as soon as
 		possible.
 
 		A call to `processEvents` that is currently in progress will be notfied
@@ -92,12 +89,10 @@ interface EventDriverSockets {
 	void cancelRead(StreamSocketFD socket);
 	void cancelWrite(StreamSocketFD socket);
 
-	/**
-		Increments the reference count of the given resource.
+	/** Increments the reference count of the given resource.
 	*/
 	void addRef(SocketFD descriptor);
-	/**
-		Decrements the reference count of the given resource.
+	/** Decrements the reference count of the given resource.
 
 		Once the reference count reaches zero, all associated resources will be
 		freed and the resource descriptor gets invalidated.
@@ -114,12 +109,11 @@ interface EventDriverFiles {
 	void cancelWrite(FileFD file);
 	void cancelRead(FileFD file);
 
-	/**
-		Increments the reference count of the given resource.
+	/** Increments the reference count of the given resource.
 	*/
 	void addRef(FileFD descriptor);
-	/**
-		Decrements the reference count of the given resource.
+	
+	/** Decrements the reference count of the given resource.
 
 		Once the reference count reaches zero, all associated resources will be
 		freed and the resource descriptor gets invalidated.
@@ -135,12 +129,11 @@ interface EventDriverEvents {
 	void wait(EventID event, EventCallback on_event);
 	void cancelWait(EventID event, EventCallback on_event);
 
-	/**
-		Increments the reference count of the given resource.
+	/** Increments the reference count of the given resource.
 	*/
 	void addRef(EventID descriptor);
-	/**
-		Decrements the reference count of the given resource.
+	
+	/** Decrements the reference count of the given resource.
 
 		Once the reference count reaches zero, all associated resources will be
 		freed and the resource descriptor gets invalidated.
@@ -164,12 +157,11 @@ interface EventDriverTimers {
 	void wait(TimerID timer, TimerCallback callback);
 	void cancelWait(TimerID timer, TimerCallback callback);
 
-	/**
-		Increments the reference count of the given resource.
+	/** Increments the reference count of the given resource.
 	*/
 	void addRef(TimerID descriptor);
-	/**
-		Decrements the reference count of the given resource.
+	
+	/** Decrements the reference count of the given resource.
 
 		Once the reference count reaches zero, all associated resources will be
 		freed and the resource descriptor gets invalidated.
@@ -183,12 +175,11 @@ interface EventDriverWatchers {
 	void wait(WatcherID watcher, FileChangesCallback callback);
 	void cancelWait(WatcherID watcher);
 
-	/**
-		Increments the reference count of the given resource.
+	/** Increments the reference count of the given resource.
 	*/
 	void addRef(WatcherID descriptor);
-	/**
-		Decrements the reference count of the given resource.
+	
+	/** Decrements the reference count of the given resource.
 
 		Once the reference count reaches zero, all associated resources will be
 		freed and the resource descriptor gets invalidated.
