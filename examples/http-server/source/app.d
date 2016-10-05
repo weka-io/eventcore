@@ -31,7 +31,7 @@ struct ClientHandler {
 	alias LineCallback = void delegate(ubyte[]);
 
 	StreamSocketFD client;
-	ubyte[512] linebuf = void;
+	ubyte[1024] linebuf = void;
 	size_t linefill = 0;
 	LineCallback onLine;
 
@@ -94,6 +94,7 @@ struct ClientHandler {
 
 		auto idx = linebuf[0 .. linefill].countUntil(cast(const(ubyte)[])"\r\n");
 		if (idx >= 0) {
+			assert(linefill + idx <= linebuf.length, "Not enough space to buffer the incoming line.");
 			linebuf[linefill .. linefill + idx] = linebuf[0 .. idx];
 			foreach (i; 0 .. linefill - idx - 2)
 				linebuf[i] = linebuf[idx+2+i];

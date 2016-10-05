@@ -150,6 +150,7 @@ struct StreamConnectionImpl {
 
 		auto idx = m_readBuffer[0 .. m_readBufferFill].countUntil(cast(const(ubyte)[])"\r\n");
 		if (idx >= 0) {
+			assert(m_readBufferFill + idx <= m_readBuffer.length, "Not enough space to buffer the incoming line.");
 			m_readBuffer[m_readBufferFill .. m_readBufferFill + idx] = m_readBuffer[0 .. idx];
 			foreach (i; 0 .. m_readBufferFill - idx - 2)
 				m_readBuffer[i] = m_readBuffer[idx+2+i];
@@ -204,7 +205,7 @@ struct ClientHandler {
 
 	void handleConnection()
 	@trusted {
-		ubyte[512] linebuf = void;
+		ubyte[1024] linebuf = void;
 		auto reply = cast(const(ubyte)[])"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\nKeep-Alive: timeout=10\r\n\r\nHello, World!";
 
 		auto conn = StreamConnection(client, linebuf);
