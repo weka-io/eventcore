@@ -115,7 +115,7 @@ abstract class PosixEventDriver : EventDriver,
 	{
 		m_exit = true;
 		long one = 1;
-		() @trusted { write(m_wakeupEvent, &one, one.sizeof); } ();
+		() @trusted { .write(m_wakeupEvent, &one, one.sizeof); } ();
 	}
 
 	final override void clearExitFlag()
@@ -494,6 +494,36 @@ abstract class PosixEventDriver : EventDriver,
 		// TODO!
 	}
 
+	final override FileFD openFile(string path, FileOpenMode mode)
+	{
+		assert(false, "TODO!");
+	}
+
+	final override FileFD createTempFile()
+	{
+		assert(false, "TODO!");
+	}
+
+	final override void write(FileFD file, ulong offset, ubyte[] buffer, IOCallback on_write_finish)
+	{
+		assert(false, "TODO!");
+	}
+
+	final override void read(FileFD file, ulong offset, ubyte[] buffer, IOCallback on_read_finish)
+	{
+		assert(false, "TODO!");
+	}
+
+	final override void cancelWrite(FileFD file)
+	{
+		assert(false, "TODO!");
+	}
+
+	final override void cancelRead(FileFD file)
+	{
+		assert(false, "TODO!");
+	}
+
 	final override EventID createEvent()
 	{
 		auto id = cast(EventID)eventfd(0, EFD_NONBLOCK);
@@ -527,7 +557,7 @@ abstract class PosixEventDriver : EventDriver,
 		long one = 1;
 		//log("emitting for all threads");
 		if (notify_all) atomicStore(thisus.m_fds[event].triggerAll, true);
-		() @trusted { write(event, &one, one.sizeof); } ();
+		() @trusted { .write(event, &one, one.sizeof); } ();
 	}
 
 	final override void waitForEvent(EventID event, EventCallback on_event)
@@ -548,10 +578,35 @@ abstract class PosixEventDriver : EventDriver,
 	private void onEvent(FD event)
 	@trusted {
 		ulong cnt;
-		() @trusted { read(event, &cnt, cnt.sizeof); } ();
+		() @trusted { .read(event, &cnt, cnt.sizeof); } ();
 		import core.atomic : cas;
 		auto all = cas(&m_fds[event].triggerAll, true, false);
 		triggerEvent(cast(EventID)event, all);
+	}
+
+	final override void waitForSignal(int sig, SignalCallback on_signal)
+	{
+		assert(false, "TODO!");
+	}
+
+	final override void cancelWaitForSignal(int sig)
+	{
+		assert(false, "TODO!");
+	}
+
+	final override WatcherID watchDirectory(string path, bool recursive)
+	{
+		assert(false, "TODO!");
+	}
+
+	final override void waitForChanges(WatcherID watcher, FileChangesCallback callback)
+	{
+		assert(false, "TODO!");
+	}
+
+	final override void cancelWaitForChanges(WatcherID watcher)
+	{
+		assert(false, "TODO!");
 	}
 
 	final override void addRef(SocketFD fd)

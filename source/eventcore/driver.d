@@ -119,8 +119,12 @@ interface EventDriverFiles {
 	*/
 	void releaseRef(FileFD descriptor);
 
-	//FileFD openFile(string path, FileOpenMode mode);
-	//FileFD createTempFile();
+	FileFD openFile(string path, FileOpenMode mode);
+	FileFD createTempFile();
+	void write(FileFD file, ulong offset, ubyte[] buffer, IOCallback on_write_finish);
+	void read(FileFD file, ulong offset, ubyte[] buffer, IOCallback on_read_finish);
+	void cancelWrite(FileFD file);
+	void cancelRead(FileFD file);
 }
 
 interface EventDriverEvents {
@@ -146,8 +150,8 @@ interface EventDriverEvents {
 
 interface EventDriverSignals {
 @safe: /*@nogc:*/ nothrow:
-	//void waitForSignal(int sig, SignalCallback on_signal);
-	//void cancelWaitForSignal(sig);
+	void waitForSignal(int sig, SignalCallback on_signal);
+	void cancelWaitForSignal(int sig);
 }
 
 interface EventDriverTimers {
@@ -175,9 +179,9 @@ interface EventDriverTimers {
 
 interface EventDriverWatchers {
 @safe: /*@nogc:*/ nothrow:
-	//WatcherID watchDirectory(Path path, bool recursive);
-	//void waitForChanges(WatcherID watcher, FileChangesCallback callback);
-	//void cancelWaitForChanges(WatcherID watcher);
+	WatcherID watchDirectory(string path, bool recursive);
+	void waitForChanges(WatcherID watcher, FileChangesCallback callback);
+	void cancelWaitForChanges(WatcherID watcher);
 }
 
 
@@ -185,7 +189,9 @@ alias ConnectCallback = void delegate(StreamSocketFD, ConnectStatus);
 alias AcceptCallback = void delegate(StreamListenSocketFD, StreamSocketFD);
 alias IOCallback = void delegate(StreamSocketFD, IOStatus, size_t);
 alias EventCallback = void delegate(EventID);
+alias SignalCallback = void delegate(int);
 alias TimerCallback = void delegate(TimerID);
+alias FileChangesCallback = void delegate(WatcherID, in FileChange[] changes);
 @system alias DataInitializer = void function(void*);
 
 enum ExitReason {
@@ -212,18 +218,53 @@ enum ConnectionState {
 	closed
 }
 
+/**
+	Specifies how a file is manipulated on disk.
+*/
+enum FileOpenMode {
+	/// The file is opened read-only.
+	read,
+	/// The file is opened for read-write random access.
+	readWrite,
+	/// The file is truncated if it exists or created otherwise and then opened for read-write access.
+	createTrunc,
+	/// The file is opened for appending data to it and created if it does not exist.
+	append
+}
+
 enum IOMode {
 	immediate, /// Process only as much as possible without waiting
 	once,      /// Process as much as possible with a single call
 	all        /// Process the full buffer
 }
 
-
 enum IOStatus {
 	ok,           /// The data has been transferred normally
 	disconnected, /// The connection was closed before all data could be transterred
 	error,        /// An error occured while transferring the data
 	wouldBlock    /// Returned for `IOMode.immediate` when no data is readily readable/writable
+}
+
+/** Specifies the kind of change in a watched directory.
+*/
+enum FileChangeKind {
+	/// A file or directory was added
+	added,
+	/// A file or directory was deleted
+	removed,
+	/// A file or directory was modified
+	modified
+}
+
+
+/** Describes a single change in a watched directory.
+*/
+struct FileChange {
+	/// The type of change
+	FileChangeKind type;
+
+	/// Path of the file/directory that was changed
+	string path;
 }
 
 struct Handle(T, T invalid_value = T.init, int MAGIC = __LINE__) {
@@ -256,4 +297,5 @@ alias StreamListenSocketFD = Handle!SocketFD;
 alias FileFD = Handle!FD;
 alias EventID = Handle!FD;
 alias TimerID = Handle!int;
+alias WatcherID = Handle!int;
 alias EventWaitID = Handle!int;
