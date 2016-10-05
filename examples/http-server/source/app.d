@@ -49,7 +49,7 @@ struct ClientHandler {
 	{
 		onLine = on_line;
 		if (linefill >= 2) onReadData(client, IOStatus.ok, 0);
-		else eventDriver.sockets.readSocket(client, linebuf[linefill .. $], IOMode.once, &onReadData);
+		else eventDriver.sockets.read(client, linebuf[linefill .. $], IOMode.once, &onReadData);
 	}
 
 	void onRequestLine(ubyte[] ln)
@@ -57,7 +57,7 @@ struct ClientHandler {
 		//print("Request: %s", cast(char[])ln);
 		if (ln.length == 0) {
 			//print("Error: empty request line");
-			eventDriver.sockets.shutdownSocket(client);
+			eventDriver.sockets.shutdown(client);
 			eventDriver.sockets.releaseRef(client);
 		}
 
@@ -68,7 +68,7 @@ struct ClientHandler {
 	{
 		if (ln.length == 0) {
 			auto reply = cast(const(ubyte)[])"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\nKeep-Alive: timeout=10\r\n\r\nHello, World!";
-			eventDriver.sockets.writeSocket(client, reply, IOMode.all, &onWriteFinished);
+			eventDriver.sockets.write(client, reply, IOMode.all, &onWriteFinished);
 		} else readLine(&onHeaderLine);
 	}
 
@@ -83,7 +83,7 @@ struct ClientHandler {
 
 		if (status != IOStatus.ok) {
 			print("Client disconnect");
-			eventDriver.sockets.shutdownSocket(client);
+			eventDriver.sockets.shutdown(client);
 			eventDriver.sockets.releaseRef(client);
 			return;
 		}
@@ -102,11 +102,11 @@ struct ClientHandler {
 
 			onLine(linebuf[linefill + idx + 2 .. linefill + idx + 2 + idx]);
 		} else if (linebuf.length - linefill > 0) {
-			eventDriver.sockets.readSocket(client, linebuf[linefill .. $], IOMode.once, &onReadData);
+			eventDriver.sockets.read(client, linebuf[linefill .. $], IOMode.once, &onReadData);
 		} else {
 			// ERROR: header line too long
 			print("Header line too long");
-			eventDriver.sockets.shutdownSocket(client);
+			eventDriver.sockets.shutdown(client);
 			eventDriver.sockets.releaseRef(client);
 		}
 	}

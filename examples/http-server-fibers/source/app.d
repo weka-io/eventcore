@@ -89,7 +89,7 @@ struct StreamConnectionImpl {
 	@property bool empty()
 	{
 		reader.start();
-		eventDriver.sockets.waitSocketData(m_socket, &onData);
+		eventDriver.sockets.waitForData(m_socket, &onData);
 		reader.wait();
 		return m_empty;
 	}
@@ -98,7 +98,7 @@ struct StreamConnectionImpl {
 	{
 		reader.start();
 		if (m_readBufferFill >= 2) onReadLineData(m_socket, IOStatus.ok, 0);
-		else eventDriver.sockets.readSocket(m_socket, m_readBuffer[m_readBufferFill .. $], IOMode.once, &onReadLineData);
+		else eventDriver.sockets.read(m_socket, m_readBuffer[m_readBufferFill .. $], IOMode.once, &onReadLineData);
 		reader.wait();
 		auto ln = m_line;
 		m_line = null;
@@ -108,7 +108,7 @@ struct StreamConnectionImpl {
 	void write(const(ubyte)[] data)
 	{
 		writer.start();
-		eventDriver.sockets.writeSocket(m_socket, data, IOMode.all, &onWrite);
+		eventDriver.sockets.write(m_socket, data, IOMode.all, &onWrite);
 		writer.wait();
 	}
 
@@ -160,7 +160,7 @@ struct StreamConnectionImpl {
 
 			reader.finish();
 		} else if (m_readBuffer.length - m_readBufferFill > 0) {
-			eventDriver.sockets.readSocket(m_socket, m_readBuffer[m_readBufferFill .. $], IOMode.once, &onReadLineData);
+			eventDriver.sockets.read(m_socket, m_readBuffer[m_readBufferFill .. $], IOMode.once, &onReadLineData);
 		} else {
 			reader.finish(exh);
 		}

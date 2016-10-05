@@ -61,7 +61,7 @@ abstract class PosixEventDriver : EventDriver,
 	abstract override @property PosixEventDriver core();
 	abstract override @property PosixEventDriver files();
 	abstract override @property PosixEventDriver sockets();
-	abstract override @property PosixEventDriver udp();
+	abstract override @property PosixEventDriver timers();
 	abstract override @property PosixEventDriver events();
 	abstract override @property PosixEventDriver signals();
 	abstract override @property PosixEventDriver watchers();
@@ -244,7 +244,7 @@ abstract class PosixEventDriver : EventDriver,
 		() @trusted { setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, cast(char*)&opt, opt.sizeof); } ();
 	}
 
-	final override void readSocket(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish)
+	final override void read(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish)
 	{
 		if (buffer.length == 0) {
 			on_read_finish(socket, IOStatus.ok, 0);
@@ -340,7 +340,7 @@ abstract class PosixEventDriver : EventDriver,
 		}
 	}
 
-	final override void writeSocket(StreamSocketFD socket, const(ubyte)[] buffer, IOMode mode, IOCallback on_write_finish)
+	final override void write(StreamSocketFD socket, const(ubyte)[] buffer, IOMode mode, IOCallback on_write_finish)
 	{
 		if (buffer.length == 0) {
 			on_write_finish(socket, IOStatus.ok, 0);
@@ -432,7 +432,7 @@ abstract class PosixEventDriver : EventDriver,
 		}
 	}
 
-	final override void waitSocketData(StreamSocketFD socket, IOCallback on_data_available)
+	final override void waitForData(StreamSocketFD socket, IOCallback on_data_available)
 	{
 		sizediff_t ret;
 		ubyte dummy;
@@ -489,17 +489,35 @@ abstract class PosixEventDriver : EventDriver,
 		} else finalize(ret ? IOStatus.ok : IOStatus.disconnected);
 	}
 
-	final override void shutdownSocket(StreamSocketFD socket, bool shut_read, bool shut_write)
+	final override void shutdown(StreamSocketFD socket, bool shut_read, bool shut_write)
 	{
 		// TODO!
 	}
 
-	final override FileFD openFile(string path, FileOpenMode mode)
+	final override void addRef(SocketFD fd)
+	{
+		auto pfd = &m_fds[fd];
+		assert(pfd.refCount > 0, "Adding reference to unreferenced socket FD.");
+		m_fds[fd].refCount++;
+	}
+
+	final override void releaseRef(SocketFD fd)
+	{
+		auto pfd = &m_fds[fd];
+		assert(pfd.refCount > 0, "Releasing reference to unreferenced socket FD.");
+		if (--m_fds[fd].refCount == 0) {
+			unregisterFD(fd);
+			clearFD(fd);
+			closeSocket(fd);
+		}
+	}
+
+	final override FileFD open(string path, FileOpenMode mode)
 	{
 		assert(false, "TODO!");
 	}
 
-	final override FileFD createTempFile()
+	final override FileFD createTemp()
 	{
 		assert(false, "TODO!");
 	}
@@ -524,7 +542,18 @@ abstract class PosixEventDriver : EventDriver,
 		assert(false, "TODO!");
 	}
 
-	final override EventID createEvent()
+	final override void addRef(FileFD descriptor)
+	{
+		assert(false);
+	}
+
+	final override void releaseRef(FileFD descriptor)
+	{
+		assert(false);
+	}
+		
+
+	final override EventID create()
 	{
 		auto id = cast(EventID)eventfd(0, EFD_NONBLOCK);
 		initFD(id);
@@ -534,7 +563,7 @@ abstract class PosixEventDriver : EventDriver,
 		return id;
 	}
 
-	final override void triggerEvent(EventID event, bool notify_all = true)
+	final override void trigger(EventID event, bool notify_all = true)
 	{
 		assert(event < m_fds.length, "Invalid event ID passed to triggerEvent.");
 		if (notify_all) {
@@ -549,7 +578,7 @@ abstract class PosixEventDriver : EventDriver,
 		}
 	}
 
-	final override void triggerEvent(EventID event, bool notify_all = true)
+	final override void trigger(EventID event, bool notify_all = true)
 	shared @trusted {
 		import core.atomic : atomicStore;
 		auto thisus = cast(PosixEventDriver)this;
@@ -560,13 +589,13 @@ abstract class PosixEventDriver : EventDriver,
 		() @trusted { .write(event, &one, one.sizeof); } ();
 	}
 
-	final override void waitForEvent(EventID event, EventCallback on_event)
+	final override void wait(EventID event, EventCallback on_event)
 	{
 		assert(event < m_fds.length, "Invalid event ID passed to waitForEvent.");
 		return m_fds[event].waiters.put(on_event);
 	}
 
-	final override void cancelWaitForEvent(EventID event, EventCallback on_event)
+	final override void cancelWait(EventID event, EventCallback on_event)
 	{
 		import std.algorithm.searching : countUntil;
 		import std.algorithm.mutation : remove;
@@ -581,44 +610,7 @@ abstract class PosixEventDriver : EventDriver,
 		() @trusted { .read(event, &cnt, cnt.sizeof); } ();
 		import core.atomic : cas;
 		auto all = cas(&m_fds[event].triggerAll, true, false);
-		triggerEvent(cast(EventID)event, all);
-	}
-
-	final override void waitForSignal(int sig, SignalCallback on_signal)
-	{
-		assert(false, "TODO!");
-	}
-
-	final override void cancelWaitForSignal(int sig)
-	{
-		assert(false, "TODO!");
-	}
-
-	final override WatcherID watchDirectory(string path, bool recursive)
-	{
-		assert(false, "TODO!");
-	}
-
-	final override void waitForChanges(WatcherID watcher, FileChangesCallback callback)
-	{
-		assert(false, "TODO!");
-	}
-
-	final override void cancelWaitForChanges(WatcherID watcher)
-	{
-		assert(false, "TODO!");
-	}
-
-	final override void addRef(SocketFD fd)
-	{
-		auto pfd = &m_fds[fd];
-		assert(pfd.refCount > 0, "Adding reference to unreferenced socket FD.");
-		m_fds[fd].refCount++;
-	}
-
-	final override void addRef(FileFD descriptor)
-	{
-		assert(false);
+		trigger(cast(EventID)event, all);
 	}
 
 	final override void addRef(EventID descriptor)
@@ -628,22 +620,6 @@ abstract class PosixEventDriver : EventDriver,
 		m_fds[descriptor].refCount++;
 	}
 
-	final override void releaseRef(SocketFD fd)
-	{
-		auto pfd = &m_fds[fd];
-		assert(pfd.refCount > 0, "Releasing reference to unreferenced socket FD.");
-		if (--m_fds[fd].refCount == 0) {
-			unregisterFD(fd);
-			clearFD(fd);
-			closeSocket(fd);
-		}
-	}
-
-	final override void releaseRef(FileFD descriptor)
-	{
-		assert(false);
-	}
-		
 	final override void releaseRef(EventID descriptor)
 	{
 		auto pfd = &m_fds[descriptor];
@@ -655,6 +631,42 @@ abstract class PosixEventDriver : EventDriver,
 		}
 	}
 	
+
+	final override void wait(int sig, SignalCallback on_signal)
+	{
+		assert(false, "TODO!");
+	}
+
+	final override void cancelWait(int sig)
+	{
+		assert(false, "TODO!");
+	}
+
+	final override WatcherID watchDirectory(string path, bool recursive)
+	{
+		assert(false, "TODO!");
+	}
+
+	final override void wait(WatcherID watcher, FileChangesCallback callback)
+	{
+		assert(false, "TODO!");
+	}
+
+	final override void cancelWait(WatcherID watcher)
+	{
+		assert(false, "TODO!");
+	}
+
+	final override void addRef(WatcherID descriptor)
+	{
+		assert(false, "TODO!");
+	}
+
+	final override void releaseRef(WatcherID descriptor)
+	{
+		assert(false, "TODO!");
+	}
+
 	final override void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
 	@system {
 		FDSlot* fds = &m_fds[descriptor];

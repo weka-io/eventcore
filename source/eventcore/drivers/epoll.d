@@ -33,7 +33,7 @@ final class EpollEventDriver : PosixEventDriver {
 		override @property EpollEventDriver core() { return this; }
 		override @property EpollEventDriver files() { return this; }
 		override @property EpollEventDriver sockets() { return this; }
-		override @property EpollEventDriver udp() { return this; }
+		override @property EpollEventDriver timers() { return this; }
 		override @property EpollEventDriver events() { return this; }
 		override @property EpollEventDriver signals() { return this; }
 		override @property EpollEventDriver watchers() { return this; }

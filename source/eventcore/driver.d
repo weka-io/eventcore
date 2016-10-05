@@ -10,7 +10,7 @@ interface EventDriver {
 	@property EventDriverCore core();
 	@property EventDriverFiles files();
 	@property EventDriverSockets sockets();
-	@property EventDriverTimers udp();
+	@property EventDriverTimers timers();
 	@property EventDriverEvents events();
 	@property EventDriverSignals signals();
 	@property EventDriverWatchers watchers();
@@ -80,6 +80,18 @@ interface EventDriverCore {
 
 interface EventDriverSockets {
 @safe: /*@nogc:*/ nothrow:
+	StreamSocketFD connectStream(scope Address peer_address, ConnectCallback on_connect);
+	StreamListenSocketFD listenStream(scope Address bind_address, AcceptCallback on_accept);
+	void waitForConnections(StreamListenSocketFD sock, AcceptCallback on_accept);
+	ConnectionState getConnectionState(StreamSocketFD sock);
+	void setTCPNoDelay(StreamSocketFD socket, bool enable);
+	void read(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish);
+	void write(StreamSocketFD socket, const(ubyte)[] buffer, IOMode mode, IOCallback on_write_finish);
+	void waitForData(StreamSocketFD socket, IOCallback on_data_available);
+	void shutdown(StreamSocketFD socket, bool shut_read = true, bool shut_write = true);
+	void cancelRead(StreamSocketFD socket);
+	void cancelWrite(StreamSocketFD socket);
+
 	/**
 		Increments the reference count of the given resource.
 	*/
@@ -91,22 +103,17 @@ interface EventDriverSockets {
 		freed and the resource descriptor gets invalidated.
 	*/
 	void releaseRef(SocketFD descriptor);
-
-	StreamSocketFD connectStream(scope Address peer_address, ConnectCallback on_connect);
-	StreamListenSocketFD listenStream(scope Address bind_address, AcceptCallback on_accept);
-	void waitForConnections(StreamListenSocketFD sock, AcceptCallback on_accept);
-	ConnectionState getConnectionState(StreamSocketFD sock);
-	void setTCPNoDelay(StreamSocketFD socket, bool enable);
-	void readSocket(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish);
-	void writeSocket(StreamSocketFD socket, const(ubyte)[] buffer, IOMode mode, IOCallback on_write_finish);
-	void waitSocketData(StreamSocketFD socket, IOCallback on_data_available);
-	void shutdownSocket(StreamSocketFD socket, bool shut_read = true, bool shut_write = true);
-	void cancelRead(StreamSocketFD socket);
-	void cancelWrite(StreamSocketFD socket);
 }
 
 interface EventDriverFiles {
 @safe: /*@nogc:*/ nothrow:
+	FileFD open(string path, FileOpenMode mode);
+	FileFD createTemp();
+	void write(FileFD file, ulong offset, ubyte[] buffer, IOCallback on_write_finish);
+	void read(FileFD file, ulong offset, ubyte[] buffer, IOCallback on_read_finish);
+	void cancelWrite(FileFD file);
+	void cancelRead(FileFD file);
+
 	/**
 		Increments the reference count of the given resource.
 	*/
@@ -118,17 +125,16 @@ interface EventDriverFiles {
 		freed and the resource descriptor gets invalidated.
 	*/
 	void releaseRef(FileFD descriptor);
-
-	FileFD openFile(string path, FileOpenMode mode);
-	FileFD createTempFile();
-	void write(FileFD file, ulong offset, ubyte[] buffer, IOCallback on_write_finish);
-	void read(FileFD file, ulong offset, ubyte[] buffer, IOCallback on_read_finish);
-	void cancelWrite(FileFD file);
-	void cancelRead(FileFD file);
 }
 
 interface EventDriverEvents {
 @safe: /*@nogc:*/ nothrow:
+	EventID create();
+	void trigger(EventID event, bool notify_all = true);
+	void trigger(EventID event, bool notify_all = true) shared;
+	void wait(EventID event, EventCallback on_event);
+	void cancelWait(EventID event, EventCallback on_event);
+
 	/**
 		Increments the reference count of the given resource.
 	*/
@@ -140,22 +146,24 @@ interface EventDriverEvents {
 		freed and the resource descriptor gets invalidated.
 	*/
 	void releaseRef(EventID descriptor);
-
-	EventID createEvent();
-	void triggerEvent(EventID event, bool notify_all = true);
-	void triggerEvent(EventID event, bool notify_all = true) shared;
-	void waitForEvent(EventID event, EventCallback on_event);
-	void cancelWaitForEvent(EventID event, EventCallback on_event);
 }
 
 interface EventDriverSignals {
 @safe: /*@nogc:*/ nothrow:
-	void waitForSignal(int sig, SignalCallback on_signal);
-	void cancelWaitForSignal(int sig);
+	void wait(int sig, SignalCallback on_signal);
+	void cancelWait(int sig);
 }
 
 interface EventDriverTimers {
 @safe: /*@nogc:*/ nothrow:
+	TimerID create();
+	void set(TimerID timer, Duration timeout, Duration repeat = Duration.zero);
+	void stop(TimerID timer);
+	bool isPending(TimerID timer);
+	bool isPeriodic(TimerID timer);
+	void wait(TimerID timer, TimerCallback callback);
+	void cancelWait(TimerID timer, TimerCallback callback);
+
 	/**
 		Increments the reference count of the given resource.
 	*/
@@ -167,21 +175,25 @@ interface EventDriverTimers {
 		freed and the resource descriptor gets invalidated.
 	*/
 	void releaseRef(TimerID descriptor);
-
-	TimerID createTimer();
-	void setTimer(TimerID timer, Duration timeout, Duration repeat = Duration.zero);
-	void stopTimer(TimerID timer);
-	bool isTimerPending(TimerID timer);
-	bool isTimerPeriodic(TimerID timer);
-	void waitTimer(TimerID timer, TimerCallback callback);
-	void cancelTimerWait(TimerID timer, TimerCallback callback);
 }
 
 interface EventDriverWatchers {
 @safe: /*@nogc:*/ nothrow:
 	WatcherID watchDirectory(string path, bool recursive);
-	void waitForChanges(WatcherID watcher, FileChangesCallback callback);
-	void cancelWaitForChanges(WatcherID watcher);
+	void wait(WatcherID watcher, FileChangesCallback callback);
+	void cancelWait(WatcherID watcher);
+
+	/**
+		Increments the reference count of the given resource.
+	*/
+	void addRef(WatcherID descriptor);
+	/**
+		Decrements the reference count of the given resource.
+
+		Once the reference count reaches zero, all associated resources will be
+		freed and the resource descriptor gets invalidated.
+	*/
+	void releaseRef(WatcherID descriptor);
 }
 
 

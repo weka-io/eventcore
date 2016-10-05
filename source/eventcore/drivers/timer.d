@@ -70,7 +70,7 @@ mixin template DefaultTimerImpl() {
 		return any_fired;
 	}
 
-	final override TimerID createTimer()
+	final override TimerID create()
 	@trusted {
 		auto id = cast(TimerID)(++m_lastTimerID);
 		TimerSlot* tm;
@@ -83,11 +83,11 @@ mixin template DefaultTimerImpl() {
 		return id;
 	}
 
-	final override void setTimer(TimerID timer, Duration timeout, Duration repeat)
+	final override void set(TimerID timer, Duration timeout, Duration repeat)
 	@trusted {
 		scope (failure) assert(false);
 		auto tm = m_timers[timer];
-		if (tm.pending) stopTimer(timer);
+		if (tm.pending) stop(timer);
 		tm.timeout = Clock.currStdTime + timeout.total!"hnsecs";
 		tm.repeatDuration = repeat.total!"hnsecs";
 		tm.pending = true;
@@ -97,7 +97,7 @@ mixin template DefaultTimerImpl() {
 		catch (Exception e) { print("Failed to insert timer: %s", e.msg); }
 	}
 
-	final override void stopTimer(TimerID timer)
+	final override void stop(TimerID timer)
 	@trusted {
 		auto tm = m_timers[timer];
 		if (!tm.pending) return;
@@ -118,22 +118,22 @@ mixin template DefaultTimerImpl() {
 		}
 	}
 
-	final override bool isTimerPending(TimerID descriptor)
+	final override bool isPending(TimerID descriptor)
 	{
 		return m_timers[descriptor].pending;
 	}
 
-	final override bool isTimerPeriodic(TimerID descriptor)
+	final override bool isPeriodic(TimerID descriptor)
 	{
 		return m_timers[descriptor].repeatDuration > 0;
 	}
 
-	final override void waitTimer(TimerID timer, TimerCallback callback)
+	final override void wait(TimerID timer, TimerCallback callback)
 	{
 		m_timers[timer].callbacks ~= callback;
 	}
 
-	final override void cancelTimerWait(TimerID timer, TimerCallback callback)
+	final override void cancelWait(TimerID timer, TimerCallback callback)
 	{
 		import std.algorithm.mutation : remove;
 		import std.algorithm.searching : countUntil;
@@ -160,7 +160,7 @@ mixin template DefaultTimerImpl() {
 
 		auto tm = m_timers[descriptor];
 		if (!--tm.refCount) {
-			if (tm.pending) stopTimer(tm.id);
+			if (tm.pending) stop(tm.id);
 			m_timers.remove(descriptor);
 			() @trusted { scope (failure) assert(false); ms_allocator.dispose(tm); } ();
 		}
