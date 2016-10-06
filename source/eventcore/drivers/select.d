@@ -25,7 +25,6 @@ version (Windows) {
 
 final class SelectEventDriver : PosixEventDriver {
 	override @property SelectEventDriver core() { return this; }
-	override @property SelectEventDriver files() { return this; }
 	override @property SelectEventDriver sockets() { return this; }
 	override @property SelectEventDriver timers() { return this; }
 	override @property SelectEventDriver events() { return this; }
@@ -51,7 +50,7 @@ final class SelectEventDriver : PosixEventDriver {
 		enumerateFDs!(EventType.write)((fd) @trusted { FD_SET(fd, &writefds); });
 		enumerateFDs!(EventType.status)((fd) @trusted { FD_SET(fd, &statusfds); });
 
-//print("Wait for event...");
+//print("Wait for event... %s", timeout);
 //writefln("%.3f: select in", Clock.currAppTick.usecs * 1e-3);
 		auto ret = () @trusted { return select(this.maxFD+1, &readfds, &writefds, &statusfds, timeout == Duration.max ? null : &ts); } ();
 //writefln("%.3f: select out", Clock.currAppTick.usecs * 1e-3);
@@ -75,7 +74,7 @@ final class SelectEventDriver : PosixEventDriver {
 
 	override void dispose()
 	{
-
+		super.dispose();
 	}
 
 	override void registerFD(FD fd, EventMask mask)

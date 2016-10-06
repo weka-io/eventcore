@@ -8,6 +8,7 @@ module eventcore.drivers.posix;
 
 public import eventcore.driver;
 import eventcore.drivers.timer;
+import eventcore.drivers.threadedfile;
 import eventcore.internal.consumablequeue : ConsumableQueue;
 import eventcore.internal.utils;
 
@@ -37,7 +38,7 @@ private long currStdTime()
 }
 
 abstract class PosixEventDriver : EventDriver,
-		EventDriverCore, EventDriverFiles, EventDriverSockets, EventDriverTimers,
+		EventDriverCore, EventDriverSockets, EventDriverTimers,
 		EventDriverEvents, EventDriverSignals, EventDriverWatchers
 {
 @safe: /*@nogc:*/ nothrow:
@@ -47,6 +48,7 @@ abstract class PosixEventDriver : EventDriver,
 		size_t m_waiterCount = 0;
 		bool m_exit = false;
 		FD m_wakeupEvent;
+		ThreadedFileEventDriver!PosixEventDriver m_files;
 	}
 
 	protected this()
@@ -55,11 +57,12 @@ abstract class PosixEventDriver : EventDriver,
 		initFD(m_wakeupEvent);
 		registerFD(m_wakeupEvent, EventMask.read);
 		//startNotify!(EventType.read)(m_wakeupEvent, null); // should already be caught by registerFD
+		m_files = new ThreadedFileEventDriver!PosixEventDriver(this);
 	}
 
 	// force overriding these in the (final) sub classes to avoid virtual calls
 	abstract override @property PosixEventDriver core();
-	abstract override @property PosixEventDriver files();
+	final override @property ThreadedFileEventDriver!PosixEventDriver files() { return m_files; }
 	abstract override @property PosixEventDriver sockets();
 	abstract override @property PosixEventDriver timers();
 	abstract override @property PosixEventDriver events();
@@ -124,7 +127,11 @@ abstract class PosixEventDriver : EventDriver,
 	}
 
 	protected abstract bool doProcessEvents(Duration dur);
-	abstract void dispose();
+	
+	abstract void dispose()
+	{
+		m_files.dispose();
+	}
 
 	final override StreamSocketFD connectStream(scope Address address, ConnectCallback on_connect)
 	{
@@ -511,47 +518,6 @@ abstract class PosixEventDriver : EventDriver,
 			closeSocket(fd);
 		}
 	}
-
-	final override FileFD open(string path, FileOpenMode mode)
-	{
-		assert(false, "TODO!");
-	}
-
-	final override FileFD createTemp()
-	{
-		assert(false, "TODO!");
-	}
-
-	final override void write(FileFD file, ulong offset, ubyte[] buffer, IOCallback on_write_finish)
-	{
-		assert(false, "TODO!");
-	}
-
-	final override void read(FileFD file, ulong offset, ubyte[] buffer, IOCallback on_read_finish)
-	{
-		assert(false, "TODO!");
-	}
-
-	final override void cancelWrite(FileFD file)
-	{
-		assert(false, "TODO!");
-	}
-
-	final override void cancelRead(FileFD file)
-	{
-		assert(false, "TODO!");
-	}
-
-	final override void addRef(FileFD descriptor)
-	{
-		assert(false);
-	}
-
-	final override void releaseRef(FileFD descriptor)
-	{
-		assert(false);
-	}
-		
 
 	final override EventID create()
 	{

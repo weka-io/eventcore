@@ -31,6 +31,6 @@ DNS              | no                | no               | no              | no
 Timers           | yes               | yes              | no              | no               
 Events           | yes               | yes              | no              | no               
 Signals          | no                | no               | no              | no               
-Files            | no                | no               | no              | no               
+Files            | yes               | yes              | no              | no               
 UI Integration   | no                | no               | no              | no               
 File watcher     | no                | no               | no              | no               

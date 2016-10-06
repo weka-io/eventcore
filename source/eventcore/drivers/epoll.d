@@ -31,7 +31,6 @@ final class EpollEventDriver : PosixEventDriver {
 
 	nothrow @safe {
 		override @property EpollEventDriver core() { return this; }
-		override @property EpollEventDriver files() { return this; }
 		override @property EpollEventDriver sockets() { return this; }
 		override @property EpollEventDriver timers() { return this; }
 		override @property EpollEventDriver events() { return this; }
@@ -67,6 +66,7 @@ final class EpollEventDriver : PosixEventDriver {
 	override void dispose()
 	{
 		import core.sys.posix.unistd : close;
+		super.dispose();
 		close(m_epoll);
 	}
 

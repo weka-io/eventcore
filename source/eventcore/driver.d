@@ -104,8 +104,12 @@ interface EventDriverFiles {
 @safe: /*@nogc:*/ nothrow:
 	FileFD open(string path, FileOpenMode mode);
 	FileFD createTemp();
-	void write(FileFD file, ulong offset, ubyte[] buffer, IOCallback on_write_finish);
-	void read(FileFD file, ulong offset, ubyte[] buffer, IOCallback on_read_finish);
+	void close(FileFD file);
+
+	ulong getSize(FileFD file);
+
+	void write(FileFD file, ulong offset, const(ubyte)[] buffer, FileIOCallback on_write_finish);
+	void read(FileFD file, ulong offset, ubyte[] buffer, FileIOCallback on_read_finish);
 	void cancelWrite(FileFD file);
 	void cancelRead(FileFD file);
 
@@ -191,6 +195,7 @@ interface EventDriverWatchers {
 alias ConnectCallback = void delegate(StreamSocketFD, ConnectStatus);
 alias AcceptCallback = void delegate(StreamListenSocketFD, StreamSocketFD);
 alias IOCallback = void delegate(StreamSocketFD, IOStatus, size_t);
+alias FileIOCallback = void delegate(FileFD, IOStatus, size_t);
 alias EventCallback = void delegate(EventID);
 alias SignalCallback = void delegate(int);
 alias TimerCallback = void delegate(TimerID);
