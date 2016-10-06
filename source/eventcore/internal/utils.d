@@ -92,7 +92,96 @@ struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
 	}
 }
 
-private size_t nextPOT(size_t n)
+/** Efficient bit set of dynamic size.
+*/
+struct SmallIntegerSet(V : uint)
+{
+	private {
+		uint[][4] m_bits;
+	}
+
+	void insert(V i)
+	{
+		foreach (j; 0 .. m_bits.length) {
+			uint b = 1u << (i%32);
+			i /= 32;
+			if (i >= m_bits[j].length)
+				m_bits[j].length = nextPOT(i);
+			m_bits[j][i] |= b;
+		}
+	}
+
+	void remove(V i)
+	{
+		foreach (j; 0 .. m_bits.length) {
+			uint b = 1u << (i%32);
+			i /= 32;
+			if (!m_bits[j][i]) break;
+			m_bits[j][i] &= ~b;
+			if (m_bits[j][i]) break;
+		}
+	}
+
+	bool contains(V i) const { return i/32 < m_bits[0].length && m_bits[0][i/32] & (1u<<(i%32)); }
+
+	int opApply(scope int delegate(V) @safe nothrow del)
+	const @safe {
+		int rec(size_t depth, uint bi)
+		{
+			auto b = m_bits[depth][bi];
+			foreach (i; 0 .. 32)
+				if (b & (1u << i)) {
+					uint sbi = bi*32 + i;
+					if (depth == 0) {
+						if (auto ret = del(V(sbi)))
+							return ret;
+					} else rec(depth-1, sbi);
+				}
+			return 0;
+		}
+
+		foreach (i, b; m_bits[$-1])
+			if (b) {
+				if (auto ret = rec(m_bits.length-1, cast(uint)i))
+					return ret;
+			}
+
+		return 0;
+	}
+}
+
+@safe nothrow unittest {
+	SmallIntegerSet!uint s;
+
+	void testIter(scope uint[] seq...) nothrow {
+		size_t cnt = 0;
+		foreach (v; s) {
+			assert(v == seq[cnt]);
+			cnt++;
+		}
+		assert(cnt == seq.length);
+	}
+
+	testIter();
+	s.insert(1);
+	assert(s.contains(1));
+	assert(!s.contains(2));
+	testIter(1);
+	s.insert(3467);
+	assert(s.contains(3467));
+	assert(!s.contains(300));
+	testIter(1, 3467);
+	s.insert(2);
+	testIter(1, 2, 3467);
+	s.remove(1);
+	testIter(2, 3467);
+	s.remove(2);
+	testIter(3467);
+	s.remove(3467);
+	testIter();
+}
+
+private size_t nextPOT(size_t n) @safe nothrow @nogc
 {
 	foreach_reverse (i; 0 .. size_t.sizeof*8) {
 		size_t ni = cast(size_t)1 << i;
