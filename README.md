@@ -34,3 +34,10 @@ Signals          | no                | no               | no              | no
 Files            | yes               | yes              | no              | no               
 UI Integration   | no                | no               | no              | no               
 File watcher     | no                | no               | no              | no               
+
+Open questions
+--------------
+
+- Error code reporting
+- Adopting existing file descriptors
+- Enqueued writes
