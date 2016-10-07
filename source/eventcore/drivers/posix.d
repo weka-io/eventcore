@@ -177,6 +177,7 @@ abstract class PosixEventDriver : EventDriver,
 
 	private void onConnect(FD sock)
 	{
+		setNotifyCallback!(EventType.write)(sock, null);
 		m_fds[sock].connectCallback(cast(StreamSocketFD)sock, ConnectStatus.connected);
 	}
 
@@ -832,8 +833,7 @@ abstract class PosixEventDriver : EventDriver,
 	{
 		//log("start notify %s %s", evt, fd);
 		//assert(m_fds[fd].callback[evt] is null, "Waiting for event which is already being waited for.");
-		m_fds[fd].callback[evt] = callback;
-		m_waiterCount++;
+		if (callback) setNotifyCallback!evt(fd, callback);
 		updateFD(fd, m_fds[fd].eventMask);
 	}
 
@@ -841,8 +841,7 @@ abstract class PosixEventDriver : EventDriver,
 	{
 		//log("stop notify %s %s", evt, fd);
 		//ssert(m_fds[fd].callback[evt] !is null, "Stopping waiting for event which is not being waited for.");
-		m_fds[fd].callback[evt] = null;
-		m_waiterCount--;
+		if (m_fds[fd].callback) setNotifyCallback!evt(fd, null);
 		updateFD(fd, m_fds[fd].eventMask);
 	}
 
@@ -850,6 +849,14 @@ abstract class PosixEventDriver : EventDriver,
 	{
 		assert((callback !is null) != (m_fds[fd].callback[evt] !is null),
 			"Overwriting notification callback.");
+		// ensure that the FD doesn't get closed before the callback gets called.
+		if (callback !is null) {
+			m_waiterCount++;
+			m_fds[fd].refCount++;
+		} else {
+			m_fds[fd].refCount--;
+			m_waiterCount--;
+		}
 		m_fds[fd].callback[evt] = callback;
 	}
 
