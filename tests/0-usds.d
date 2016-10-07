@@ -41,25 +41,20 @@ void testDgram()
 	auto s_baseSocket = createDatagramSocket(baddr);
 	auto s_freeSocket = createDatagramSocket(new UnixAddress(addr2));
 	auto s_connectedSocket = createDatagramSocket(new UnixAddress(addr3), baddr);
-	log("drec");
 	s_baseSocket.receive!((status, bytes, addr) {
 		assert(status == IOStatus.wouldBlock);
 	})(s_rbuf, IOMode.immediate);
-	log("drec2");
 	s_baseSocket.receive!((status, bts, address) {
 		assert(status == IOStatus.ok);
 		assert(bts == pack1.length);
 		assert(s_rbuf[0 .. pack1.length] == pack1);
 
-	log("dsend2");
 		s_freeSocket.send!((status, bytes) {
 			assert(status == IOStatus.ok);
 			assert(bytes == pack2.length);
 		})(pack2, IOMode.once, baddr);
 
-	log("drec3");
 		s_baseSocket.receive!((status, bts, scope addr) {
-	log("drec3done");
 			assert(status == IOStatus.ok);
 			assert(bts == pack2.length);
 			assert(s_rbuf[0 .. pack2.length] == pack2);
@@ -73,9 +68,7 @@ void testDgram()
 			eventDriver.core.exit();
 		})(s_rbuf, IOMode.immediate);
 	})(s_rbuf, IOMode.once);
-	log("dsend");
 	s_connectedSocket.send!((status, bytes) {
-	log("dsenddone");
 		assert(status == IOStatus.ok);
 		assert(bytes == 10);
 	})(pack1, IOMode.immediate);
@@ -100,34 +93,17 @@ void testStream()
 	auto server = listenStream(baddr);
 	StreamSocket client;
 
-				log("connect");
-	connectStream!((sock, status) {
-		client = sock;
-		assert(status == ConnectStatus.connected);
-				log("write1");
-		client.write!((wstatus, bytes) {
-				log("written1");
-			{ import std.stdio; scope (failure) assert(false); writefln("%s %s", wstatus, bytes); }
-			assert(wstatus == IOStatus.ok);
-			assert(bytes == 10);
-		})(pack1, IOMode.all);
-	})(baddr);
-
-				log("listen");
 	server.waitForConnections!((ref incoming) {
-				log("read1");
 		incoming.read!((status, bts) {
 			assert(status == IOStatus.ok);
 			assert(bts == pack1.length);
 			assert(s_rbuf[0 .. pack1.length] == pack1);
 
-				log("write2");
 			client.write!((status, bytes) {
 				assert(status == IOStatus.ok);
 				assert(bytes == pack2.length);
 			})(pack2, IOMode.once);
 
-				log("read2");
 			incoming.read!((status, bts) {
 				assert(status == IOStatus.ok);
 				assert(bts == pack2.length);
@@ -144,6 +120,15 @@ void testStream()
 		})(s_rbuf, IOMode.once);
 	});
 
+	connectStream!((sock, status) {
+		client = sock;
+		assert(status == ConnectStatus.connected);
+		client.write!((wstatus, bytes) {
+			assert(wstatus == IOStatus.ok);
+			assert(bytes == 10);
+		})(pack1, IOMode.all);
+	})(baddr);
+
 	ExitReason er;
 	do er = eventDriver.core.processEvents();
 	while (er == ExitReason.idle);
@@ -156,11 +141,4 @@ void main()
 {
 	testStream();
 	testDgram();
-}
-
-void log(ARGS...)(string fmt, ARGS args)
-{
-	import std.stdio;
-	try writefln(fmt, args);
-	catch (Exception e) {}
 }
