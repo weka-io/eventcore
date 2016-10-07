@@ -151,6 +151,8 @@ abstract class PosixEventDriver : EventDriver,
 
 		registerFD(sock, EventMask.read|EventMask.write|EventMask.status);
 
+		initFD(sock);
+
 		auto ret = () @trusted { return connect(sock, address.name, address.nameLen); } ();
 		if (ret == 0) {
 			on_connect(sock, ConnectStatus.connected);
@@ -162,13 +164,13 @@ abstract class PosixEventDriver : EventDriver,
 				}
 				startNotify!(EventType.write)(sock, &onConnect);
 			} else {
+				clearFD(sock);
 				unregisterFD(sock);
 				invalidateSocket();
 				on_connect(sock, ConnectStatus.unknownError);
+				return sock;
 			}
 		}
-
-		initFD(sock);
 
 		return sock;
 	}
@@ -206,8 +208,12 @@ abstract class PosixEventDriver : EventDriver,
 			} else log("Success!");
 		} ();
 
-		if (on_accept && sock != StreamListenSocketFD.invalid)
-			waitForConnections(sock, on_accept);
+		if (sock == StreamListenSocketFD.invalid)
+			return sock;
+
+		initFD(sock);
+
+		if (on_accept) waitForConnections(sock, on_accept);
 
 		return sock;
 	}
@@ -216,9 +222,9 @@ abstract class PosixEventDriver : EventDriver,
 	{
 		log("wait for conn");
 		registerFD(sock, EventMask.read);
-		initFD(sock);
 		m_fds[sock].acceptCallback = on_accept;
 		startNotify!(EventType.read)(sock, &onAccept);
+		onAccept(sock);
 	}
 
 	private void onAccept(FD listenfd)
@@ -270,8 +276,6 @@ abstract class PosixEventDriver : EventDriver,
 			}
 		}
 
-		size_t bytes_read = 0;
-
 		if (ret == 0) {
 			on_read_finish(socket, IOStatus.disconnected, 0);
 			return;
@@ -283,10 +287,9 @@ abstract class PosixEventDriver : EventDriver,
 		}
 
 		if (ret > 0) {
-			bytes_read += ret;
-			buffer = buffer[bytes_read .. $];
+			buffer = buffer[ret .. $];
 			if (mode != IOMode.all || buffer.length == 0) {
-				on_read_finish(socket, IOStatus.ok, bytes_read);
+				on_read_finish(socket, IOStatus.ok, ret);
 				return;
 			}
 		}
@@ -504,7 +507,7 @@ abstract class PosixEventDriver : EventDriver,
 		auto sock = cast(DatagramSocketFD)createSocket(bind_address.addressFamily, SOCK_DGRAM);
 		if (sock == -1) return DatagramSocketFD.invalid;
 
-		if (() @trusted { return bind(sock, bind_address.name, bind_address.nameLen); } () != 0) {
+		if (bind_address && () @trusted { return bind(sock, bind_address.name, bind_address.nameLen); } () != 0) {
 			closeSocket(sock);
 			return DatagramSocketFD.init;
 		}
@@ -537,9 +540,7 @@ abstract class PosixEventDriver : EventDriver,
 				on_receive_finish(socket, IOStatus.error, 0, null);
 				return;
 			}
-		}
 
-		if (ret < 0) {
 			if (mode == IOMode.immediate) {
 				on_receive_finish(socket, IOStatus.wouldBlock, 0, null);
 			} else {
@@ -607,9 +608,7 @@ abstract class PosixEventDriver : EventDriver,
 				on_send_finish(socket, IOStatus.error, 0, null);
 				return;
 			}
-		}
 
-		if (ret < 0) {
 			if (mode == IOMode.immediate) {
 				on_send_finish(socket, IOStatus.wouldBlock, 0, null);
 			} else {
