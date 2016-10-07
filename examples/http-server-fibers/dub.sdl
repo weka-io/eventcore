@@ -1,4 +1,0 @@
-name "http-server-example"
-description "Simple pseudo HTTP server suitable for benchmarking"
-dependency "eventcore" path="../.."
-

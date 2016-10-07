@@ -13,14 +13,16 @@ fi
 dub test --combined --compiler=$DC
 
 if [ ${BUILD_EXAMPLE=1} -eq 1 ]; then
-    for ex in $(\ls -1 examples/); do
+    for ex in $(\ls -1 examples/*.d); do
         echo "[INFO] Building example $ex"
-        (cd examples/$ex && dub build --compiler=$DC && dub clean)
+        dub build --compiler=$DC --single $ex
     done
+    rm -rf examples/.dub/
+    rm examples/*-example
 fi
 if [ ${RUN_TEST=1} -eq 1 ]; then
-    for ex in `\ls -1 tests/`; do
+    for ex in `\ls -1 tests/*.d`; do
         echo "[INFO] Running test $ex"
-        (cd tests/$ex && dub --compiler=$DC && dub clean)
+        dub --temp-build --compiler=$DC --single $ex
     done
 fi

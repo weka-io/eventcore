@@ -1,3 +1,9 @@
+/++ dub.sdl:
+	name "http-server-example"
+	description "Simple pseudo HTTP server suitable for benchmarking"
+	dependency "eventcore" path=".."
++/
+module http_server_example;
 
 import eventcore.core;
 import eventcore.internal.utils;

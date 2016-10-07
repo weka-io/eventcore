@@ -1,3 +1,9 @@
+/++ dub.sdl:
+	name "http-server-fibers-example"
+	description "Simple fiber based pseudo HTTP server suitable for benchmarking"
+	dependency "eventcore" path=".."
++/
+module http_server_fibers_example;
 
 import eventcore.core;
 import eventcore.internal.utils;
