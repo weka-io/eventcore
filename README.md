@@ -25,7 +25,7 @@ Driver development status
 Feature          | SelectEventDriver | EpollEventDriver | IOCPEventDriver | KqueueEventDriver
 -----------------|-------------------|------------------|-----------------|------------------
 TCP Sockets      | yes               | yes              | no              | no               
-UDP Sockets      | no                | no               | no              | no               
+UDP Sockets      | yes               | yes              | no              | no               
 USDS             | no                | no               | no              | no               
 DNS              | no                | no               | no              | no               
 Timers           | yes               | yes              | no              | no               

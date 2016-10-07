@@ -83,11 +83,17 @@ interface EventDriverSockets {
 	ConnectionState getConnectionState(StreamSocketFD sock);
 	void setTCPNoDelay(StreamSocketFD socket, bool enable);
 	void read(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish);
+	void cancelRead(StreamSocketFD socket);
 	void write(StreamSocketFD socket, const(ubyte)[] buffer, IOMode mode, IOCallback on_write_finish);
+	void cancelWrite(StreamSocketFD socket);
 	void waitForData(StreamSocketFD socket, IOCallback on_data_available);
 	void shutdown(StreamSocketFD socket, bool shut_read = true, bool shut_write = true);
-	void cancelRead(StreamSocketFD socket);
-	void cancelWrite(StreamSocketFD socket);
+
+	DatagramSocketFD createDatagramSocket(scope Address bind_address, scope Address target_address);
+	void receive(DatagramSocketFD socket, ubyte[] buffer, IOMode mode, DatagramIOCallback on_receive_finish);
+	void cancelReceive(DatagramSocketFD socket);
+	void send(DatagramSocketFD socket, const(ubyte)[] buffer, IOMode mode, DatagramIOCallback on_send_finish, Address target_address = null);
+	void cancelSend(DatagramSocketFD socket);
 
 	/** Increments the reference count of the given resource.
 	*/
@@ -195,6 +201,7 @@ interface EventDriverWatchers {
 alias ConnectCallback = void delegate(StreamSocketFD, ConnectStatus);
 alias AcceptCallback = void delegate(StreamListenSocketFD, StreamSocketFD);
 alias IOCallback = void delegate(StreamSocketFD, IOStatus, size_t);
+alias DatagramIOCallback = void delegate(DatagramSocketFD, IOStatus, size_t, scope Address);
 alias FileIOCallback = void delegate(FileFD, IOStatus, size_t);
 alias EventCallback = void delegate(EventID);
 alias SignalCallback = void delegate(int);
@@ -302,6 +309,7 @@ alias FD = Handle!("FD", int, -1);
 alias SocketFD = Handle!("Socket", FD);
 alias StreamSocketFD = Handle!("Stream", SocketFD);
 alias StreamListenSocketFD = Handle!("StreamListen", SocketFD);
+alias DatagramSocketFD = Handle!("Datagram", SocketFD);
 alias FileFD = Handle!("File", FD);
 alias EventID = Handle!("Event", FD);
 alias TimerID = Handle!("Timer", int);

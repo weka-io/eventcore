@@ -135,7 +135,7 @@ abstract class PosixEventDriver : EventDriver,
 
 	final override StreamSocketFD connectStream(scope Address address, ConnectCallback on_connect)
 	{
-		auto sock = cast(StreamSocketFD)createSocket(address.addressFamily);
+		auto sock = cast(StreamSocketFD)createSocket(address.addressFamily, SOCK_STREAM);
 		if (sock == -1) return StreamSocketFD.invalid;
 
 		void invalidateSocket() @nogc @trusted nothrow { closeSocket(sock); sock = StreamSocketFD.invalid; }
@@ -187,7 +187,7 @@ abstract class PosixEventDriver : EventDriver,
 	final override StreamListenSocketFD listenStream(scope Address address, AcceptCallback on_accept)
 	{
 		log("Listen stream");
-		auto sock = cast(StreamListenSocketFD)createSocket(address.addressFamily);
+		auto sock = cast(StreamListenSocketFD)createSocket(address.addressFamily, SOCK_STREAM);
 
 		void invalidateSocket() @nogc @trusted nothrow { closeSocket(sock); sock = StreamSocketFD.invalid; }
 
@@ -259,7 +259,7 @@ abstract class PosixEventDriver : EventDriver,
 		}
 
 		sizediff_t ret;
-		() @trusted { ret = recv(socket, buffer.ptr, buffer.length, 0); } ();
+		() @trusted { ret = .recv(socket, buffer.ptr, buffer.length, 0); } ();
 
 		if (ret < 0) {
 			auto err = getSocketError();
@@ -323,7 +323,7 @@ abstract class PosixEventDriver : EventDriver,
 		}
 
 		sizediff_t ret;
-		() @trusted { ret = recv(socket, slot.readBuffer.ptr, slot.readBuffer.length, 0); } ();
+		() @trusted { ret = .recv(socket, slot.readBuffer.ptr, slot.readBuffer.length, 0); } ();
 		if (ret < 0) {
 			auto err = getSocketError();
 			if (err != EAGAIN) {
@@ -355,7 +355,7 @@ abstract class PosixEventDriver : EventDriver,
 		}
 
 		sizediff_t ret;
-		() @trusted { ret = send(socket, buffer.ptr, buffer.length, 0); } ();
+		() @trusted { ret = .send(socket, buffer.ptr, buffer.length, 0); } ();
 
 		if (ret < 0) {
 			auto err = getSocketError();
@@ -398,11 +398,9 @@ abstract class PosixEventDriver : EventDriver,
 
 	override void cancelWrite(StreamSocketFD socket)
 	{
-		assert(m_fds[socket].readCallback !is null, "Cancelling write when there is no read in progress.");
+		assert(m_fds[socket].writeCallback !is null, "Cancelling write when there is no write in progress.");
 		setNotifyCallback!(EventType.write)(socket, null);
-		with (m_fds[socket]) {
-			writeBuffer = null;
-		}
+		m_fds[socket].writeBuffer = null;
 	}
 
 	private void onSocketWrite(FD fd)
@@ -411,13 +409,13 @@ abstract class PosixEventDriver : EventDriver,
 		auto socket = cast(StreamSocketFD)fd;
 
 		sizediff_t ret;
-		() @trusted { ret = send(socket, slot.writeBuffer.ptr, slot.writeBuffer.length, 0); } ();
+		() @trusted { ret = .send(socket, slot.writeBuffer.ptr, slot.writeBuffer.length, 0); } ();
 
 		if (ret < 0) {
 			auto err = getSocketError();
 			if (err != EAGAIN) {
 				setNotifyCallback!(EventType.write)(socket, null);
-				slot.readCallback(socket, IOStatus.error, slot.bytesRead);
+				slot.writeCallback(socket, IOStatus.error, slot.bytesRead);
 				return;
 			}
 		}
@@ -499,6 +497,167 @@ abstract class PosixEventDriver : EventDriver,
 	final override void shutdown(StreamSocketFD socket, bool shut_read, bool shut_write)
 	{
 		// TODO!
+	}
+
+	DatagramSocketFD createDatagramSocket(scope Address bind_address, scope Address target_address)
+	{
+		auto sock = cast(DatagramSocketFD)createSocket(bind_address.addressFamily, SOCK_DGRAM);
+		if (sock == -1) return DatagramSocketFD.invalid;
+
+		if (() @trusted { return bind(sock, bind_address.name, bind_address.nameLen); } () != 0) {
+			closeSocket(sock);
+			return DatagramSocketFD.init;
+		}
+
+		if (target_address && () @trusted { return connect(sock, target_address.name, target_address.nameLen); } () != 0) {
+			closeSocket(sock);
+			return DatagramSocketFD.init;
+		}
+
+		registerFD(sock, EventMask.read|EventMask.write|EventMask.status);
+
+		initFD(sock);
+
+		return sock;
+	}
+
+	void receive(DatagramSocketFD socket, ubyte[] buffer, IOMode mode, DatagramIOCallback on_receive_finish)
+	{
+		assert(mode != IOMode.all, "Only IOMode.immediate and IOMode.once allowed for datagram sockets.");
+
+		sizediff_t ret;
+		scope src_addr = new UnknownAddress;
+		socklen_t src_addr_len = src_addr.nameLen;
+		() @trusted { ret = .recvfrom(socket, buffer.ptr, buffer.length, 0, src_addr.name, &src_addr_len); } ();
+
+		if (ret < 0) {
+			auto err = getSocketError();
+			if (err != EAGAIN) {
+				print("sock error %s!", err);
+				on_receive_finish(socket, IOStatus.error, 0, null);
+				return;
+			}
+		}
+
+		if (ret < 0) {
+			if (mode == IOMode.immediate) {
+				on_receive_finish(socket, IOStatus.wouldBlock, 0, null);
+			} else {
+				with (m_fds[socket]) {
+					readCallback = () @trusted { return cast(IOCallback)on_receive_finish; } ();
+					readMode = mode;
+					bytesRead = 0;
+					readBuffer = buffer;
+				}
+
+				setNotifyCallback!(EventType.read)(socket, &onDgramRead);
+			}
+			return;
+		}
+
+		on_receive_finish(socket, IOStatus.ok, ret, src_addr);
+	}
+
+	void cancelReceive(DatagramSocketFD socket)
+	{
+		assert(m_fds[socket].readCallback !is null, "Cancelling read when there is no read in progress.");
+		setNotifyCallback!(EventType.read)(socket, null);
+		m_fds[socket].readBuffer = null;
+	}
+
+	private void onDgramRead(FD fd)
+	{
+		auto slot = &m_fds[fd];
+		auto socket = cast(DatagramSocketFD)fd;
+
+		sizediff_t ret;
+		scope src_addr = new UnknownAddress;
+		socklen_t src_addr_len = src_addr.nameLen;
+		() @trusted { ret = .recvfrom(socket, slot.readBuffer.ptr, slot.readBuffer.length, 0, src_addr.name, &src_addr_len); } ();
+
+		if (ret < 0) {
+			auto err = getSocketError();
+			if (err != EAGAIN) {
+				setNotifyCallback!(EventType.read)(socket, null);
+				() @trusted { return cast(DatagramIOCallback)slot.readCallback; } ()(socket, IOStatus.error, 0, null);
+				return;
+			}
+		}
+
+		setNotifyCallback!(EventType.read)(socket, null);
+		() @trusted { return cast(DatagramIOCallback)slot.readCallback; } ()(socket, IOStatus.ok, ret, src_addr);
+	}
+
+	void send(DatagramSocketFD socket, const(ubyte)[] buffer, IOMode mode, DatagramIOCallback on_send_finish, Address target_address = null)
+	{
+		assert(mode != IOMode.all, "Only IOMode.immediate and IOMode.once allowed for datagram sockets.");
+
+		sizediff_t ret;
+		if (target_address) {
+			() @trusted { ret = .sendto(socket, buffer.ptr, buffer.length, 0, target_address.name, target_address.nameLen); } ();
+			m_fds[socket].targetAddr = target_address;
+		} else {
+			() @trusted { ret = .send(socket, buffer.ptr, buffer.length, 0); } ();
+		}
+
+		if (ret < 0) {
+			auto err = getSocketError();
+			if (err != EAGAIN) {
+				print("sock error %s!", err);
+				on_send_finish(socket, IOStatus.error, 0, null);
+				return;
+			}
+		}
+
+		if (ret < 0) {
+			if (mode == IOMode.immediate) {
+				on_send_finish(socket, IOStatus.wouldBlock, 0, null);
+			} else {
+				with (m_fds[socket]) {
+					writeCallback = () @trusted { return cast(IOCallback)on_send_finish; } ();
+					writeMode = mode;
+					bytesWritten = 0;
+					writeBuffer = buffer;
+				}
+
+				setNotifyCallback!(EventType.write)(socket, &onDgramWrite);
+			}
+			return;
+		}
+
+		on_send_finish(socket, IOStatus.ok, ret, null);
+	}
+
+	void cancelSend(DatagramSocketFD socket)
+	{
+		assert(m_fds[socket].writeCallback !is null, "Cancelling write when there is no write in progress.");
+		setNotifyCallback!(EventType.write)(socket, null);
+		m_fds[socket].writeBuffer = null;
+	}
+
+	private void onDgramWrite(FD fd)
+	{
+		auto slot = &m_fds[fd];
+		auto socket = cast(DatagramSocketFD)fd;
+
+		sizediff_t ret;
+		if (slot.targetAddr) {
+			() @trusted { ret = .sendto(socket, slot.writeBuffer.ptr, slot.writeBuffer.length, 0, slot.targetAddr.name, slot.targetAddr.nameLen); } ();
+		} else {
+			() @trusted { ret = .send(socket, slot.writeBuffer.ptr, slot.writeBuffer.length, 0); } ();
+		}
+
+		if (ret < 0) {
+			auto err = getSocketError();
+			if (err != EAGAIN) {
+				setNotifyCallback!(EventType.write)(socket, null);
+				() @trusted { return cast(DatagramIOCallback)slot.writeCallback; } ()(socket, IOStatus.error, 0, null);
+				return;
+			}
+		}
+
+		setNotifyCallback!(EventType.write)(socket, null);
+		() @trusted { return cast(DatagramIOCallback)slot.writeCallback; } ()(socket, IOStatus.ok, ret, null);
 	}
 
 	final override void addRef(SocketFD fd)
@@ -695,10 +854,10 @@ abstract class PosixEventDriver : EventDriver,
 		m_fds[fd].callback[evt] = callback;
 	}
 
-	private SocketFD createSocket(AddressFamily family)
+	private SocketFD createSocket(AddressFamily family, int type)
 	{
 		int sock;
-		() @trusted { sock = socket(family, SOCK_STREAM, 0); } ();
+		() @trusted { sock = socket(family, type, 0); } ();
 		if (sock == -1) return SocketFD.invalid;
 		setSocketNonBlocking(cast(SocketFD)sock);
 		return cast(SocketFD)sock;
@@ -733,12 +892,13 @@ private struct FDSlot {
 	size_t bytesRead;
 	ubyte[] readBuffer;
 	IOMode readMode;
-	IOCallback readCallback;
+	IOCallback readCallback; // FIXME: this type only works for stream sockets
 
 	size_t bytesWritten;
 	const(ubyte)[] writeBuffer;
 	IOMode writeMode;
-	IOCallback writeCallback;
+	IOCallback writeCallback; // FIXME: this type only works for stream sockets
+	Address targetAddr;
 
 	ConnectCallback connectCallback;
 	AcceptCallback acceptCallback;
