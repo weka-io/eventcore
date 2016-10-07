@@ -26,7 +26,7 @@ Feature          | SelectEventDriver | EpollEventDriver | IOCPEventDriver | Kque
 -----------------|-------------------|------------------|-----------------|------------------
 TCP Sockets      | yes               | yes              | no              | no               
 UDP Sockets      | yes               | yes              | no              | no               
-USDS             | no                | no               | no              | no               
+USDS             | yes               | yes              | no              | no               
 DNS              | no                | no               | no              | no               
 Timers           | yes               | yes              | no              | no               
 Events           | yes               | yes              | no              | no               
