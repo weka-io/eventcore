@@ -8,19 +8,19 @@ import std.socket : Address;
 interface EventDriver {
 @safe: /*@nogc:*/ nothrow:
 	@property EventDriverCore core();
-	@property EventDriverFiles files();
-	@property EventDriverSockets sockets();
 	@property EventDriverTimers timers();
 	@property EventDriverEvents events();
 	@property EventDriverSignals signals();
+	@property EventDriverSockets sockets();
+	@property EventDriverFiles files();
 	@property EventDriverWatchers watchers();
+
+	/// Releases all resources associated with the driver
+	void dispose();
 }
 
 interface EventDriverCore {
 @safe: /*@nogc:*/ nothrow:
-	/// Releases all resources associated with the driver
-	void dispose();
-
 	/** The number of pending callbacks.
 
 		When this number drops to zero, the event loop can safely be quit. It is

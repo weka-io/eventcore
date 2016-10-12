@@ -6,7 +6,7 @@ module eventcore.drivers.timer;
 import eventcore.driver;
 
 
-mixin template DefaultTimerImpl() {
+final class LoopTimeoutTimerDriver : EventDriverTimers {
 	import std.experimental.allocator.building_blocks.free_list;
 	import std.experimental.allocator.building_blocks.region;
 	import std.experimental.allocator.mallocator;
@@ -29,12 +29,12 @@ mixin template DefaultTimerImpl() {
 		ms_allocator.parent = Mallocator.instance;
 	}
 
-	final protected Duration getNextTimeout(long stdtime)
-	{
+	final package Duration getNextTimeout(long stdtime)
+	@safe nothrow {
 		return m_timerQueue.length ? (m_timerQueue.front.timeout - stdtime).hnsecs : Duration.max;
 	}
 
-	final protected bool processTimers(long stdtime)
+	final package bool process(long stdtime)
 	@trusted nothrow {
 		assert(m_firedTimers.length == 0);
 		if (m_timerQueue.empty) return false;
@@ -48,7 +48,7 @@ mixin template DefaultTimerImpl() {
 				while (tm.timeout <= stdtime);
 				auto tail = m_timerQueue[fired.length .. $].assumeSorted!((a, b) => a.timeout < b.timeout).upperBound(tm);
 				try m_timerQueue.insertBefore(tail.release, tm);
-				catch (Exception e) { print("Failed to insert timer: %s", e.msg); }
+				catch (Exception e) { assert(false, e.msg); }
 			} else tm.pending = false;
 			m_firedTimers ~= tm;
 		}
@@ -94,7 +94,7 @@ mixin template DefaultTimerImpl() {
 
 		auto largerRange = m_timerQueue[].assumeSorted!((a, b) => a.timeout < b.timeout).upperBound(tm);
 		try m_timerQueue.insertBefore(largerRange.release, tm);
-		catch (Exception e) { print("Failed to insert timer: %s", e.msg); }
+		catch (Exception e) { assert(false, e.msg); }
 	}
 
 	final override void stop(TimerID timer)

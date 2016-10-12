@@ -23,14 +23,8 @@ version (Windows) {
 }
 
 
-final class SelectEventDriver : PosixEventDriver {
-	override @property SelectEventDriver core() { return this; }
-	override @property SelectEventDriver sockets() { return this; }
-	override @property SelectEventDriver timers() { return this; }
-	override @property SelectEventDriver events() { return this; }
-	override @property SelectEventDriver signals() { return this; }
-	override @property SelectEventDriver watchers() { return this; }
-
+final class SelectEventLoop : PosixEventLoop {
+@safe: nothrow:
 	override bool doProcessEvents(Duration timeout)
 	{
 		//assert(Fiber.getThis() is null, "processEvents may not be called from within a fiber!");
@@ -74,7 +68,6 @@ final class SelectEventDriver : PosixEventDriver {
 
 	override void dispose()
 	{
-		super.dispose();
 	}
 
 	override void registerFD(FD fd, EventMask mask)

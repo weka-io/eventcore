@@ -5,9 +5,11 @@ public import eventcore.driver;
 import eventcore.drivers.epoll;
 import eventcore.drivers.libasync;
 import eventcore.drivers.select;
+import eventcore.drivers.posix;
 
 version (Have_libasync) alias NativeEventDriver = LibasyncEventDriver;
-else alias NativeEventDriver = SelectEventDriver;
+else version (linux) alias NativeEventDriver = PosixEventDriver!EpollEventLoop;
+else alias NativeEventDriver = PosixEventDriver!SelectEventLoop;
 
 @property EventDriver eventDriver()
 @safe @nogc nothrow {

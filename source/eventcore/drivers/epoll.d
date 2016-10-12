@@ -17,7 +17,9 @@ import core.sys.posix.sys.time : timeval;
 import core.sys.linux.epoll;
 
 
-final class EpollEventDriver : PosixEventDriver {
+final class EpollEventLoop : PosixEventLoop {
+@safe: nothrow:
+
 	private {
 		int m_epoll;
 		epoll_event[] m_events;
@@ -27,15 +29,6 @@ final class EpollEventDriver : PosixEventDriver {
 	{
 		m_epoll = () @trusted { return epoll_create1(0); } ();
 		m_events.length = 100;
-	}
-
-	nothrow @safe {
-		override @property EpollEventDriver core() { return this; }
-		override @property EpollEventDriver sockets() { return this; }
-		override @property EpollEventDriver timers() { return this; }
-		override @property EpollEventDriver events() { return this; }
-		override @property EpollEventDriver signals() { return this; }
-		override @property EpollEventDriver watchers() { return this; }
 	}
 
 	override bool doProcessEvents(Duration timeout)
@@ -66,7 +59,6 @@ final class EpollEventDriver : PosixEventDriver {
 	override void dispose()
 	{
 		import core.sys.posix.unistd : close;
-		super.dispose();
 		close(m_epoll);
 	}
 
