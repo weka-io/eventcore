@@ -140,10 +140,14 @@ abstract class PosixEventDriver : EventDriver,
 
 		void invalidateSocket() @nogc @trusted nothrow { closeSocket(sock); sock = StreamSocketFD.invalid; }
 
-		scope bind_addr = new UnknownAddress;
-		bind_addr.name.sa_family = cast(ushort)address.addressFamily;
-		bind_addr.name.sa_data[] = 0;
-		if (() @trusted { return bind(sock, bind_addr.name, bind_addr.nameLen); } () != 0) {
+		int bret;
+		() @trusted { // scope
+			scope bind_addr = new UnknownAddress;
+			bind_addr.name.sa_family = cast(ushort)address.addressFamily;
+			bind_addr.name.sa_data[] = 0;
+			bret = bind(sock, bind_addr.name, bind_addr.nameLen);
+		} ();
+		if (bret != 0) {
 			invalidateSocket();
 			on_connect(sock, ConnectStatus.bindFailure);
 			return sock;
@@ -230,12 +234,12 @@ abstract class PosixEventDriver : EventDriver,
 
 	private void onAccept(FD listenfd)
 	{
-		scope addr = new UnknownAddress;
 		foreach (i; 0 .. 20) {
 			int sockfd;
-			version (Windows) int addr_len = addr.nameLen;
-			else uint addr_len = addr.nameLen;
-			() @trusted { sockfd = accept(listenfd, addr.name, &addr_len); } ();
+			sockaddr_storage addr;
+			version (Windows) int addr_len = addr.sizeof;
+			else uint addr_len = addr.sizeof;
+			() @trusted { sockfd = accept(listenfd, () @trusted { return cast(sockaddr*)&addr; } (), &addr_len); } ();
 			if (sockfd == -1) break;
 
 			setSocketNonBlocking(cast(SocketFD)sockfd);
@@ -316,7 +320,7 @@ abstract class PosixEventDriver : EventDriver,
 
 	private void onSocketRead(FD fd)
 	{
-		auto slot = &m_fds[fd];
+		auto slot = () @trusted { return &m_fds[fd]; } ();
 		auto socket = cast(StreamSocketFD)fd;
 
 		void finalize()(IOStatus status)
@@ -409,7 +413,7 @@ abstract class PosixEventDriver : EventDriver,
 
 	private void onSocketWrite(FD fd)
 	{
-		auto slot = &m_fds[fd];
+		auto slot = () @trusted { return &m_fds[fd]; } ();
 		auto socket = cast(StreamSocketFD)fd;
 
 		sizediff_t ret;
@@ -479,7 +483,7 @@ abstract class PosixEventDriver : EventDriver,
 
 	private void onSocketDataAvailable(FD fd)
 	{
-		auto slot = &m_fds[fd];
+		auto slot = () @trusted { return &m_fds[fd]; } ();
 		auto socket = cast(StreamSocketFD)fd;
 
 		void finalize()(IOStatus status)
@@ -526,11 +530,13 @@ abstract class PosixEventDriver : EventDriver,
 	}
 
 	void receive(DatagramSocketFD socket, ubyte[] buffer, IOMode mode, DatagramIOCallback on_receive_finish)
-	{
+	@trusted { // DMD 2.072.0-b2: scope considered unsafe
+		import std.typecons : scoped;
+
 		assert(mode != IOMode.all, "Only IOMode.immediate and IOMode.once allowed for datagram sockets.");
 
 		sizediff_t ret;
-		scope src_addr = new UnknownAddress;
+		scope src_addr = new UnknownAddress();
 		socklen_t src_addr_len = src_addr.nameLen;
 		() @trusted { ret = .recvfrom(socket, buffer.ptr, buffer.length, 0, src_addr.name, &src_addr_len); } ();
 
@@ -568,8 +574,8 @@ abstract class PosixEventDriver : EventDriver,
 	}
 
 	private void onDgramRead(FD fd)
-	{
-		auto slot = &m_fds[fd];
+	@trusted { // DMD 2.072.0-b2: scope considered unsafe
+		auto slot = () @trusted { return &m_fds[fd]; } ();
 		auto socket = cast(DatagramSocketFD)fd;
 
 		sizediff_t ret;
@@ -637,7 +643,7 @@ abstract class PosixEventDriver : EventDriver,
 
 	private void onDgramWrite(FD fd)
 	{
-		auto slot = &m_fds[fd];
+		auto slot = () @trusted { return &m_fds[fd]; } ();
 		auto socket = cast(DatagramSocketFD)fd;
 
 		sizediff_t ret;
@@ -662,14 +668,14 @@ abstract class PosixEventDriver : EventDriver,
 
 	final override void addRef(SocketFD fd)
 	{
-		auto pfd = &m_fds[fd];
+		auto pfd = () @trusted { return &m_fds[fd]; } ();
 		assert(pfd.refCount > 0, "Adding reference to unreferenced socket FD.");
 		m_fds[fd].refCount++;
 	}
 
 	final override void releaseRef(SocketFD fd)
 	{
-		auto pfd = &m_fds[fd];
+		auto pfd = () @trusted { return &m_fds[fd]; } ();
 		assert(pfd.refCount > 0, "Releasing reference to unreferenced socket FD.");
 		if (--m_fds[fd].refCount == 0) {
 			unregisterFD(fd);
@@ -725,8 +731,7 @@ abstract class PosixEventDriver : EventDriver,
 		import std.algorithm.searching : countUntil;
 		import std.algorithm.mutation : remove;
 
-		auto slot = &m_fds[event];
-		slot.waiters.removePending(on_event);
+		m_fds[event].waiters.removePending(on_event);
 	}
 
 	private void onEvent(FD event)
@@ -740,15 +745,13 @@ abstract class PosixEventDriver : EventDriver,
 
 	final override void addRef(EventID descriptor)
 	{
-		auto pfd = &m_fds[descriptor];
-		assert(pfd.refCount > 0, "Adding reference to unreferenced event FD.");
+		assert(m_fds[descriptor].refCount > 0, "Adding reference to unreferenced event FD.");
 		m_fds[descriptor].refCount++;
 	}
 
 	final override void releaseRef(EventID descriptor)
 	{
-		auto pfd = &m_fds[descriptor];
-		assert(pfd.refCount > 0, "Releasing reference to unreferenced event FD.");
+		assert(m_fds[descriptor].refCount > 0, "Releasing reference to unreferenced event FD.");
 		if (--m_fds[descriptor].refCount == 0) {
 			unregisterFD(descriptor);
 			clearFD(descriptor);

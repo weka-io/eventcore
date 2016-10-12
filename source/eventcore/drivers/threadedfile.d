@@ -223,16 +223,15 @@ log("start task");
 
 	final override void addRef(FileFD descriptor)
 	{
-		auto f = &m_files[descriptor];
-		f.refCount++;
+		m_files[descriptor].refCount++;
 	}
 
 	final override void releaseRef(FileFD descriptor)
 	{
-		auto f = &m_files[descriptor];
+		auto f = () @trusted { return &m_files[descriptor]; } ();
 		if (!--f.refCount) {
 			.close(descriptor);
-			m_files[descriptor] = FileInfo.init;
+			*f = FileInfo.init;
 			assert(!m_activeReads.contains(descriptor));
 			assert(!m_activeWrites.contains(descriptor));
 		}
