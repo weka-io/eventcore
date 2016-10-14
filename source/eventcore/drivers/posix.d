@@ -46,6 +46,7 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 		alias SignalsDriver = PosixEventDriverSignals!Loop;
 		alias TimerDriver = LoopTimeoutTimerDriver;
 		alias SocketsDriver = PosixEventDriverSockets!Loop;
+		alias DNSDriver = EventDriverDNS_GAI!(EventsDriver, SignalsDriver);
 		alias FileDriver = ThreadedFileEventDriver!EventsDriver;
 		alias WatcherDriver = PosixEventDriverWatchers!Loop;
 
@@ -55,6 +56,7 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 		SignalsDriver m_signals;
 		LoopTimeoutTimerDriver m_timers;
 		SocketsDriver m_sockets;
+		DNSDriver m_dns;
 		FileDriver m_files;
 		WatcherDriver m_watchers;
 	}
@@ -67,6 +69,7 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 		m_timers = new TimerDriver;
 		m_core = new CoreDriver(m_loop, m_timers);
 		m_sockets = new SocketsDriver(m_loop);
+		m_dns = new DNSDriver(m_events, m_signals);
 		m_files = new FileDriver(m_events);
 		m_watchers = new WatcherDriver(m_loop);
 	}
@@ -77,6 +80,7 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 	final override @property SignalsDriver signals() { return m_signals; }
 	final override @property TimerDriver timers() { return m_timers; }
 	final override @property SocketsDriver sockets() { return m_sockets; }
+	final override @property DNSDriver dns() { return m_dns; }
 	final override @property FileDriver files() { return m_files; }
 	final override @property WatcherDriver watchers() { return m_watchers; }
 
@@ -743,6 +747,25 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		if (sock == -1) return SocketFD.invalid;
 		setSocketNonBlocking(cast(SocketFD)sock);
 		return cast(SocketFD)sock;
+	}
+}
+
+
+/// getaddrinfo_a based asynchronous lookups
+final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriverSignals) : EventDriverDNS {
+	this(Events events, Signals signals)
+	{
+	}
+
+
+	override DNSLookupID lookupHost(string name, DNSLookupCallback on_lookup_finished)
+	{
+		assert(false, "TODO!");
+	}
+
+	override void cancelLookup(DNSLookupID handle)
+	{
+		assert(false, "TODO!");
 	}
 }
 

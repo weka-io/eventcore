@@ -14,6 +14,7 @@ final class LibasyncEventDriver : EventDriver {
 		LibasyncEventDriverCore m_core;
 		LibasyncEventDriverFiles m_files;
 		LibasyncEventDriverSockets m_sockets;
+		LibasyncEventDriverDNS m_dns;
 		LibasyncEventDriverTimers m_timers;
 		LibasyncEventDriverEvents m_events;
 		LibasyncEventDriverSignals m_signals;
@@ -25,6 +26,7 @@ final class LibasyncEventDriver : EventDriver {
 		m_core = new LibasyncEventDriverCore();
 		m_files = new LibasyncEventDriverFiles();
 		m_sockets = new LibasyncEventDriverSockets();
+		m_dns = new LibasyncEventDriverDNS();
 		m_timers = new LibasyncEventDriverTimers();
 		m_events = new LibasyncEventDriverEvents();
 		m_signals = new LibasyncEventDriverSignals();
@@ -34,19 +36,20 @@ final class LibasyncEventDriver : EventDriver {
 	override @property LibasyncEventDriverCore core() { return m_core; }
 	override @property LibasyncEventDriverFiles files() { return m_files; }
 	override @property LibasyncEventDriverSockets sockets() { return m_sockets; }
+	override @property LibasyncEventDriverDNS dns() { return m_dns; }
 	override @property LibasyncEventDriverTimers timers() { return m_timers; }
 	override @property LibasyncEventDriverEvents events() { return m_events; }
 	override @property LibasyncEventDriverSignals signals() { return m_signals; }
 	override @property LibasyncEventDriverWatchers watchers() { return m_watchers; }
-}
 
-final class LibasyncEventDriverCore : EventDriverCore {
-@safe: /*@nogc:*/ nothrow:
 	override void dispose()
 	{
 		assert(false, "TODO!");
 	}
+}
 
+final class LibasyncEventDriverCore : EventDriverCore {
+@safe: /*@nogc:*/ nothrow:
 	override size_t waiterCount()
 	{
 		assert(false, "TODO!");
@@ -130,6 +133,31 @@ final class LibasyncEventDriverSockets : EventDriverSockets {
 		assert(false, "TODO!");
 	}
 
+	override DatagramSocketFD createDatagramSocket(scope Address bind_address, scope Address target_address)
+	{
+		assert(false, "TODO!");
+	}
+
+	override void receive(DatagramSocketFD socket, ubyte[] buffer, IOMode mode, DatagramIOCallback on_receive_finish)
+	{
+		assert(false, "TODO!");
+	}
+
+	override void cancelReceive(DatagramSocketFD socket)
+	{
+		assert(false, "TODO!");
+	}
+
+	override void send(DatagramSocketFD socket, const(ubyte)[] buffer, IOMode mode, DatagramIOCallback on_send_finish, Address target_address = null)
+	{
+		assert(false, "TODO!");
+	}
+
+	override void cancelSend(DatagramSocketFD socket)
+	{
+		assert(false, "TODO!");
+	}
+
 	override void addRef(SocketFD descriptor)
 	{
 		assert(false, "TODO!");
@@ -140,6 +168,21 @@ final class LibasyncEventDriverSockets : EventDriverSockets {
 		assert(false, "TODO!");
 	}
 }
+
+final class LibasyncEventDriverDNS : EventDriverDNS {
+@safe: /*@nogc:*/ nothrow:
+
+	DNSLookupID lookupHost(string name, DNSLookupCallback on_lookup_finished)
+	{
+		assert(false, "TODO!");
+	}
+
+	void cancelLookup(DNSLookupID handle)
+	{
+		assert(false, "TODO!");
+	}
+}
+
 
 final class LibasyncEventDriverFiles : EventDriverFiles {
 @safe: /*@nogc:*/ nothrow:
@@ -153,12 +196,22 @@ final class LibasyncEventDriverFiles : EventDriverFiles {
 		assert(false, "TODO!");
 	}
 
-	override void write(FileFD file, ulong offset, ubyte[] buffer, IOCallback on_write_finish)
+	override void close(FileFD file)
 	{
 		assert(false, "TODO!");
 	}
 
-	override void read(FileFD file, ulong offset, ubyte[] buffer, IOCallback on_read_finish)
+	override ulong getSize(FileFD file)
+	{
+		assert(false, "TODO!");
+	}
+
+	override void write(FileFD file, ulong offset, const(ubyte)[] buffer, FileIOCallback on_write_finish)
+	{
+		assert(false, "TODO!");
+	}
+
+	override void read(FileFD file, ulong offset, ubyte[] buffer, FileIOCallback on_read_finish)
 	{
 		assert(false, "TODO!");
 	}

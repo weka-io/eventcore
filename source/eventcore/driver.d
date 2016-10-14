@@ -12,6 +12,7 @@ interface EventDriver {
 	@property EventDriverEvents events();
 	@property EventDriverSignals signals();
 	@property EventDriverSockets sockets();
+	@property EventDriverDNS dns();
 	@property EventDriverFiles files();
 	@property EventDriverWatchers watchers();
 
@@ -104,6 +105,12 @@ interface EventDriverSockets {
 		freed and the resource descriptor gets invalidated.
 	*/
 	void releaseRef(SocketFD descriptor);
+}
+
+interface EventDriverDNS {
+@safe: /*@nogc:*/ nothrow:
+	DNSLookupID lookupHost(string name, DNSLookupCallback on_lookup_finished);
+	void cancelLookup(DNSLookupID handle);
 }
 
 interface EventDriverFiles {
@@ -202,6 +209,7 @@ alias ConnectCallback = void delegate(StreamSocketFD, ConnectStatus);
 alias AcceptCallback = void delegate(StreamListenSocketFD, StreamSocketFD);
 alias IOCallback = void delegate(StreamSocketFD, IOStatus, size_t);
 alias DatagramIOCallback = void delegate(DatagramSocketFD, IOStatus, size_t, scope Address);
+alias DNSLookupCallback = void delegate(DNSLookupID, scope Address[] results);
 alias FileIOCallback = void delegate(FileFD, IOStatus, size_t);
 alias EventCallback = void delegate(EventID);
 alias SignalCallback = void delegate(int);
@@ -315,3 +323,4 @@ alias EventID = Handle!("Event", FD);
 alias TimerID = Handle!("Timer", int);
 alias WatcherID = Handle!("Watcher", int);
 alias EventWaitID = Handle!("EventWait", int);
+alias DNSLookupID = Handle!("DNS", int);
