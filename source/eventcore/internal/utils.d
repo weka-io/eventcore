@@ -30,7 +30,7 @@ struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
 	static assert(nextPOT(CHUNK_SIZE) == CHUNK_SIZE,
 		"CHUNK_SIZE must be a power of two for performance reasons.");
 
-	@safe: @nogc: nothrow:
+	@safe: nothrow:
 	import core.stdc.stdlib : calloc, free, malloc, realloc;
 	import std.traits : hasElaborateDestructor;
 
@@ -49,14 +49,14 @@ struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
 	@disable this(this);
 
 	~this()
-	{
+	@nogc {
 		clear();
 	}
 
-	@property size_t length() const { return m_length; }
+	@property size_t length() const @nogc { return m_length; }
 
 	void clear()
-	{
+	@nogc {
 		() @trusted {
 			foreach (i; 0 .. m_chunkCount)
 				free(m_chunks[i]);
@@ -67,7 +67,7 @@ struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
 	}
 
 	ref T opIndex(size_t index)
-	{
+	@nogc {
 		auto chunk = index / chunkSize;
 		auto subidx = index % chunkSize;
 		if (index >= m_length) m_length = index+1;
@@ -75,8 +75,36 @@ struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
 		return (*m_chunks[chunk])[subidx];
 	}
 
-	private void reserveChunk(size_t chunkidx)
+	int opApply(scope int delegate(size_t idx, ref T) @safe nothrow del)
 	{
+		size_t idx = 0;
+		foreach (c; m_chunks) {
+			if (c) {
+				foreach (i, ref t; *c)
+					if (auto ret = del(idx+i, t))
+						return ret;
+			}
+			idx += chunkSize;
+		}
+		return 0;
+	}
+
+	int opApply(scope int delegate(size_t idx, ref const(T)) @safe nothrow del)
+	const {
+		size_t idx = 0;
+		foreach (c; m_chunks) {
+			if (c) {
+				foreach (i, ref t; *c)
+					if (auto ret = del(idx+i, t))
+						return ret;
+			}
+			idx += chunkSize;
+		}
+		return 0;
+	}
+
+	private void reserveChunk(size_t chunkidx)
+	@nogc {
 		if (m_chunks.length <= chunkidx) {
 			auto l = m_chunks.length == 0 ? 64 : m_chunks.length;
 			while (l <= chunkidx) l *= 2;
