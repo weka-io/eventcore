@@ -5,6 +5,8 @@ copyright "Copyright © 2012-2016 rejectedsoftware e.K."
 
 targetType "library"
 
+libs "anl" platform="linux"
+
 configuration "native" {
 }
 

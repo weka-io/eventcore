@@ -49,8 +49,8 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 		alias SignalsDriver = PosixEventDriverSignals!Loop;
 		alias TimerDriver = LoopTimeoutTimerDriver;
 		alias SocketsDriver = PosixEventDriverSockets!Loop;
-		/*version (linux) alias DNSDriver = EventDriverDNS_GAIA!(EventsDriver, SignalsDriver);
-		else*/ alias DNSDriver = EventDriverDNS_GAI!(EventsDriver, SignalsDriver);
+		version (linux) alias DNSDriver = EventDriverDNS_GAIA!(EventsDriver, SignalsDriver);
+		else alias DNSDriver = EventDriverDNS_GAI!(EventsDriver, SignalsDriver);
 		alias FileDriver = ThreadedFileEventDriver!EventsDriver;
 		alias WatcherDriver = PosixEventDriverWatchers!Loop;
 
@@ -857,14 +857,7 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 
 /// getaddrinfo+thread based lookup - does not support true cancellation
 final class EventDriverDNS_GAIA(Events : EventDriverEvents, Signals : EventDriverSignals) : EventDriverDNS {
-	import core.sys.posix.signal : SIGRTMIN;
-
-	private static extern(C) struct gaicb {
-		const(char)* ar_name;
-		const(char)* ar_service;
-		const(addrinfo)* ar_request;
-		addrinfo* ar_result;
-	};
+	import core.sys.posix.signal : SIGEV_SIGNAL, SIGRTMIN, sigevent;
 
 	private {
 		static struct Lookup {
@@ -874,6 +867,7 @@ final class EventDriverDNS_GAIA(Events : EventDriverEvents, Signals : EventDrive
 		ChoppedVector!Lookup m_lookups;
 		Signals m_signals;
 		int m_dnsSignal;
+		SignalListenID m_sighandle;
 	}
 
 	@safe nothrow:
@@ -882,24 +876,26 @@ final class EventDriverDNS_GAIA(Events : EventDriverEvents, Signals : EventDrive
 	{
 		m_signals = signals;
 		m_dnsSignal = () @trusted { return SIGRTMIN; } ();
-		signals.wait(m_dnsSignal, &onDNSSignal);
+		m_sighandle = signals.listen(m_dnsSignal, &onDNSSignal);
 	}
 
 	void dispose()
 	{
-		m_signals.cancelWait(m_dnsSignal);
+		m_signals.releaseRef(m_sighandle);
 	}
 
 	override DNSLookupID lookupHost(string name, DNSLookupCallback on_lookup_finished)
 	{
+		import std.string : toStringz;
+
 		auto handle = getFreeHandle();
 
 		sigevent evt;
 		evt.sigev_notify = SIGEV_SIGNAL;
 		evt.sigev_signo = m_dnsSignal;
-		evt.sigev_value = handle;
-		gaicb[16] res;
-		auto ret = getaddrinfo_a(GAI_NOWAIT, &res[0], res.length, &evp);
+		gaicb* res = &m_lookups[handle].ctx;
+		res.ar_name = name.toStringz();
+		auto ret = () @trusted { return getaddrinfo_a(GAI_NOWAIT, &res, 1, &evt); } ();
 
 		if (ret != 0)
 			return DNSLookupID.invalid;
@@ -911,27 +907,57 @@ final class EventDriverDNS_GAIA(Events : EventDriverEvents, Signals : EventDrive
 
 	override void cancelLookup(DNSLookupID handle)
 	{
-		gai_cancel(m_lookups[handle]);
+		gai_cancel(&m_lookups[handle].ctx);
 		m_lookups[handle].callback = null;
 	}
 
-	private void onDNSSignal(int signal, int value)
+	private void onDNSSignal(SignalListenID, SignalStatus status, int signal)
 		@safe nothrow
 	{
-		auto cb = m_lookups[value].callback;
-		auto ai = m_lookups[value].ctx.ar_result;
-		m_lookups[value].callback = null;
-		m_lookups[value].ctx.ar_result = null;
-		passToDNSCallback(cast(DNSLookupID)value, cb, ai);
+		assert(status == SignalStatus.ok);
+		foreach (i, l; m_lookups) {
+			if (!l.callback) continue;
+			auto err = gai_error(&l.ctx);
+			if (err == EAI_INPROGRESS) continue;
+			DNSStatus status;
+			switch (err) {
+				default: status = DNSStatus.error; break;
+				case 0: status = DNSStatus.ok; break;
+			}
+			auto cb = l.callback;
+			auto ai = l.ctx.ar_result;
+			l.callback = null;
+			l.ctx.ar_result = null;
+			passToDNSCallback(cast(DNSLookupID)cast(int)i, cb, status, ai);
+		}
 	}
 
 	private DNSLookupID getFreeHandle()
 	{
 		foreach (i, ref l; m_lookups)
 			if (!l.callback)
-				return i;
-		return m_lookups.length;
+				return cast(DNSLookupID)cast(int)i;
+		return cast(DNSLookupID)cast(int)m_lookups.length;
 	}
+}
+
+version (linux) extern(C) {
+	import core.sys.posix.signal : sigevent;
+
+	struct gaicb {
+		const(char)* ar_name;
+		const(char)* ar_service;
+		const(addrinfo)* ar_request;
+		addrinfo* ar_result;
+	}
+
+	enum GAI_NOWAIT = 1;
+
+	enum EAI_INPROGRESS = -100;
+
+	int getaddrinfo_a(int mode, gaicb** list, int nitems, sigevent *sevp);
+	int gai_error(gaicb *req);
+	int gai_cancel(gaicb *req);
 }
 
 private void passToDNSCallback(DNSLookupID id, scope DNSLookupCallback cb, DNSStatus status, addrinfo* ai_orig)
