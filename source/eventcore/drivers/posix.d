@@ -1055,18 +1055,71 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop) : EventDriverEvents {
 
 final class PosixEventDriverSignals(Loop : PosixEventLoop) : EventDriverSignals {
 @safe: /*@nogc:*/ nothrow:
+	import core.sys.posix.signal;
+	import core.sys.linux.sys.signalfd;
+
 	private Loop m_loop;
 
 	this(Loop loop) { m_loop = loop; }
 
-	final override void wait(int sig, SignalCallback on_signal)
+	override SignalListenID listen(int sig, SignalCallback on_signal)
 	{
-		assert(false, "TODO!");
+		auto fd = () @trusted {
+			sigset_t sset;
+			sigemptyset(&sset);
+			sigaddset(&sset, sig);
+
+			if (sigprocmask(SIG_BLOCK, &sset, null) != 0)
+				return SignalListenID.invalid;
+
+			return SignalListenID(signalfd(-1, &sset, SFD_NONBLOCK));
+		} ();
+
+
+		m_loop.initFD(cast(FD)fd);
+		m_loop.m_fds[fd].readCallback = () @trusted { return cast(IOCallback)on_signal; } (); // FIXME: avoid unsafe cast
+		m_loop.registerFD(cast(FD)fd, EventMask.read);
+		m_loop.setNotifyCallback!(EventType.read)(cast(FD)fd, &onSignal);
+
+		onSignal(cast(FD)fd);
+
+		return fd;
 	}
 
-	final override void cancelWait(int sig)
+	override void addRef(SignalListenID descriptor)
 	{
-		assert(false, "TODO!");
+		assert(m_loop.m_fds[descriptor].refCount > 0, "Adding reference to unreferenced event FD.");
+		m_loop.m_fds[descriptor].refCount++;
+	}
+	
+	override void releaseRef(SignalListenID descriptor)
+	{
+		FD fd = cast(FD)descriptor;
+		assert(m_loop.m_fds[fd].refCount > 0, "Releasing reference to unreferenced event FD.");
+		if (--m_loop.m_fds[fd].refCount == 0) {
+			m_loop.unregisterFD(fd);
+			m_loop.clearFD(fd);
+			close(fd);
+		}
+	}
+
+	private void onSignal(FD fd)
+	{
+		SignalListenID lid = cast(SignalListenID)fd;
+		auto cb = () @trusted { return cast(SignalCallback)m_loop.m_fds[fd].readCallback; } ();
+		signalfd_siginfo nfo;
+		do {
+			auto ret = () @trusted { return read(fd, &nfo, nfo.sizeof); } ();	
+			if (ret == -1 && errno == EAGAIN)
+				break;
+			if (ret != nfo.sizeof) {
+				cb(lid, SignalStatus.error, -1);
+				return;
+			}
+			addRef(lid);
+			cb(lid, SignalStatus.ok, nfo.ssi_signo);
+			releaseRef(lid);
+		} while (m_loop.m_fds[fd].refCount > 0);
 	}
 }
 

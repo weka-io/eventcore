@@ -30,10 +30,12 @@ USDS             | yes               | yes              | no              | no
 DNS              | yes               | yes              | no              | no               
 Timers           | yes               | yes              | no              | no               
 Events           | yes               | yes              | no              | no               
-Signals          | no                | no               | no              | no               
+Signals          | yes²              | yes²             | no              | no               
 Files            | yes               | yes              | no              | no               
 UI Integration   | no                | no               | no              | no               
 File watcher     | no                | no               | no              | no               
+
+² Currently only supported on Linux
 
 
 Open questions

@@ -160,8 +160,18 @@ interface EventDriverEvents {
 
 interface EventDriverSignals {
 @safe: /*@nogc:*/ nothrow:
-	void wait(int sig, SignalCallback on_signal);
-	void cancelWait(int sig);
+	SignalListenID listen(int sig, SignalCallback on_signal);
+
+	/** Increments the reference count of the given resource.
+	*/
+	void addRef(SignalListenID descriptor);
+	
+	/** Decrements the reference count of the given resource.
+
+		Once the reference count reaches zero, all associated resources will be
+		freed and the resource descriptor gets invalidated.
+	*/
+	void releaseRef(SignalListenID descriptor);
 }
 
 interface EventDriverTimers {
@@ -212,7 +222,7 @@ alias DatagramIOCallback = void delegate(DatagramSocketFD, IOStatus, size_t, sco
 alias DNSLookupCallback = void delegate(DNSLookupID, DNSStatus, scope Address[]);
 alias FileIOCallback = void delegate(FileFD, IOStatus, size_t);
 alias EventCallback = void delegate(EventID);
-alias SignalCallback = void delegate(int);
+alias SignalCallback = void delegate(SignalListenID, SignalStatus, int);
 alias TimerCallback = void delegate(TimerID);
 alias FileChangesCallback = void delegate(WatcherID, in FileChange[] changes);
 @system alias DataInitializer = void function(void*);
@@ -284,6 +294,11 @@ enum FileChangeKind {
 	modified
 }
 
+enum SignalStatus {
+	ok,
+	error
+}
+
 
 /** Describes a single change in a watched directory.
 */
@@ -328,4 +343,5 @@ alias EventID = Handle!("Event", FD);
 alias TimerID = Handle!("Timer", int);
 alias WatcherID = Handle!("Watcher", int);
 alias EventWaitID = Handle!("EventWait", int);
+alias SignalListenID = Handle!("Signal", int);
 alias DNSLookupID = Handle!("DNS", int);
