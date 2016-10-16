@@ -209,7 +209,7 @@ alias ConnectCallback = void delegate(StreamSocketFD, ConnectStatus);
 alias AcceptCallback = void delegate(StreamListenSocketFD, StreamSocketFD);
 alias IOCallback = void delegate(StreamSocketFD, IOStatus, size_t);
 alias DatagramIOCallback = void delegate(DatagramSocketFD, IOStatus, size_t, scope Address);
-alias DNSLookupCallback = void delegate(DNSLookupID, scope Address[] results);
+alias DNSLookupCallback = void delegate(DNSLookupID, DNSStatus, scope Address[]);
 alias FileIOCallback = void delegate(FileFD, IOStatus, size_t);
 alias EventCallback = void delegate(EventID);
 alias SignalCallback = void delegate(int);
@@ -266,6 +266,11 @@ enum IOStatus {
 	disconnected, /// The connection was closed before all data could be transterred
 	error,        /// An error occured while transferring the data
 	wouldBlock    /// Returned for `IOMode.immediate` when no data is readily readable/writable
+}
+
+enum DNSStatus {
+	ok,
+	error
 }
 
 /** Specifies the kind of change in a watched directory.

@@ -12,10 +12,12 @@ import eventcore.drivers.threadedfile;
 import eventcore.internal.consumablequeue : ConsumableQueue;
 import eventcore.internal.utils;
 
-import std.socket : Address, AddressFamily, UnknownAddress;
+import std.socket : Address, AddressFamily, InternetAddress, Internet6Address, UnixAddress, UnknownAddress;
 version (Posix) {
+	import core.sys.posix.netdb : AI_ADDRCONFIG, AI_V4MAPPED, addrinfo, freeaddrinfo, getaddrinfo;
 	import core.sys.posix.netinet.in_;
 	import core.sys.posix.netinet.tcp;
+	import core.sys.posix.sys.un;
 	import core.sys.posix.unistd : close, read, write;
 	import core.stdc.errno : errno, EAGAIN, EINPROGRESS;
 	import core.sys.posix.fcntl;
@@ -40,13 +42,15 @@ private long currStdTime()
 final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 @safe: /*@nogc:*/ nothrow:
 
+
 	private {
 		alias CoreDriver = PosixEventDriverCore!(Loop, LoopTimeoutTimerDriver);
 		alias EventsDriver = PosixEventDriverEvents!Loop;
 		alias SignalsDriver = PosixEventDriverSignals!Loop;
 		alias TimerDriver = LoopTimeoutTimerDriver;
 		alias SocketsDriver = PosixEventDriverSockets!Loop;
-		alias DNSDriver = EventDriverDNS_GAI!(EventsDriver, SignalsDriver);
+		/*version (linux) alias DNSDriver = EventDriverDNS_GAIA!(EventsDriver, SignalsDriver);
+		else*/ alias DNSDriver = EventDriverDNS_GAI!(EventsDriver, SignalsDriver);
 		alias FileDriver = ThreadedFileEventDriver!EventsDriver;
 		alias WatcherDriver = PosixEventDriverWatchers!Loop;
 
@@ -87,6 +91,7 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 	final override void dispose()
 	{
 		m_files.dispose();
+		m_dns.dispose();
 		m_loop.dispose();		
 	}
 }
@@ -753,20 +758,216 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 /// getaddrinfo_a based asynchronous lookups
 final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriverSignals) : EventDriverDNS {
-	this(Events events, Signals signals)
-	{
+	import std.parallelism : task, taskPool;
+	import std.string : toStringz;
+
+	private {
+		static struct Lookup {
+			DNSLookupCallback callback;
+			addrinfo* result;
+			int retcode;
+			string name;
+		}
+		ChoppedVector!Lookup m_lookups;
+		Events m_events;
+		EventID m_event;
+		size_t m_maxHandle;
 	}
 
+	this(Events events, Signals signals)
+	{
+		m_events = events;
+		m_event = events.create();
+		m_events.wait(m_event, &onDNSSignal);
+	}
+
+	void dispose()
+	{
+		m_events.cancelWait(m_event, &onDNSSignal);
+		m_events.releaseRef(m_event);
+	}
 
 	override DNSLookupID lookupHost(string name, DNSLookupCallback on_lookup_finished)
 	{
-		assert(false, "TODO!");
+		auto handle = getFreeHandle();
+		if (handle > m_maxHandle) m_maxHandle = handle;
+
+		assert(!m_lookups[handle].result);
+		Lookup* l = () @trusted { return &m_lookups[handle]; } ();
+		l.name = name;
+		l.callback = on_lookup_finished;
+		auto events = () @trusted { return cast(shared)m_events; } ();
+		auto t = task!taskFun(l, AddressFamily.UNSPEC, events, m_event);
+		try taskPool.put(t);
+		catch (Exception e) return DNSLookupID.invalid;
+		return handle;
+	}
+
+	/// public
+	static void taskFun(Lookup* lookup, int af, shared(Events) events, EventID event)
+	{
+		addrinfo hints;
+		hints.ai_flags = AI_ADDRCONFIG|AI_V4MAPPED;
+		hints.ai_family = af;
+		() @trusted { lookup.retcode = getaddrinfo(lookup.name.toStringz(), null, af == AddressFamily.UNSPEC ? null : &hints, &lookup.result); } ();
+		events.trigger(event);
 	}
 
 	override void cancelLookup(DNSLookupID handle)
 	{
-		assert(false, "TODO!");
+		m_lookups[handle].callback = null;
 	}
+
+	private void onDNSSignal(EventID event)
+		@trusted nothrow
+	{
+		size_t lastmax;
+		foreach (i, ref l; m_lookups) {
+			if (i > m_maxHandle) break;
+			if (l.callback) {
+				if (l.result || l.retcode) {
+					auto cb = l.callback;
+					auto ai = l.result;
+					DNSStatus status;
+					switch (l.retcode) {
+						default: status = DNSStatus.error; break;
+						case 0: status = DNSStatus.ok; break;
+					}
+					l.callback = null;
+					l.result = null;
+					l.retcode = 0;
+					if (i == m_maxHandle) m_maxHandle = lastmax;
+					passToDNSCallback(cast(DNSLookupID)cast(int)i, cb, status, ai);
+				} else lastmax = i;
+			}
+		}
+		m_events.wait(m_event, &onDNSSignal);
+	}
+
+	private DNSLookupID getFreeHandle()
+	@safe nothrow {
+		assert(m_lookups.length <= int.max);
+		foreach (i, ref l; m_lookups)
+			if (!l.callback)
+				return cast(DNSLookupID)cast(int)i;
+		return cast(DNSLookupID)cast(int)m_lookups.length;
+	}
+}
+
+
+/// getaddrinfo+thread based lookup - does not support true cancellation
+final class EventDriverDNS_GAIA(Events : EventDriverEvents, Signals : EventDriverSignals) : EventDriverDNS {
+	import core.sys.posix.signal : SIGRTMIN;
+
+	private static extern(C) struct gaicb {
+		const(char)* ar_name;
+		const(char)* ar_service;
+		const(addrinfo)* ar_request;
+		addrinfo* ar_result;
+	};
+
+	private {
+		static struct Lookup {
+			gaicb ctx;
+			DNSLookupCallback callback;
+		}
+		ChoppedVector!Lookup m_lookups;
+		Signals m_signals;
+		int m_dnsSignal;
+	}
+
+	@safe nothrow:
+
+	this(Events events, Signals signals)
+	{
+		m_signals = signals;
+		m_dnsSignal = () @trusted { return SIGRTMIN; } ();
+		signals.wait(m_dnsSignal, &onDNSSignal);
+	}
+
+	void dispose()
+	{
+		m_signals.cancelWait(m_dnsSignal);
+	}
+
+	override DNSLookupID lookupHost(string name, DNSLookupCallback on_lookup_finished)
+	{
+		auto handle = getFreeHandle();
+
+		sigevent evt;
+		evt.sigev_notify = SIGEV_SIGNAL;
+		evt.sigev_signo = m_dnsSignal;
+		evt.sigev_value = handle;
+		gaicb[16] res;
+		auto ret = getaddrinfo_a(GAI_NOWAIT, &res[0], res.length, &evp);
+
+		if (ret != 0)
+			return DNSLookupID.invalid;
+
+		m_lookups[handle].callback = on_lookup_finished;
+
+		return handle;
+	}
+
+	override void cancelLookup(DNSLookupID handle)
+	{
+		gai_cancel(m_lookups[handle]);
+		m_lookups[handle].callback = null;
+	}
+
+	private void onDNSSignal(int signal, int value)
+		@safe nothrow
+	{
+		auto cb = m_lookups[value].callback;
+		auto ai = m_lookups[value].ctx.ar_result;
+		m_lookups[value].callback = null;
+		m_lookups[value].ctx.ar_result = null;
+		passToDNSCallback(cast(DNSLookupID)value, cb, ai);
+	}
+
+	private DNSLookupID getFreeHandle()
+	{
+		foreach (i, ref l; m_lookups)
+			if (!l.callback)
+				return i;
+		return m_lookups.length;
+	}
+}
+
+private void passToDNSCallback(DNSLookupID id, scope DNSLookupCallback cb, DNSStatus status, addrinfo* ai_orig)
+	@trusted nothrow
+{
+	import std.typecons : scoped;
+
+	static final class RefAddr : Address {
+		sockaddr* sa;
+		socklen_t len;
+		override @property sockaddr* name() { return sa; }
+		override @property const(sockaddr)* name() const { return sa; }
+		override @property socklen_t nameLen() const { return len; }
+	}
+
+	try {
+		typeof(scoped!RefAddr())[16] addrs_prealloc = [
+			scoped!RefAddr(), scoped!RefAddr(), scoped!RefAddr(), scoped!RefAddr(),
+			scoped!RefAddr(), scoped!RefAddr(), scoped!RefAddr(), scoped!RefAddr(),
+			scoped!RefAddr(), scoped!RefAddr(), scoped!RefAddr(), scoped!RefAddr(),
+			scoped!RefAddr(), scoped!RefAddr(), scoped!RefAddr(), scoped!RefAddr()
+		];
+		Address[16] addrs;
+		auto ai = ai_orig;
+		size_t addr_count = 0;
+		while (ai !is null && addr_count < addrs.length) {
+			RefAddr ua = addrs_prealloc[addr_count];
+			ua.sa = ai.ai_addr;
+			ua.len = ai.ai_addrlen;
+			addrs[addr_count] = ua;
+			addr_count++;
+			ai = ai.ai_next;
+		}
+		cb(id, status, addrs[0 .. addr_count]);
+		freeaddrinfo(ai_orig);
+	} catch (Exception e) assert(false, e.msg);
 }
 
 
