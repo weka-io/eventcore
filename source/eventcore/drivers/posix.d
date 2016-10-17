@@ -1,7 +1,7 @@
 /**
 	Base class for BSD socket based driver implementations.
 
-	See_also: `eventcore.drivers.select`, `eventcore.drivers.epoll`
+	See_also: `eventcore.drivers.select`, `eventcore.drivers.epoll`, `eventcore.drivers.kqueue`
 */
 module eventcore.drivers.posix;
 @safe: /*@nogc:*/ nothrow:
