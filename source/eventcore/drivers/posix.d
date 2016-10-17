@@ -735,7 +735,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		m_loop.m_fds[fd].refCount++;
 	}
 
-	final override void releaseRef(SocketFD fd)
+	final override bool releaseRef(SocketFD fd)
 	{
 		auto pfd = () @trusted { return &m_loop.m_fds[fd]; } ();
 		assert(pfd.refCount > 0, "Releasing reference to unreferenced socket FD.");
@@ -743,7 +743,9 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			m_loop.unregisterFD(fd);
 			m_loop.clearFD(fd);
 			closeSocket(fd);
+			return false;
 		}
+		return true;
 	}
 
 	private SocketFD createSocket(AddressFamily family, int type)
@@ -1069,14 +1071,16 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop) : EventDriverEvents {
 		m_loop.m_fds[descriptor].refCount++;
 	}
 
-	final override void releaseRef(EventID descriptor)
+	final override bool releaseRef(EventID descriptor)
 	{
 		assert(m_loop.m_fds[descriptor].refCount > 0, "Releasing reference to unreferenced event FD.");
 		if (--m_loop.m_fds[descriptor].refCount == 0) {
 			m_loop.unregisterFD(descriptor);
 			m_loop.clearFD(descriptor);
 			close(descriptor);
+			return false;
 		}
+		return true;
 	}
 }
 
@@ -1119,7 +1123,7 @@ final class PosixEventDriverSignals(Loop : PosixEventLoop) : EventDriverSignals 
 		m_loop.m_fds[descriptor].refCount++;
 	}
 	
-	override void releaseRef(SignalListenID descriptor)
+	override bool releaseRef(SignalListenID descriptor)
 	{
 		FD fd = cast(FD)descriptor;
 		assert(m_loop.m_fds[fd].refCount > 0, "Releasing reference to unreferenced event FD.");
@@ -1127,7 +1131,9 @@ final class PosixEventDriverSignals(Loop : PosixEventLoop) : EventDriverSignals 
 			m_loop.unregisterFD(fd);
 			m_loop.clearFD(fd);
 			close(fd);
+			return false;
 		}
+		return true;
 	}
 
 	private void onSignal(FD fd)
@@ -1292,7 +1298,7 @@ final class PosixEventDriverWatchers(Loop : PosixEventLoop) : EventDriverWatcher
 		assert(false, "TODO!");
 	}
 
-	final override void releaseRef(WatcherID descriptor)
+	final override bool releaseRef(WatcherID descriptor)
 	{
 		assert(false, "TODO!");
 	}

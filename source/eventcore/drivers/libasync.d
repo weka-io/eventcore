@@ -163,7 +163,7 @@ final class LibasyncEventDriverSockets : EventDriverSockets {
 		assert(false, "TODO!");
 	}
 
-	override void releaseRef(SocketFD descriptor)
+	override bool releaseRef(SocketFD descriptor)
 	{
 		assert(false, "TODO!");
 	}
@@ -231,7 +231,7 @@ final class LibasyncEventDriverFiles : EventDriverFiles {
 		assert(false, "TODO!");
 	}
 
-	override void releaseRef(FileFD descriptor)
+	override bool releaseRef(FileFD descriptor)
 	{
 		assert(false, "TODO!");
 	}
@@ -269,7 +269,7 @@ final class LibasyncEventDriverEvents : EventDriverEvents {
 		assert(false, "TODO!");
 	}
 
-	override void releaseRef(EventID descriptor)
+	override bool releaseRef(EventID descriptor)
 	{
 		assert(false, "TODO!");
 	}
@@ -277,12 +277,17 @@ final class LibasyncEventDriverEvents : EventDriverEvents {
 
 final class LibasyncEventDriverSignals : EventDriverSignals {
 @safe: /*@nogc:*/ nothrow:
-	override void wait(int sig, SignalCallback on_signal)
+	override SignalListenID listen(int sig, SignalCallback on_signal)
 	{
 		assert(false, "TODO!");
 	}
 
-	override void cancelWait(int sig)
+	override void addRef(SignalListenID descriptor)
+	{
+		assert(false, "TODO!");
+	}
+
+	override bool releaseRef(SignalListenID descriptor)
 	{
 		assert(false, "TODO!");
 	}
@@ -320,7 +325,7 @@ final class LibasyncEventDriverTimers : EventDriverTimers {
 		assert(false, "TODO!");
 	}
 
-	override void cancelWait(TimerID timer, TimerCallback callback)
+	override void cancelWait(TimerID timer)
 	{
 		assert(false, "TODO!");
 	}
@@ -330,7 +335,7 @@ final class LibasyncEventDriverTimers : EventDriverTimers {
 		assert(false, "TODO!");
 	}
 
-	override void releaseRef(TimerID descriptor)
+	override bool releaseRef(TimerID descriptor)
 	{
 		assert(false, "TODO!");
 	}
@@ -338,17 +343,7 @@ final class LibasyncEventDriverTimers : EventDriverTimers {
 
 final class LibasyncEventDriverWatchers : EventDriverWatchers {
 @safe: /*@nogc:*/ nothrow:
-	override WatcherID watchDirectory(string path, bool recursive)
-	{
-		assert(false, "TODO!");
-	}
-
-	override void wait(WatcherID watcher, FileChangesCallback callback)
-	{
-		assert(false, "TODO!");
-	}
-
-	override void cancelWait(WatcherID watcher)
+	override WatcherID watchDirectory(string path, bool recursive, FileChangesCallback callback)
 	{
 		assert(false, "TODO!");
 	}
@@ -358,7 +353,7 @@ final class LibasyncEventDriverWatchers : EventDriverWatchers {
 		assert(false, "TODO!");
 	}
 
-	override void releaseRef(WatcherID descriptor)
+	override bool releaseRef(WatcherID descriptor)
 	{
 		assert(false, "TODO!");
 	}

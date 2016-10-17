@@ -154,18 +154,21 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		m_timers[descriptor].refCount++;
 	}
 
-	final override void releaseRef(TimerID descriptor)
+	final override bool releaseRef(TimerID descriptor)
 	{
 		assert(descriptor != TimerID.init, "Invalid timer ID.");
 		assert(descriptor in m_timers, "Unknown timer ID.");
-		if (descriptor !in m_timers) return;
+		if (descriptor !in m_timers) return true;
 
 		auto tm = m_timers[descriptor];
 		if (!--tm.refCount) {
 			if (tm.pending) stop(tm.id);
 			m_timers.remove(descriptor);
 			() @trusted { scope (failure) assert(false); ms_allocator.dispose(tm); } ();
+			return false;
 		}
+
+		return true;
 	}
 }
 

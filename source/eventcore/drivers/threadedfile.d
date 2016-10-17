@@ -226,7 +226,7 @@ log("start task");
 		m_files[descriptor].refCount++;
 	}
 
-	final override void releaseRef(FileFD descriptor)
+	final override bool releaseRef(FileFD descriptor)
 	{
 		auto f = () @trusted { return &m_files[descriptor]; } ();
 		if (!--f.refCount) {
@@ -234,7 +234,9 @@ log("start task");
 			*f = FileInfo.init;
 			assert(!m_activeReads.contains(descriptor));
 			assert(!m_activeWrites.contains(descriptor));
+			return false;
 		}
+		return true;
 	}
 
 	/// private

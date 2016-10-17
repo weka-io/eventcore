@@ -103,8 +103,11 @@ interface EventDriverSockets {
 
 		Once the reference count reaches zero, all associated resources will be
 		freed and the resource descriptor gets invalidated.
+
+		Returns:
+			Returns `false` $(I iff) the last reference was removed by this call.
 	*/
-	void releaseRef(SocketFD descriptor);
+	bool releaseRef(SocketFD descriptor);
 }
 
 interface EventDriverDNS {
@@ -134,8 +137,11 @@ interface EventDriverFiles {
 
 		Once the reference count reaches zero, all associated resources will be
 		freed and the resource descriptor gets invalidated.
+
+		Returns:
+			Returns `false` $(I iff) the last reference was removed by this call.
 	*/
-	void releaseRef(FileFD descriptor);
+	bool releaseRef(FileFD descriptor);
 }
 
 interface EventDriverEvents {
@@ -154,8 +160,11 @@ interface EventDriverEvents {
 
 		Once the reference count reaches zero, all associated resources will be
 		freed and the resource descriptor gets invalidated.
+
+		Returns:
+			Returns `false` $(I iff) the last reference was removed by this call.
 	*/
-	void releaseRef(EventID descriptor);
+	bool releaseRef(EventID descriptor);
 }
 
 interface EventDriverSignals {
@@ -170,8 +179,11 @@ interface EventDriverSignals {
 
 		Once the reference count reaches zero, all associated resources will be
 		freed and the resource descriptor gets invalidated.
+
+		Returns:
+			Returns `false` $(I iff) the last reference was removed by this call.
 	*/
-	void releaseRef(SignalListenID descriptor);
+	bool releaseRef(SignalListenID descriptor);
 }
 
 interface EventDriverTimers {
@@ -192,8 +204,11 @@ interface EventDriverTimers {
 
 		Once the reference count reaches zero, all associated resources will be
 		freed and the resource descriptor gets invalidated.
+
+		Returns:
+			Returns `false` $(I iff) the last reference was removed by this call.
 	*/
-	void releaseRef(TimerID descriptor);
+	bool releaseRef(TimerID descriptor);
 }
 
 interface EventDriverWatchers {
@@ -208,6 +223,9 @@ interface EventDriverWatchers {
 
 		Once the reference count reaches zero, all associated resources will be
 		freed and the resource descriptor gets invalidated.
+
+		Returns:
+			Returns `false` $(I iff) the last reference was removed by this call.
 	*/
 	bool releaseRef(WatcherID descriptor);
 }
