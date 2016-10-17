@@ -182,7 +182,7 @@ interface EventDriverTimers {
 	bool isPending(TimerID timer);
 	bool isPeriodic(TimerID timer);
 	void wait(TimerID timer, TimerCallback callback);
-	void cancelWait(TimerID timer, TimerCallback callback);
+	void cancelWait(TimerID timer);
 
 	/** Increments the reference count of the given resource.
 	*/
@@ -198,9 +198,7 @@ interface EventDriverTimers {
 
 interface EventDriverWatchers {
 @safe: /*@nogc:*/ nothrow:
-	WatcherID watchDirectory(string path, bool recursive);
-	void wait(WatcherID watcher, FileChangesCallback callback);
-	void cancelWait(WatcherID watcher);
+	WatcherID watchDirectory(string path, bool recursive, FileChangesCallback callback);
 
 	/** Increments the reference count of the given resource.
 	*/
@@ -211,7 +209,7 @@ interface EventDriverWatchers {
 		Once the reference count reaches zero, all associated resources will be
 		freed and the resource descriptor gets invalidated.
 	*/
-	void releaseRef(WatcherID descriptor);
+	bool releaseRef(WatcherID descriptor);
 }
 
 
@@ -224,7 +222,7 @@ alias FileIOCallback = void delegate(FileFD, IOStatus, size_t);
 alias EventCallback = void delegate(EventID);
 alias SignalCallback = void delegate(SignalListenID, SignalStatus, int);
 alias TimerCallback = void delegate(TimerID);
-alias FileChangesCallback = void delegate(WatcherID, in FileChange[] changes);
+alias FileChangesCallback = void delegate(WatcherID, in ref FileChange change);
 @system alias DataInitializer = void function(void*);
 
 enum ExitReason {
@@ -304,10 +302,16 @@ enum SignalStatus {
 */
 struct FileChange {
 	/// The type of change
-	FileChangeKind type;
+	FileChangeKind kind;
 
-	/// Path of the file/directory that was changed
-	string path;
+	/// Directory containing the changed file
+	string directory;
+
+	/// Determines if the changed entity is a file or a directory.
+	bool isDirectory;
+
+	/// Name of the changed file
+	const(char)[] name;
 }
 
 struct Handle(string NAME, T, T invalid_value = T.init) {

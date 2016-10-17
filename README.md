@@ -33,7 +33,7 @@ Events           | yes               | yes              | no              | no
 Signals          | yes²              | yes²             | no              | no               
 Files            | yes               | yes              | no              | no               
 UI Integration   | no                | no               | no              | no               
-File watcher     | no                | no               | no              | no               
+File watcher     | yes²              | yes²             | no              | no               
 
 ² Currently only supported on Linux
 
