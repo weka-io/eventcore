@@ -55,12 +55,17 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 
 		// NOTE: this isn't yet verified to work under all circumstances
 		auto elems = m_timerQueue[0 .. fired.length];
-		scope (failure) assert(false);
-		m_timerQueue.linearRemove(elems);
 
-		foreach (tm; m_firedTimers)
-			foreach (cb; tm.callbacks)
-				cb(tm.id);
+		{
+			scope (failure) assert(false);
+			m_timerQueue.linearRemove(elems);
+		}
+
+		foreach (tm; m_firedTimers) {
+			auto cb = tm.callback;
+			tm.callback = null;
+			cb(tm.id);
+		}
 		
 		bool any_fired = m_firedTimers.length > 0;
 
@@ -102,7 +107,6 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		auto tm = m_timers[timer];
 		if (!tm.pending) return;
 		tm.pending = false;
-		tm.callbacks.length = 0;
 
 		TimerSlot cmp = void;
 		cmp.timeout = tm.timeout-1;
@@ -130,17 +134,15 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 
 	final override void wait(TimerID timer, TimerCallback callback)
 	{
-		m_timers[timer].callbacks ~= callback;
+		assert(!m_timers[timer].callback);
+		m_timers[timer].callback = callback;
 	}
 
-	final override void cancelWait(TimerID timer, TimerCallback callback)
+	final override void cancelWait(TimerID timer)
 	{
-		import std.algorithm.mutation : remove;
-		import std.algorithm.searching : countUntil;
-
 		auto pt = m_timers[timer];
-		auto idx = pt.callbacks.countUntil(callback);
-		if (idx >= 0) pt.callbacks = pt.callbacks.remove(idx);
+		assert(pt.callback);
+		pt.callback = null;
 	}
 
 	final override void addRef(TimerID descriptor)
@@ -173,5 +175,5 @@ struct TimerSlot {
 	bool pending;
 	long timeout; // stdtime
 	long repeatDuration;
-	TimerCallback[] callbacks; // TODO: use a list with small-value optimization
+	TimerCallback callback; // TODO: use a list with small-value optimization
 }
