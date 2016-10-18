@@ -23,6 +23,8 @@ version (Windows) {
 }
 
 
+alias SelectEventDriver = PosixEventDriver!SelectEventLoop;
+
 final class SelectEventLoop : PosixEventLoop {
 @safe: nothrow:
 	override bool doProcessEvents(Duration timeout)

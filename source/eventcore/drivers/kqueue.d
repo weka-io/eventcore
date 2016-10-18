@@ -27,6 +27,8 @@ else static assert(false, "Kqueue not supported on this OS.");
 import core.sys.linux.epoll;
 
 
+alias KqueueEventDriver = PosixEventDriver!KqueueEventLoop;
+
 final class KqueueEventLoop : PosixEventLoop {
 	private {
 		int m_queue;

@@ -20,14 +20,14 @@ version(Windows){
 	private {
 		// TODO: use CreateFile/HANDLE instead of the Posix API on Windows
 
-		extern(C) {
+		extern(C) nothrow {
 			alias off_t = sizediff_t;
 			int open(in char* name, int mode, ...);
 			int chmod(in char* name, int mode);
-			int close(int fd);
+			int close(int fd) @safe;
 			int read(int fd, void *buffer, uint count);
 			int write(int fd, in void *buffer, uint count);
-			off_t lseek(int fd, off_t offset, int whence);
+			off_t lseek(int fd, off_t offset, int whence) @safe;
 		}
 
 		enum O_RDONLY = 0;
@@ -152,7 +152,7 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 
 	void close(FileFD file)
 	{
-		.close(file);
+		() @trusted { .close(file); } ();
 	}
 
 	ulong getSize(FileFD file)
@@ -162,7 +162,7 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 			return .lseek(file, 0, SEEK_END);
 		} else {
 			stat_t st;
-			fstat(file, &st);
+			() @trusted { fstat(file, &st); } ();
 			return st.st_size;
 		}
 	}
@@ -262,7 +262,10 @@ log("start processing");
 		assert(res, "Concurrent file "~op~"s are disallowed.");
 
 		auto bytes = buffer;
-		.lseek(file, offset, SEEK_SET);
+		version (Windows) {
+			assert(offset <= off_t.max);
+			.lseek(file, cast(off_t)offset, SEEK_SET);
+		} else .lseek(file, offset, SEEK_SET);
 
 		scope (exit) {
 log("trigger event");

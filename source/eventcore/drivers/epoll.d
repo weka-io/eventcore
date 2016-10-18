@@ -16,6 +16,7 @@ import core.time : Duration;
 import core.sys.posix.sys.time : timeval;
 import core.sys.linux.epoll;
 
+alias EpollEventDriver = PosixEventDriver!EpollEventLoop;
 
 final class EpollEventLoop : PosixEventLoop {
 @safe: nothrow:

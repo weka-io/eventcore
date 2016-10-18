@@ -1,15 +1,37 @@
 name "eventcore"
-description "Experimental callback based abstraction layer over operating system asynchronous I/O facilities."
+description "Pro-actor based abstraction layer over operating system asynchronous I/O facilities."
 license "MIT"
 copyright "Copyright © 2012-2016 rejectedsoftware e.K."
 
 targetType "library"
 
 libs "anl" platform="linux"
+libs "ws2_32" platform="windows"
 
-configuration "native" {
+configuration "epoll" {
+	platforms "linux"
+	versions "EventcoreEpollDriver"
+}
+
+configuration "kqueue" {
+	platforms "osx" "freebsd"
+	versions "EventcoreKqueueDriver"
+}
+
+configuration "winapi" {
+	platforms "windows"
+	versions "EventcoreWinAPIDriver"
+}
+
+configuration "select" {
+	versions "EventcoreSelectDriver"
 }
 
 configuration "libasync" {
 	dependency "libasync" version="~>0.7.9"
+	versions "EventcoreLibasyncDriver"
+}
+
+configuration "generic" {
+	// Defines eventDriver as the generic EventDriver interface. Setup must be done manually.
 }

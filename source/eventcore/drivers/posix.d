@@ -12,8 +12,9 @@ import eventcore.drivers.threadedfile;
 import eventcore.internal.consumablequeue : ConsumableQueue;
 import eventcore.internal.utils;
 
-import std.socket : Address, AddressFamily, InternetAddress, Internet6Address, UnixAddress, UnknownAddress;
+import std.socket : Address, AddressFamily, InternetAddress, Internet6Address, UnknownAddress;
 version (Posix) {
+	import std.socket : UnixAddress;
 	import core.sys.posix.netdb : AI_ADDRCONFIG, AI_V4MAPPED, addrinfo, freeaddrinfo, getaddrinfo;
 	import core.sys.posix.netinet.in_;
 	import core.sys.posix.netinet.tcp;
@@ -24,7 +25,11 @@ version (Posix) {
 }
 version (Windows) {
 	import core.sys.windows.winsock2;
+	alias sockaddr_storage = SOCKADDR_STORAGE;
 	alias EAGAIN = WSAEWOULDBLOCK;
+	extern (C) int read(int fd, void *buffer, uint count) nothrow;
+	extern (C) int write(int fd, const(void) *buffer, uint count) nothrow;
+	extern (C) int close(int fd) nothrow @safe;
 }
 version (linux) {
 	extern (C) int eventfd(uint initval, int flags);
@@ -44,9 +49,10 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 
 
 	private {
-		alias CoreDriver = PosixEventDriverCore!(Loop, LoopTimeoutTimerDriver);
+		alias CoreDriver = PosixEventDriverCore!(Loop, TimerDriver, EventsDriver);
 		alias EventsDriver = PosixEventDriverEvents!Loop;
-		alias SignalsDriver = PosixEventDriverSignals!Loop;
+		version (linx) alias SignalsDriver = SignalFDEventDriverSignals!Loop;
+		else alias SignalsDriver = DummyEventDriverSignals!Loop;
 		alias TimerDriver = LoopTimeoutTimerDriver;
 		alias SocketsDriver = PosixEventDriverSockets!Loop;
 		version (linux) alias DNSDriver = EventDriverDNS_GAIA!(EventsDriver, SignalsDriver);
@@ -72,7 +78,7 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 		m_events = new EventsDriver(m_loop);
 		m_signals = new SignalsDriver(m_loop);
 		m_timers = new TimerDriver;
-		m_core = new CoreDriver(m_loop, m_timers);
+		m_core = new CoreDriver(m_loop, m_timers, m_events);
 		m_sockets = new SocketsDriver(m_loop);
 		m_dns = new DNSDriver(m_events, m_signals);
 		m_files = new FileDriver(m_events);
@@ -98,7 +104,7 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 }
 
 
-final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTimers) : EventDriverCore {
+final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTimers, Events : EventDriverEvents) : EventDriverCore {
 @safe: nothrow:
 	import core.time : Duration;
 
@@ -107,19 +113,16 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 	private {
 		Loop m_loop;
 		Timers m_timers;
+		Events m_events;
 		bool m_exit = false;
 		FD m_wakeupEvent;
 	}
 
-	protected this(Loop loop, Timers timers)
+	protected this(Loop loop, Timers timers, Events events)
 	{
 		m_loop = loop;
 		m_timers = timers;
-
-		m_wakeupEvent = eventfd(0, EFD_NONBLOCK);
-		m_loop.initFD(m_wakeupEvent);
-		m_loop.registerFD(m_wakeupEvent, EventMask.read);
-		//startNotify!(EventType.read)(m_wakeupEvent, null); // should already be caught by registerFD
+		m_wakeupEvent = events.create();
 	}
 
 	@property size_t waiterCount() const { return m_loop.m_waiterCount; }
@@ -810,7 +813,8 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 	static void taskFun(Lookup* lookup, int af, shared(Events) events, EventID event)
 	{
 		addrinfo hints;
-		hints.ai_flags = AI_ADDRCONFIG|AI_V4MAPPED;
+		hints.ai_flags = AI_ADDRCONFIG;
+		version (linx) hints.ai_flags |= AI_V4MAPPED;
 		hints.ai_family = af;
 		() @trusted { lookup.retcode = getaddrinfo(lookup.name.toStringz(), null, af == AddressFamily.UNSPEC ? null : &hints, &lookup.result); } ();
 		events.trigger(event);
@@ -1008,12 +1012,14 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop) : EventDriverEvents {
 
 	final override EventID create()
 	{
-		auto id = cast(EventID)eventfd(0, EFD_NONBLOCK);
-		m_loop.initFD(id);
-		m_loop.m_fds[id].waiters = new ConsumableQueue!EventCallback; // FIXME: avoid dynamic memory allocation
-		m_loop.registerFD(id, EventMask.read);
-		m_loop.startNotify!(EventType.read)(id, &onEvent);
-		return id;
+		version (linux) {
+			auto id = cast(EventID)eventfd(0, EFD_NONBLOCK);
+			m_loop.initFD(id);
+			m_loop.m_fds[id].waiters = new ConsumableQueue!EventCallback; // FIXME: avoid dynamic memory allocation
+			m_loop.registerFD(id, EventMask.read);
+			m_loop.startNotify!(EventType.read)(id, &onEvent);
+			return id;
+		} else assert(false, "OS not supported!");	
 	}
 
 	final override void trigger(EventID event, bool notify_all = true)
@@ -1084,7 +1090,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop) : EventDriverEvents {
 	}
 }
 
-final class PosixEventDriverSignals(Loop : PosixEventLoop) : EventDriverSignals {
+final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSignals {
 @safe: /*@nogc:*/ nothrow:
 	import core.sys.posix.signal;
 	import core.sys.linux.sys.signalfd;
@@ -1153,6 +1159,29 @@ final class PosixEventDriverSignals(Loop : PosixEventLoop) : EventDriverSignals 
 			cb(lid, SignalStatus.ok, nfo.ssi_signo);
 			releaseRef(lid);
 		} while (m_loop.m_fds[fd].refCount > 0);
+	}
+}
+
+final class DummyEventDriverSignals(Loop : PosixEventLoop) : EventDriverSignals {
+@safe: /*@nogc:*/ nothrow:
+
+	private Loop m_loop;
+
+	this(Loop loop) { m_loop = loop; }
+
+	override SignalListenID listen(int sig, SignalCallback on_signal)
+	{
+		assert(false);
+	}
+
+	override void addRef(SignalListenID descriptor)
+	{
+		assert(false);
+	}
+	
+	override bool releaseRef(SignalListenID descriptor)
+	{
+		assert(false);
 	}
 }
 
@@ -1278,17 +1307,7 @@ final class PosixEventDriverWatchers(Loop : PosixEventLoop) : EventDriverWatcher
 
 	this(Loop loop) { m_loop = loop; }
 
-	final override WatcherID watchDirectory(string path, bool recursive)
-	{
-		assert(false, "TODO!");
-	}
-
-	final override void wait(WatcherID watcher, FileChangesCallback callback)
-	{
-		assert(false, "TODO!");
-	}
-
-	final override void cancelWait(WatcherID watcher)
+	final override WatcherID watchDirectory(string path, bool recursive, FileChangesCallback on_change)
 	{
 		assert(false, "TODO!");
 	}
