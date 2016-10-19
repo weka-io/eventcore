@@ -51,7 +51,7 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 	private {
 		alias CoreDriver = PosixEventDriverCore!(Loop, TimerDriver, EventsDriver);
 		alias EventsDriver = PosixEventDriverEvents!Loop;
-		version (linx) alias SignalsDriver = SignalFDEventDriverSignals!Loop;
+		version (linux) alias SignalsDriver = SignalFDEventDriverSignals!Loop;
 		else alias SignalsDriver = DummyEventDriverSignals!Loop;
 		alias TimerDriver = LoopTimeoutTimerDriver;
 		alias SocketsDriver = PosixEventDriverSockets!Loop;
