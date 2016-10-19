@@ -7,6 +7,7 @@ module test;
 import eventcore.core;
 import eventcore.socket;
 import std.socket : InternetAddress;
+import core.time : Duration;
 
 ubyte[256] s_rbuf;
 bool s_done;
@@ -59,7 +60,7 @@ void main()
 	})(baddr);
 
 	ExitReason er;
-	do er = eventDriver.core.processEvents();
+	do er = eventDriver.core.processEvents(Duration.max);
 	while (er == ExitReason.idle);
 	//assert(er == ExitReason.outOfWaiters); // FIXME: see above
 	assert(s_done);
