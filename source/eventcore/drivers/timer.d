@@ -64,7 +64,7 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		foreach (tm; m_firedTimers) {
 			auto cb = tm.callback;
 			tm.callback = null;
-			cb(tm.id);
+			if (cb) cb(tm.id);
 		}
 		
 		bool any_fired = m_firedTimers.length > 0;
