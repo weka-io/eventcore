@@ -6,6 +6,7 @@ module test;
 
 import eventcore.core;
 import std.stdio : writefln;
+import core.time : Duration;
 
 bool s_done;
 
@@ -23,7 +24,7 @@ void main()
 	});
 
 	ExitReason er;
-	do er = eventDriver.core.processEvents();
+	do er = eventDriver.core.processEvents(Duration.max);
 	while (er == ExitReason.idle);
 	//assert(er == ExitReason.outOfWaiters); // FIXME: see above
 	assert(s_done);

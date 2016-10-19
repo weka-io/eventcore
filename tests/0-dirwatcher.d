@@ -7,7 +7,7 @@ module test;
 import eventcore.core;
 import std.stdio : File, writefln;
 import std.file : exists, remove;
-import core.time : msecs;
+import core.time : Duration, msecs;
 
 bool s_done;
 int s_cnt = 0;
@@ -45,12 +45,12 @@ void main()
 	auto fil = File(testFilename, "wt");
 
 	auto tm = eventDriver.timers.create();
-	eventDriver.timers.set(tm, 100.msecs);
+	eventDriver.timers.set(tm, 100.msecs, 0.msecs);
 	eventDriver.timers.wait(tm, (tm) {
 		scope (failure) assert(false);
 		fil.write("test");
 		fil.close();
-		eventDriver.timers.set(tm, 100.msecs);
+		eventDriver.timers.set(tm, 100.msecs, 0.msecs);
 		eventDriver.timers.wait(tm, (tm) {
 			scope (failure) assert(false);
 			remove(testFilename);
@@ -58,7 +58,7 @@ void main()
 	});
 
 	ExitReason er;
-	do er = eventDriver.core.processEvents();
+	do er = eventDriver.core.processEvents(Duration.max);
 	while (er == ExitReason.idle);
 	//assert(er == ExitReason.outOfWaiters); // FIXME: see above
 	assert(s_done);

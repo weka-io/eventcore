@@ -18,6 +18,7 @@ import eventcore.core;
 import eventcore.socket;
 import std.file : exists, remove;
 import std.socket : UnixAddress;
+import core.time : Duration;
 
 ubyte[256] s_rbuf;
 bool s_done;
@@ -75,7 +76,7 @@ void testDgram()
 
 
 	ExitReason er;
-	do er = eventDriver.core.processEvents();
+	do er = eventDriver.core.processEvents(Duration.max);
 	while (er == ExitReason.idle);
 	//assert(er == ExitReason.outOfWaiters); // FIXME: see above
 	assert(s_done);
@@ -130,7 +131,7 @@ void testStream()
 	})(baddr);
 
 	ExitReason er;
-	do er = eventDriver.core.processEvents();
+	do er = eventDriver.core.processEvents(Duration.max);
 	while (er == ExitReason.idle);
 	//assert(er == ExitReason.outOfWaiters); // FIXME: see above
 	assert(s_done);
