@@ -8,6 +8,8 @@ targetType "library"
 libs "anl" platform="linux"
 libs "ws2_32" platform="windows"
 
+dependency "taggedalgebraic" version="~>0.10.4"
+
 configuration "epoll" {
 	platforms "linux"
 	versions "EventcoreEpollDriver"

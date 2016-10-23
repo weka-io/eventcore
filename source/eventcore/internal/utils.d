@@ -1,4 +1,8 @@
 module eventcore.internal.utils;
+
+import taggedalgebraic;
+
+
 void print(ARGS...)(string str, ARGS args)
 @trusted @nogc nothrow {
 	import std.format : formattedWrite;
@@ -119,6 +123,43 @@ struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
 		}
 	}
 }
+
+struct AlgebraicChoppedVector(TCommon, TSpecific...)
+{
+	import std.conv : to;
+	import std.meta : AliasSeq;
+
+	union U { mixin fields!0; }
+	alias FieldType = TaggedAlgebraic!U;
+	static struct FullField {
+		TCommon common;
+		FieldType specific;
+		mixin(accessors());
+	}
+
+	ChoppedVector!(FullField) items;
+
+	alias items this;
+
+	private static string accessors()
+	{
+		import std.format : format;
+		string ret;
+		foreach (i, U; TSpecific)
+			ret ~= "@property ref TSpecific[%s] %s() nothrow @safe { return this.specific.get!(TSpecific[%s]); }\n"
+				.format(i, U.Handle.name, i);
+		return ret;
+	}
+
+	private mixin template fields(size_t i) {
+		static if (i < TSpecific.length) {
+			mixin("TSpecific["~i.to!string~"] "~TSpecific[i].Handle.name~";");
+			mixin fields!(i+1);
+		}
+	}
+}
+
+
 
 /** Efficient bit set of dynamic size.
 */

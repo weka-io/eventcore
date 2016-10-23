@@ -2,7 +2,7 @@ module eventcore.internal.consumablequeue;
 
 /** FIFO queue with support for chunk-wise consumption.
 */
-class ConsumableQueue(T)
+final class ConsumableQueue(T)
 {
 	@safe:
 	nothrow:
