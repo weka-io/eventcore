@@ -1034,7 +1034,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop) : EventDriverEvents {
 			}
 		} else {
 			if (!m_loop.m_fds[event].event.waiters.empty)
-				m_loop.m_fds[event].event.waiters.consumeOne();
+				m_loop.m_fds[event].event.waiters.consumeOne()(event);
 		}
 	}
 
