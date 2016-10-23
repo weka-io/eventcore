@@ -38,11 +38,11 @@ interface EventDriverCore {
 
 		Params:
 			timeout = Maximum amount of time to wait for an event. A duration of
-				zero will cause the function to only process pending events. The
-				the default duration of `Duration.max`, if necessary, will wait
-				indefinitely until an event arrives.
+				zero will cause the function to only process pending events. A
+				duration of `Duration.max`, if necessary, will wait indefinitely
+				until an event arrives.
 	*/
-	ExitReason processEvents(Duration timeout = Duration.max);
+	ExitReason processEvents(Duration timeout);
 
 	/** Causes `processEvents` to return with `ExitReason.exited` as soon as
 		possible.
@@ -88,12 +88,12 @@ interface EventDriverSockets {
 	void write(StreamSocketFD socket, const(ubyte)[] buffer, IOMode mode, IOCallback on_write_finish);
 	void cancelWrite(StreamSocketFD socket);
 	void waitForData(StreamSocketFD socket, IOCallback on_data_available);
-	void shutdown(StreamSocketFD socket, bool shut_read = true, bool shut_write = true);
+	void shutdown(StreamSocketFD socket, bool shut_read, bool shut_write);
 
 	DatagramSocketFD createDatagramSocket(scope Address bind_address, scope Address target_address);
 	void receive(DatagramSocketFD socket, ubyte[] buffer, IOMode mode, DatagramIOCallback on_receive_finish);
 	void cancelReceive(DatagramSocketFD socket);
-	void send(DatagramSocketFD socket, const(ubyte)[] buffer, IOMode mode, DatagramIOCallback on_send_finish, Address target_address = null);
+	void send(DatagramSocketFD socket, const(ubyte)[] buffer, IOMode mode, DatagramIOCallback on_send_finish, Address target_address);
 	void cancelSend(DatagramSocketFD socket);
 
 	/** Increments the reference count of the given resource.
@@ -147,8 +147,8 @@ interface EventDriverFiles {
 interface EventDriverEvents {
 @safe: /*@nogc:*/ nothrow:
 	EventID create();
-	void trigger(EventID event, bool notify_all = true);
-	void trigger(EventID event, bool notify_all = true) shared;
+	void trigger(EventID event, bool notify_all);
+	void trigger(EventID event, bool notify_all) shared;
 	void wait(EventID event, EventCallback on_event);
 	void cancelWait(EventID event, EventCallback on_event);
 
@@ -189,7 +189,7 @@ interface EventDriverSignals {
 interface EventDriverTimers {
 @safe: /*@nogc:*/ nothrow:
 	TimerID create();
-	void set(TimerID timer, Duration timeout, Duration repeat = Duration.zero);
+	void set(TimerID timer, Duration timeout, Duration repeat);
 	void stop(TimerID timer);
 	bool isPending(TimerID timer);
 	bool isPeriodic(TimerID timer);
@@ -336,6 +336,8 @@ struct Handle(string NAME, T, T invalid_value = T.init) {
 	static if (is(T : Handle!(N, V, M), string N, V, int M)) alias BaseType = T.BaseType;
 	else alias BaseType = T;
 
+	alias name = NAME;
+
 	enum invalid = Handle.init;
 
 	T value = invalid_value;
@@ -355,15 +357,15 @@ struct Handle(string NAME, T, T invalid_value = T.init) {
 	alias value this;
 }
 
-alias FD = Handle!("FD", int, -1);
-alias SocketFD = Handle!("Socket", FD);
-alias StreamSocketFD = Handle!("Stream", SocketFD);
-alias StreamListenSocketFD = Handle!("StreamListen", SocketFD);
-alias DatagramSocketFD = Handle!("Datagram", SocketFD);
-alias FileFD = Handle!("File", FD);
-alias EventID = Handle!("Event", FD);
-alias TimerID = Handle!("Timer", int);
-alias WatcherID = Handle!("Watcher", int);
-alias EventWaitID = Handle!("EventWait", int);
-alias SignalListenID = Handle!("Signal", int);
-alias DNSLookupID = Handle!("DNS", int);
+alias FD = Handle!("fd", int, -1);
+alias SocketFD = Handle!("socket", FD);
+alias StreamSocketFD = Handle!("streamSocket", SocketFD);
+alias StreamListenSocketFD = Handle!("streamListen", SocketFD);
+alias DatagramSocketFD = Handle!("datagramSocket", SocketFD);
+alias FileFD = Handle!("file", FD);
+alias EventID = Handle!("event", FD);
+alias TimerID = Handle!("timer", int);
+alias WatcherID = Handle!("watcher", int);
+alias EventWaitID = Handle!("eventWait", int);
+alias SignalListenID = Handle!("signal", int);
+alias DNSLookupID = Handle!("dns", int);
