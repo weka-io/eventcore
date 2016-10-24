@@ -55,8 +55,8 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 		else alias SignalsDriver = DummyEventDriverSignals!Loop;
 		alias TimerDriver = LoopTimeoutTimerDriver;
 		alias SocketsDriver = PosixEventDriverSockets!Loop;
-		version (linux) alias DNSDriver = EventDriverDNS_GAIA!(EventsDriver, SignalsDriver);
-		else alias DNSDriver = EventDriverDNS_GAI!(EventsDriver, SignalsDriver);
+		/*version (linux) alias DNSDriver = EventDriverDNS_GAIA!(EventsDriver, SignalsDriver);
+		else*/ alias DNSDriver = EventDriverDNS_GAI!(EventsDriver, SignalsDriver);
 		alias FileDriver = ThreadedFileEventDriver!EventsDriver;
 		version (linux) alias WatcherDriver = InotifyEventDriverWatchers!Loop;
 		else alias WatcherDriver = PosixEventDriverWatchers!Loop;
