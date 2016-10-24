@@ -1408,7 +1408,7 @@ package class PosixEventLoop {
 	{
 		if (m_fds[fd.value].common.userDataDestructor)
 			() @trusted { m_fds[fd.value].common.userDataDestructor(m_fds[fd.value].common.userData.ptr); } ();
-		m_fds[fd.value].common = FDSlot.init;
+		m_fds[fd.value] = m_fds.FullField.init;
 	}
 }
 
