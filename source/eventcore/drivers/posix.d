@@ -313,6 +313,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			setSocketNonBlocking(cast(SocketFD)sockfd);
 			auto fd = cast(StreamSocketFD)sockfd;
 			m_loop.initFD(fd);
+			m_loop.m_fds[fd].specific = StreamSocketSlot.init;
 			m_loop.registerFD(fd, EventMask.read|EventMask.write|EventMask.status);
 			//print("accept %d", sockfd);
 			m_loop.m_fds[listenfd].streamListen.acceptCallback(cast(StreamListenSocketFD)listenfd, fd);
