@@ -31,6 +31,8 @@ struct StdoutRange {
 }
 
 struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
+	import core.memory : GC;
+
 	static assert(nextPOT(CHUNK_SIZE) == CHUNK_SIZE,
 		"CHUNK_SIZE must be a power of two for performance reasons.");
 
@@ -62,8 +64,10 @@ struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
 	void clear()
 	@nogc {
 		() @trusted {
-			foreach (i; 0 .. m_chunkCount)
+			foreach (i; 0 .. m_chunkCount) {
+				GC.removeRange(m_chunks[i]);
 				free(m_chunks[i]);
+			}
 			free(m_chunks.ptr);
 		} ();
 		m_chunkCount = 0;
@@ -119,7 +123,11 @@ struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
 		}
 
 		while (m_chunkCount <= chunkidx) {
-			() @trusted { m_chunks[m_chunkCount++] = cast(ChunkPtr)calloc(chunkSize, T.sizeof); } ();
+			() @trusted { 
+				auto ptr = cast(ChunkPtr)calloc(chunkSize, T.sizeof);
+				GC.addRange(ptr, chunkSize * T.sizeof);
+				m_chunks[m_chunkCount++] = ptr;
+			} ();
 		}
 	}
 }
@@ -129,7 +137,10 @@ struct AlgebraicChoppedVector(TCommon, TSpecific...)
 	import std.conv : to;
 	import std.meta : AliasSeq;
 
-	union U { mixin fields!0; }
+	union U {
+		typeof(null) none;
+		mixin fields!0;
+	}
 	alias FieldType = TaggedAlgebraic!U;
 	static struct FullField {
 		TCommon common;
