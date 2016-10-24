@@ -93,7 +93,7 @@ interface EventDriverSockets {
 	DatagramSocketFD createDatagramSocket(scope Address bind_address, scope Address target_address);
 	void receive(DatagramSocketFD socket, ubyte[] buffer, IOMode mode, DatagramIOCallback on_receive_finish);
 	void cancelReceive(DatagramSocketFD socket);
-	void send(DatagramSocketFD socket, const(ubyte)[] buffer, IOMode mode, DatagramIOCallback on_send_finish, Address target_address);
+	void send(DatagramSocketFD socket, const(ubyte)[] buffer, IOMode mode, Address target_address, DatagramIOCallback on_send_finish);
 	void cancelSend(DatagramSocketFD socket);
 
 	/** Increments the reference count of the given resource.
@@ -234,8 +234,8 @@ interface EventDriverWatchers {
 alias ConnectCallback = void delegate(StreamSocketFD, ConnectStatus);
 alias AcceptCallback = void delegate(StreamListenSocketFD, StreamSocketFD);
 alias IOCallback = void delegate(StreamSocketFD, IOStatus, size_t);
-alias DatagramIOCallback = void delegate(DatagramSocketFD, IOStatus, size_t, scope Address);
-alias DNSLookupCallback = void delegate(DNSLookupID, DNSStatus, scope Address[]);
+alias DatagramIOCallback = void delegate(DatagramSocketFD, IOStatus, size_t, /*scope*/ Address);
+alias DNSLookupCallback = void delegate(DNSLookupID, DNSStatus, /*scope*/ Address[]);
 alias FileIOCallback = void delegate(FileFD, IOStatus, size_t);
 alias EventCallback = void delegate(EventID);
 alias SignalCallback = void delegate(SignalListenID, SignalStatus, int);

@@ -665,7 +665,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		() @trusted { return cast(DatagramIOCallback)slot.readCallback; } ()(socket, IOStatus.ok, ret, src_addr);
 	}
 
-	void send(DatagramSocketFD socket, const(ubyte)[] buffer, IOMode mode, DatagramIOCallback on_send_finish, Address target_address = null)
+	void send(DatagramSocketFD socket, const(ubyte)[] buffer, IOMode mode, Address target_address, DatagramIOCallback on_send_finish)
 	{
 		assert(mode != IOMode.all, "Only IOMode.immediate and IOMode.once allowed for datagram sockets.");
 
@@ -924,7 +924,7 @@ final class EventDriverDNS_GAIA(Events : EventDriverEvents, Signals : EventDrive
 		@safe nothrow
 	{
 		assert(status == SignalStatus.ok);
-		foreach (i, l; m_lookups) {
+		foreach (i, ref l; m_lookups) {
 			if (!l.callback) continue;
 			auto err = gai_error(&l.ctx);
 			if (err == EAI_INPROGRESS) continue;
@@ -989,11 +989,12 @@ private void passToDNSCallback(DNSLookupID id, scope DNSLookupCallback cb, DNSSt
 			scoped!RefAddr(), scoped!RefAddr(), scoped!RefAddr(), scoped!RefAddr(),
 			scoped!RefAddr(), scoped!RefAddr(), scoped!RefAddr(), scoped!RefAddr()
 		];
-		Address[16] addrs;
+		//Address[16] addrs;
+		auto addrs = new Address[16]; // FIXME: avoid heap allocation
 		auto ai = ai_orig;
 		size_t addr_count = 0;
 		while (ai !is null && addr_count < addrs.length) {
-			RefAddr ua = addrs_prealloc[addr_count];
+			RefAddr ua = new RefAddr;//addrs_prealloc[addr_count]; // FIXME: avoid heap allocation
 			ua.sa = ai.ai_addr;
 			ua.len = ai.ai_addrlen;
 			addrs[addr_count] = ua;
@@ -1153,12 +1154,12 @@ final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSigna
 	private void onSignal(FD fd)
 	{
 		SignalListenID lid = cast(SignalListenID)fd;
-		auto cb = m_loop.m_fds[fd].signal.callback;
 		signalfd_siginfo nfo;
 		do {
 			auto ret = () @trusted { return read(fd, &nfo, nfo.sizeof); } ();	
 			if (ret == -1 && errno == EAGAIN)
 				break;
+			auto cb = m_loop.m_fds[fd].signal.callback;
 			if (ret != nfo.sizeof) {
 				cb(lid, SignalStatus.error, -1);
 				return;
