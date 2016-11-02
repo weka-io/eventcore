@@ -85,7 +85,7 @@ final class WinAPIEventDriverCore : EventDriverCore {
 
 final class WinAPIEventDriverSockets : EventDriverSockets {
 @safe: /*@nogc:*/ nothrow:
-	override StreamSocketFD connectStream(scope Address peer_address, ConnectCallback on_connect)
+	override StreamSocketFD connectStream(scope Address peer_address, scope Address bind_address, ConnectCallback on_connect)
 	{
 		assert(false, "TODO!");
 	}

@@ -78,7 +78,7 @@ final class LibasyncEventDriverCore : EventDriverCore {
 
 final class LibasyncEventDriverSockets : EventDriverSockets {
 @safe: /*@nogc:*/ nothrow:
-	override StreamSocketFD connectStream(scope Address peer_address, ConnectCallback on_connect)
+	override StreamSocketFD connectStream(scope Address peer_address, scope Address bind_address, ConnectCallback on_connect)
 	{
 		assert(false, "TODO!");
 	}

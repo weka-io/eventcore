@@ -78,7 +78,7 @@ interface EventDriverCore {
 
 interface EventDriverSockets {
 @safe: /*@nogc:*/ nothrow:
-	StreamSocketFD connectStream(scope Address peer_address, ConnectCallback on_connect);
+	StreamSocketFD connectStream(scope Address peer_address, scope Address bind_address, ConnectCallback on_connect);
 	StreamListenSocketFD listenStream(scope Address bind_address, AcceptCallback on_accept);
 	void waitForConnections(StreamListenSocketFD sock, AcceptCallback on_accept);
 	ConnectionState getConnectionState(StreamSocketFD sock);

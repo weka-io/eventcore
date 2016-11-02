@@ -200,7 +200,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	this(Loop loop) { m_loop = loop; }
 
-	final override StreamSocketFD connectStream(scope Address address, ConnectCallback on_connect)
+	final override StreamSocketFD connectStream(scope Address address, scope Address bind_address, ConnectCallback on_connect)
 	{
 		auto sock = cast(StreamSocketFD)createSocket(address.addressFamily, SOCK_STREAM);
 		if (sock == -1) return StreamSocketFD.invalid;
@@ -208,12 +208,17 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		void invalidateSocket() @nogc @trusted nothrow { closeSocket(sock); sock = StreamSocketFD.invalid; }
 
 		int bret;
-		() @trusted { // scope
-			scope bind_addr = new UnknownAddress;
-			bind_addr.name.sa_family = cast(ushort)address.addressFamily;
-			bind_addr.name.sa_data[] = 0;
-			bret = bind(sock, bind_addr.name, bind_addr.nameLen);
+		() @trusted { // scope + bind()
+			if (bind_address !is null) {
+				bret = bind(sock, bind_address.name, bind_address.nameLen);
+			} else {
+				scope bind_addr = new UnknownAddress;
+				bind_addr.name.sa_family = cast(ushort)address.addressFamily;
+				bind_addr.name.sa_data[] = 0;
+				bret = bind(sock, bind_addr.name, bind_addr.nameLen);
+			}
 		} ();
+
 		if (bret != 0) {
 			invalidateSocket();
 			on_connect(sock, ConnectStatus.bindFailure);
