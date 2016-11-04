@@ -231,12 +231,14 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 		auto ret = () @trusted { return connect(sock, address.name, address.nameLen); } ();
 		if (ret == 0) {
+			m_loop.m_fds[sock].specific.state = ConnectionState.connected;
 			on_connect(sock, ConnectStatus.connected);
 		} else {
 			auto err = getSocketError();
 			if (err == EINPROGRESS) {
 				with (m_loop.m_fds[sock].streamSocket) {
 					connectCallback = on_connect;
+					state = ConnectionState.connecting;
 				}
 				m_loop.startNotify!(EventType.write)(sock, &onConnect);
 			} else {
@@ -254,13 +256,21 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	private void onConnect(FD sock)
 	{
 		m_loop.setNotifyCallback!(EventType.write)(sock, null);
-		m_loop.m_fds[sock].streamSocket.connectCallback(cast(StreamSocketFD)sock, ConnectStatus.connected);
+		with (m_loop.m_fds[sock].streamSocket) {
+			state = ConnectionState.connected;
+			connectCallback(cast(StreamSocketFD)sock, ConnectStatus.connected);
+			connectCallback = null;
+		}
 	}
 
 	private void onConnectError(FD sock)
 	{
 		// FIXME: determine the correct kind of error!
-		m_loop.m_fds[sock].streamSocket.connectCallback(cast(StreamSocketFD)sock, ConnectStatus.refused);
+		with (m_loop.m_fds[sock].streamSocket) {
+			state = ConnectionState.closed;
+			connectCallback(cast(StreamSocketFD)sock, ConnectStatus.refused);
+			connectCallback = null;
+		}
 	}
 
 	final override StreamListenSocketFD listenStream(scope Address address, AcceptCallback on_accept)
@@ -327,7 +337,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	ConnectionState getConnectionState(StreamSocketFD sock)
 	{
-		assert(false);
+		return m_loop.m_fds[sock].streamSocket.state;
 	}
 
 	final override void setTCPNoDelay(StreamSocketFD socket, bool enable)
@@ -415,6 +425,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		}
 
 		if (ret == 0) {
+			slot.state = ConnectionState.passiveClose;
 			finalize(IOStatus.disconnected);
 			return;
 		}
@@ -578,7 +589,11 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override void shutdown(StreamSocketFD socket, bool shut_read, bool shut_write)
 	{
-		// TODO!
+		auto st = m_loop.m_fds[socket].streamSocket.state;
+		() @trusted { .shutdown(socket, shut_read ? shut_write ? SHUT_RDWR : SHUT_RD : shut_write ? SHUT_WR : 0); } ();
+		if (st == ConnectionState.passiveClose) shut_read = true;
+		if (st == ConnectionState.activeClose) shut_write = true;
+		m_loop.m_fds[socket].streamSocket.state = shut_read ? shut_write ? ConnectionState.closed : ConnectionState.passiveClose : shut_write ? ConnectionState.activeClose : ConnectionState.connected;
 	}
 
 	DatagramSocketFD createDatagramSocket(scope Address bind_address, scope Address target_address)
@@ -1454,6 +1469,7 @@ private struct StreamSocketSlot {
 	IOCallback writeCallback; // FIXME: this type only works for stream sockets
 
 	ConnectCallback connectCallback;
+	ConnectionState state;
 }
 
 private struct StreamListenSocketSlot {
