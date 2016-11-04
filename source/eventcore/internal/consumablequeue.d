@@ -161,6 +161,7 @@ final class ConsumableQueue(T)
 					m_consumedCount--;
 				}
 		}
+		m_first = m_first & m_capacityMask;
 	}
 
 	private ref T getPendingAt(size_t idx)
@@ -210,4 +211,14 @@ unittest {
 	assert(q.consumeOne == 6);
 	assert(q.length == 0);
 	assert(q.m_consumedCount == 0);
+
+	foreach (i; 7 .. 15) q.put(i);
+	assert(q.consume.equal([7, 8, 9, 10, 11, 12, 13, 14]));
+	q.put(15);
+	assert(q.consume.equal([15]));
+	q.put(16);
+	assert(q.consume.equal([16]));
+	q.put(17);
+	assert(q.consume.equal([17]));
+	assert(q.consume.empty);
 }
