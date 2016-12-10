@@ -186,7 +186,7 @@ struct SmallIntegerSet(V : uint)
 			uint b = 1u << (i%32);
 			i /= 32;
 			if (i >= m_bits[j].length)
-				m_bits[j].length = nextPOT(i);
+				m_bits[j].length = nextPOT(i+1);
 			m_bits[j][i] |= b;
 		}
 	}
