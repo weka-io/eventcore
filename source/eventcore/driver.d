@@ -119,7 +119,7 @@ interface EventDriverDNS {
 interface EventDriverFiles {
 @safe: /*@nogc:*/ nothrow:
 	FileFD open(string path, FileOpenMode mode);
-	FileFD createTemp();
+	FileFD adopt(int system_file_handle);
 	void close(FileFD file);
 
 	ulong getSize(FileFD file);
