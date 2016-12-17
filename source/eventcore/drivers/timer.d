@@ -63,7 +63,10 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 
 		foreach (tm; m_firedTimers) {
 			auto cb = tm.callback;
-			tm.callback = null;
+			if (!tm.pending) {
+				tm.callback = null;
+			}
+			
 			if (cb) cb(tm.id);
 		}
 		
