@@ -15,6 +15,7 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 	import std.datetime : Clock;
 	import std.range : SortedRange, assumeSorted, take;
 	import core.time : hnsecs, Duration;
+	import core.memory : GC;
 
 	private {
 		static FreeList!(Mallocator, TimerSlot.sizeof) ms_allocator;
@@ -84,6 +85,7 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		TimerSlot* tm;
 		try tm = ms_allocator.make!TimerSlot;
 		catch (Exception e) return TimerID.invalid;
+		GC.addRange(tm, TimerSlot.sizeof, typeid(TimerSlot));
 		assert(tm !is null);
 		tm.id = id;
 		tm.refCount = 1;
@@ -167,7 +169,12 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		if (!--tm.refCount) {
 			if (tm.pending) stop(tm.id);
 			m_timers.remove(descriptor);
-			() @trusted { scope (failure) assert(false); ms_allocator.dispose(tm); } ();
+			() @trusted {
+				scope (failure) assert(false);
+				ms_allocator.dispose(tm);
+				GC.removeRange(tm);
+			} ();
+			
 			return false;
 		}
 
