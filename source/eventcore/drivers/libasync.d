@@ -148,7 +148,7 @@ final class LibasyncEventDriverSockets : EventDriverSockets {
 		assert(false, "TODO!");
 	}
 
-	override void send(DatagramSocketFD socket, const(ubyte)[] buffer, IOMode mode, DatagramIOCallback on_send_finish, Address target_address = null)
+	override void send(DatagramSocketFD socket, const(ubyte)[] buffer, IOMode mode, Address target_address, DatagramIOCallback on_send_finish)
 	{
 		assert(false, "TODO!");
 	}
@@ -191,7 +191,7 @@ final class LibasyncEventDriverFiles : EventDriverFiles {
 		assert(false, "TODO!");
 	}
 
-	override FileFD createTemp()
+	override FileFD adopt(int system_file_handle)
 	{
 		assert(false, "TODO!");
 	}

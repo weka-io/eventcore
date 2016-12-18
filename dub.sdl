@@ -30,7 +30,7 @@ configuration "select" {
 }
 
 configuration "libasync" {
-	dependency "libasync" version="~>0.7.9"
+	dependency "libasync" version="~>0.8.2"
 	versions "EventcoreLibasyncDriver"
 }
 
