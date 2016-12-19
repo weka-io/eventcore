@@ -29,16 +29,19 @@ void main()
 		eventDriver.timers.set(tm, 100.msecs, 100.msecs);
 
 		void secondTier(TimerID timer) nothrow @safe {
-			scope (failure) assert(false);
-			auto dur = Clock.currTime(UTC()) - s_startTime;
-			s_cnt++;
-			assert(dur > 100.msecs * s_cnt);
-			assert(dur < 100.msecs * s_cnt + 20.msecs);
+			try {
+				auto dur = Clock.currTime(UTC()) - s_startTime;
+				s_cnt++;
+				assert(dur > 100.msecs * s_cnt);
+				assert(dur < 100.msecs * s_cnt + 20.msecs);
 
-			if (s_cnt == 3) {
-				s_done = true;
-				eventDriver.core.exit();
-			} else eventDriver.timers.wait(tm, &secondTier);
+				if (s_cnt == 3) {
+					s_done = true;
+					eventDriver.core.exit();
+				} else eventDriver.timers.wait(tm, &secondTier);
+			} catch (Exception e) {
+				assert(false, e.msg);
+			}
 		}
 
 		eventDriver.timers.wait(tm, &secondTier);
