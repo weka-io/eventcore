@@ -10,6 +10,8 @@ import eventcore.internal.utils;
 import std.functional : toDelegate;
 import std.socket : InternetAddress;
 import std.exception : enforce;
+import core.time : Duration;
+
 
 void main()
 {
@@ -20,7 +22,7 @@ void main()
 
 	print("Listening for requests on port 8080...");
 	while (eventDriver.core.waiterCount)
-		eventDriver.core.processEvents();
+		eventDriver.core.processEvents(Duration.max);
 }
 
 void onClientConnect(StreamListenSocketFD listener, StreamSocketFD client)
@@ -63,7 +65,7 @@ struct ClientHandler {
 		//print("Request: %s", cast(char[])ln);
 		if (ln.length == 0) {
 			//print("Error: empty request line");
-			eventDriver.sockets.shutdown(client);
+			eventDriver.sockets.shutdown(client, true, true);
 			eventDriver.sockets.releaseRef(client);
 		}
 
@@ -89,7 +91,7 @@ struct ClientHandler {
 
 		if (status != IOStatus.ok) {
 			print("Client disconnect");
-			eventDriver.sockets.shutdown(client);
+			eventDriver.sockets.shutdown(client, true, true);
 			eventDriver.sockets.releaseRef(client);
 			return;
 		}
@@ -112,7 +114,7 @@ struct ClientHandler {
 		} else {
 			// ERROR: header line too long
 			print("Header line too long");
-			eventDriver.sockets.shutdown(client);
+			eventDriver.sockets.shutdown(client, true, true);
 			eventDriver.sockets.releaseRef(client);
 		}
 	}

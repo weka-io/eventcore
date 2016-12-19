@@ -11,6 +11,7 @@ import std.functional : toDelegate;
 import std.socket : InternetAddress;
 import std.exception : enforce;
 import std.typecons : Rebindable, RefCounted;
+import core.time : Duration;
 import core.thread : Fiber;
 
 
@@ -187,7 +188,7 @@ void main()
 
 	print("Listening for requests on port 8080...");
 	while (eventDriver.core.waiterCount)
-		eventDriver.core.processEvents();
+		eventDriver.core.processEvents(Duration.max);
 }
 
 void onClientConnect(StreamListenSocketFD listener, StreamSocketFD client)
