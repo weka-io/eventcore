@@ -10,6 +10,15 @@ d:
   - ldc-1.0.0
   - dmd-beta
 
+env:
+    - CONFIG=select
+    - CONFIG=epoll
+    - CONFIG=libasync
+
+matrix:
+  allow_failures:
+    - env: CONFIG=libasync
+
 script: ./travis-ci.sh
 
 sudo: false
