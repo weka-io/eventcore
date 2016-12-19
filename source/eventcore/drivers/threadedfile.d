@@ -147,8 +147,13 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 
 	final override FileFD adopt(int system_file_handle)
 	{
-		auto flags = () @trusted { return fcntl(system_file_handle, F_GETFD); } ();
-		if (flags == -1) return FileFD.invalid;
+		version (Windows) {
+			// TODO: check if FD is a valid file!
+		} else {
+			auto flags = () @trusted { return fcntl(system_file_handle, F_GETFD); } ();
+			if (flags == -1) return FileFD.invalid;
+		}
+		
 		if (m_files[system_file_handle].refCount > 0) return FileFD.invalid;
 		m_files[system_file_handle] = FileInfo.init;
 		m_files[system_file_handle].refCount = 1;

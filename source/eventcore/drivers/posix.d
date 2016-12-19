@@ -27,6 +27,9 @@ version (Windows) {
 	import core.sys.windows.winsock2;
 	alias sockaddr_storage = SOCKADDR_STORAGE;
 	alias EAGAIN = WSAEWOULDBLOCK;
+	enum SHUT_RDWR = SD_BOTH;
+	enum SHUT_RD = SD_RECEIVE;
+	enum SHUT_WR = SD_SEND;
 	extern (C) int read(int fd, void *buffer, uint count) nothrow;
 	extern (C) int write(int fd, const(void) *buffer, uint count) nothrow;
 	extern (C) int close(int fd) nothrow @safe;
