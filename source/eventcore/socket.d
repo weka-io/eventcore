@@ -14,7 +14,7 @@ StreamSocket connectStream(alias callback)(scope Address peer_address)
 		if (fd != StreamSocketFD.invalid) eventDriver.sockets.releaseRef(fd);
 	}
 
-	auto fd = eventDriver.sockets.connectStream(peer_address, &cb);
+	auto fd = eventDriver.sockets.connectStream(peer_address, null, &cb);
 	enforce(fd != StreamSocketFD.invalid, "Failed to create socket.");
 	eventDriver.sockets.addRef(fd);
 	return StreamSocket(fd);
@@ -126,6 +126,6 @@ void send(alias callback)(ref DatagramSocket socket, const(ubyte)[] buffer, IOMo
 	void cb(DatagramSocketFD fd, IOStatus status, size_t bytes_written, scope Address) @safe nothrow {
 		callback(status, bytes_written);
 	}
-	eventDriver.sockets.send(socket.m_fd, buffer, mode, &cb, target_address);
+	eventDriver.sockets.send(socket.m_fd, buffer, mode, target_address, &cb);
 }
 void cancelSend(ref DatagramSocket socket) { eventDriver.sockets.cancelSend(socket.m_fd); }
