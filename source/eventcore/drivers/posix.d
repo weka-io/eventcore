@@ -132,7 +132,7 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 
 	final override ExitReason processEvents(Duration timeout)
 	{
-		import std.algorithm : min;
+		import std.algorithm : min, max;
 		import core.time : hnsecs, seconds;
 
 		if (m_exit) {
@@ -150,7 +150,7 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 		} else {
 			long now = currStdTime;
 			do {
-				auto nextto = min(m_timers.getNextTimeout(now), timeout);
+				auto nextto = max(min(m_timers.getNextTimeout(now), timeout), 0.seconds);
 				got_events = m_loop.doProcessEvents(nextto);
 				long prev_step = now;
 				now = currStdTime;

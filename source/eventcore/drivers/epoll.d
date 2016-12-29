@@ -34,13 +34,13 @@ final class EpollEventLoop : PosixEventLoop {
 
 	override bool doProcessEvents(Duration timeout)
 	@trusted {
-		import std.algorithm : min;
+		import std.algorithm : min, max;
 		//assert(Fiber.getThis() is null, "processEvents may not be called from within a fiber!");
 
 		debug (EventCoreEpollDebug) print("Epoll wait %s, %s", m_events.length, timeout);
 		long tomsec;
 		if (timeout == Duration.max) tomsec = long.max;
-		else tomsec = (timeout.total!"hnsecs" + 9999) / 10_000;
+		else tomsec = max((timeout.total!"hnsecs" + 9999) / 10_000, 0);
 		auto ret = epoll_wait(m_epoll, m_events.ptr, cast(int)m_events.length, tomsec > int.max ? -1 : cast(int)tomsec);
 		debug (EventCoreEpollDebug) print("Epoll wait done: %s", ret);
 
