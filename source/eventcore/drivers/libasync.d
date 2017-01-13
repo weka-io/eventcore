@@ -39,6 +39,7 @@ final class LibasyncEventDriver : EventDriver {
 	override @property LibasyncEventDriverDNS dns() { return m_dns; }
 	override @property LibasyncEventDriverTimers timers() { return m_timers; }
 	override @property LibasyncEventDriverEvents events() { return m_events; }
+	override @property shared(LibasyncEventDriverEvents) events() shared { return m_events; }
 	override @property LibasyncEventDriverSignals signals() { return m_signals; }
 	override @property LibasyncEventDriverWatchers watchers() { return m_watchers; }
 

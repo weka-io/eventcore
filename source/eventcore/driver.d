@@ -10,6 +10,7 @@ interface EventDriver {
 	@property EventDriverCore core();
 	@property EventDriverTimers timers();
 	@property EventDriverEvents events();
+	@property shared(EventDriverEvents) events() shared;
 	@property EventDriverSignals signals();
 	@property EventDriverSockets sockets();
 	@property EventDriverDNS dns();

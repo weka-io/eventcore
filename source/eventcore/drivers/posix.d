@@ -91,6 +91,7 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 	// force overriding these in the (final) sub classes to avoid virtual calls
 	final override @property CoreDriver core() { return m_core; }
 	final override @property EventsDriver events() { return m_events; }
+	final override @property shared(EventsDriver) events() shared { return m_events; }
 	final override @property SignalsDriver signals() { return m_signals; }
 	final override @property TimerDriver timers() { return m_timers; }
 	final override @property SocketsDriver sockets() { return m_sockets; }

@@ -46,6 +46,7 @@ final class WinAPIEventDriver : EventDriver {
 	override @property WinAPIEventDriverDNS dns() { return m_dns; }
 	override @property WinAPIEventDriverTimers timers() { return m_timers; }
 	override @property WinAPIEventDriverEvents events() { return m_events; }
+	override @property shared(WinAPIEventDriverEvents) events() shared { return m_events; }
 	override @property WinAPIEventDriverSignals signals() { return m_signals; }
 	override @property WinAPIEventDriverWatchers watchers() { return m_watchers; }
 
