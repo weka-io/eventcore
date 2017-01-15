@@ -82,6 +82,11 @@ final class WinAPIEventDriverCore : EventDriverCore {
 	{
 		assert(false, "TODO!");
 	}
+
+	protected override void* rawUserData(DatagramSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system
+	{
+		assert(false, "TODO!");
+	}
 }
 
 final class WinAPIEventDriverSockets : EventDriverSockets {
@@ -152,6 +157,11 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	}
 
 	override DatagramSocketFD createDatagramSocket(scope Address bind_address, scope Address target_address)
+	{
+		assert(false, "TODO!");
+	}
+
+	override bool setBroadcast(DatagramSocketFD socket, bool enable)
 	{
 		assert(false, "TODO!");
 	}

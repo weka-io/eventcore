@@ -65,6 +65,8 @@ interface EventDriverCore {
 
 	/// Low-level user data access. Use `getUserData` instead.
 	protected void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
+	/// ditto
+	protected void* rawUserData(DatagramSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
 
 	/** Retrieves a reference to a user-defined value associated with a descriptor.
 	*/
@@ -94,6 +96,7 @@ interface EventDriverSockets {
 	void shutdown(StreamSocketFD socket, bool shut_read, bool shut_write);
 
 	DatagramSocketFD createDatagramSocket(scope Address bind_address, scope Address target_address);
+	bool setBroadcast(DatagramSocketFD socket, bool enable);
 	void receive(DatagramSocketFD socket, ubyte[] buffer, IOMode mode, DatagramIOCallback on_receive_finish);
 	void cancelReceive(DatagramSocketFD socket);
 	void send(DatagramSocketFD socket, const(ubyte)[] buffer, IOMode mode, Address target_address, DatagramIOCallback on_send_finish);

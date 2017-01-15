@@ -75,6 +75,11 @@ final class LibasyncEventDriverCore : EventDriverCore {
 	{
 		assert(false, "TODO!");
 	}
+
+	protected override void* rawUserData(DatagramSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system
+	{
+		assert(false, "TODO!");
+	}
 }
 
 final class LibasyncEventDriverSockets : EventDriverSockets {
@@ -145,6 +150,11 @@ final class LibasyncEventDriverSockets : EventDriverSockets {
 	}
 
 	override DatagramSocketFD createDatagramSocket(scope Address bind_address, scope Address target_address)
+	{
+		assert(false, "TODO!");
+	}
+
+	override bool setBroadcast(DatagramSocketFD socket, bool enable)
 	{
 		assert(false, "TODO!");
 	}

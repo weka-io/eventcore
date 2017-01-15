@@ -184,6 +184,16 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 
 	final protected override void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
 	@system {
+		return rawUserDataImpl(descriptor, size, initialize, destroy);
+	}
+
+	final protected override void* rawUserData(DatagramSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+	@system {
+		return rawUserDataImpl(descriptor, size, initialize, destroy);
+	}
+
+	private void* rawUserDataImpl(FD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+	@system {
 		FDSlot* fds = &m_loop.m_fds[descriptor].common;
 		assert(fds.userDataDestructor is null || fds.userDataDestructor is destroy,
 			"Requesting user data with differing type (destructor).");
@@ -624,7 +634,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		m_loop.m_fds[socket].streamSocket.state = shut_read ? shut_write ? ConnectionState.closed : ConnectionState.passiveClose : shut_write ? ConnectionState.activeClose : ConnectionState.connected;
 	}
 
-	DatagramSocketFD createDatagramSocket(scope Address bind_address, scope Address target_address)
+	final override DatagramSocketFD createDatagramSocket(scope Address bind_address, scope Address target_address)
 	{
 		auto sock = cast(DatagramSocketFD)createSocket(bind_address.addressFamily, SOCK_DGRAM);
 		if (sock == -1) return DatagramSocketFD.invalid;
@@ -644,6 +654,12 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		m_loop.registerFD(sock, EventMask.read|EventMask.write|EventMask.status);
 
 		return sock;
+	}
+
+	final override bool setBroadcast(DatagramSocketFD socket, bool enable)
+	{
+		int tmp_broad = enable;
+		return () @trusted { return setsockopt(socket, SOL_SOCKET, SO_BROADCAST, &tmp_broad, tmp_broad.sizeof); } () == 0;
 	}
 
 	void receive(DatagramSocketFD socket, ubyte[] buffer, IOMode mode, DatagramIOCallback on_receive_finish)
