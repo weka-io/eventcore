@@ -84,6 +84,7 @@ interface EventDriverSockets {
 	void waitForConnections(StreamListenSocketFD sock, AcceptCallback on_accept);
 	ConnectionState getConnectionState(StreamSocketFD sock);
 	void setTCPNoDelay(StreamSocketFD socket, bool enable);
+	void setKeepAlive(StreamSocketFD socket, bool enable);
 	void read(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish);
 	void cancelRead(StreamSocketFD socket);
 	void write(StreamSocketFD socket, const(ubyte)[] buffer, IOMode mode, IOCallback on_write_finish);

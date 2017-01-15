@@ -104,6 +104,11 @@ final class LibasyncEventDriverSockets : EventDriverSockets {
 		assert(false, "TODO!");
 	}
 
+	override void setKeepAlive(StreamSocketFD socket, bool enable)
+	{
+		assert(false, "TODO!");
+	}
+
 	override void read(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish)
 	{
 		assert(false, "TODO!");

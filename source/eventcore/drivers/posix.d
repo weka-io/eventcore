@@ -350,6 +350,12 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		() @trusted { setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, cast(char*)&opt, opt.sizeof); } ();
 	}
 
+	final override void setKeepAlive(StreamSocketFD socket, bool enable)
+	{
+		ubyte opt = enable;
+		() @trusted { setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, cast(char*)&opt, opt.sizeof); } ();
+	}
+
 	final override void read(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish)
 	{
 		if (buffer.length == 0) {
