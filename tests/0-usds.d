@@ -94,7 +94,7 @@ void testStream()
 	auto server = listenStream(baddr);
 	StreamSocket client;
 
-	server.waitForConnections!((ref incoming) {
+	server.waitForConnections!((ref incoming, scope addr) {
 		incoming.read!((status, bts) {
 			assert(status == IOStatus.ok);
 			assert(bts == pack1.length);
