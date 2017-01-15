@@ -22,7 +22,7 @@ void main()
 	StreamSocket client;
 	StreamSocket incoming;
 
-	server.waitForConnections!((incoming_) {
+	server.waitForConnections!((incoming_, addr) {
 		incoming = incoming_; // work around ref counting issue
 		incoming.read!((status, bts) {
 			assert(status == IOStatus.ok);

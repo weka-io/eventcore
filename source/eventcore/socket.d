@@ -93,9 +93,9 @@ struct StreamListenSocket {
 
 void waitForConnections(alias callback)(ref StreamListenSocket socket)
 {
-	void cb(StreamListenSocketFD, StreamSocketFD sock) @safe nothrow {
+	void cb(StreamListenSocketFD, StreamSocketFD sock, scope RefAddress addr) @safe nothrow {
 		auto ss = StreamSocket(sock);
-		callback(ss);
+		callback(ss, addr);
 	}
 	eventDriver.sockets.waitForConnections(socket.m_fd, &cb);
 }
@@ -116,14 +116,14 @@ struct DatagramSocket {
 }
 
 void receive(alias callback)(ref DatagramSocket socket, ubyte[] buffer, IOMode mode) {
-	void cb(DatagramSocketFD fd, IOStatus status, size_t bytes_written, scope Address address) @safe nothrow {
+	void cb(DatagramSocketFD fd, IOStatus status, size_t bytes_written, scope RefAddress address) @safe nothrow {
 		callback(status, bytes_written, address);
 	}
 	eventDriver.sockets.receive(socket.m_fd, buffer, mode, &cb);
 }
 void cancelReceive(ref DatagramSocket socket) { eventDriver.sockets.cancelReceive(socket.m_fd); }
 void send(alias callback)(ref DatagramSocket socket, const(ubyte)[] buffer, IOMode mode, Address target_address = null) {
-	void cb(DatagramSocketFD fd, IOStatus status, size_t bytes_written, scope Address) @safe nothrow {
+	void cb(DatagramSocketFD fd, IOStatus status, size_t bytes_written, scope RefAddress) @safe nothrow {
 		callback(status, bytes_written);
 	}
 	eventDriver.sockets.send(socket.m_fd, buffer, mode, target_address, &cb);
