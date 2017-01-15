@@ -324,8 +324,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		foreach (i; 0 .. 20) {
 			int sockfd;
 			sockaddr_storage addr;
-			version (Windows) int addr_len = addr.sizeof;
-			else uint addr_len = addr.sizeof;
+			socklen_t addr_len = addr.sizeof;
 			() @trusted { sockfd = accept(listenfd, () @trusted { return cast(sockaddr*)&addr; } (), &addr_len); } ();
 			if (sockfd == -1) break;
 
@@ -335,7 +334,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			m_loop.m_fds[fd].specific = StreamSocketSlot.init;
 			m_loop.registerFD(fd, EventMask.read|EventMask.write|EventMask.status);
 			//print("accept %d", sockfd);
-			m_loop.m_fds[listenfd].streamListen.acceptCallback(cast(StreamListenSocketFD)listenfd, fd);
+			scope RefAddress addrc = new RefAddress(() @trusted { return cast(sockaddr*)&addr; } (), addr_len);
+			m_loop.m_fds[listenfd].streamListen.acceptCallback(cast(StreamListenSocketFD)listenfd, fd, addrc);
 		}
 	}
 
@@ -343,6 +343,16 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	{
 		return m_loop.m_fds[sock].streamSocket.state;
 	}
+
+	bool getLocalAddress(StreamSocketFD sock, scope RefAddress dst)
+	{
+		socklen_t addr_len = dst.nameLen;
+		if (() @trusted { return getsockname(sock, dst.name, &addr_len); } () != 0)
+			return false;
+		dst.cap(addr_len);
+		return true;
+	}
+
 
 	final override void setTCPNoDelay(StreamSocketFD socket, bool enable)
 	{
@@ -643,9 +653,9 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		assert(mode != IOMode.all, "Only IOMode.immediate and IOMode.once allowed for datagram sockets.");
 
 		sizediff_t ret;
-		scope src_addr = new UnknownAddress();
-		socklen_t src_addr_len = src_addr.nameLen;
-		() @trusted { ret = .recvfrom(socket, buffer.ptr, buffer.length, 0, src_addr.name, &src_addr_len); } ();
+		sockaddr_storage src_addr;
+		socklen_t src_addr_len = src_addr.sizeof;
+		() @trusted { ret = .recvfrom(socket, buffer.ptr, buffer.length, 0, cast(sockaddr*)&src_addr, &src_addr_len); } ();
 
 		if (ret < 0) {
 			auto err = getSocketError();
@@ -670,7 +680,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			return;
 		}
 
-		on_receive_finish(socket, IOStatus.ok, ret, src_addr);
+		scope src_addrc = new RefAddress(() @trusted { return cast(sockaddr*)&src_addr; } (), src_addr_len);
+		on_receive_finish(socket, IOStatus.ok, ret, src_addrc);
 	}
 
 	void cancelReceive(DatagramSocketFD socket)
@@ -686,9 +697,9 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		auto socket = cast(DatagramSocketFD)fd;
 
 		sizediff_t ret;
-		scope src_addr = new UnknownAddress;
-		socklen_t src_addr_len = src_addr.nameLen;
-		() @trusted { ret = .recvfrom(socket, slot.readBuffer.ptr, slot.readBuffer.length, 0, src_addr.name, &src_addr_len); } ();
+		sockaddr_storage src_addr;
+		socklen_t src_addr_len = src_addr.sizeof;
+		() @trusted { ret = .recvfrom(socket, slot.readBuffer.ptr, slot.readBuffer.length, 0, cast(sockaddr*)&src_addr, &src_addr_len); } ();
 
 		if (ret < 0) {
 			auto err = getSocketError();
@@ -700,7 +711,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		}
 
 		m_loop.setNotifyCallback!(EventType.read)(socket, null);
-		() @trusted { return cast(DatagramIOCallback)slot.readCallback; } ()(socket, IOStatus.ok, ret, src_addr);
+		scope src_addrc = new RefAddress(() @trusted { return cast(sockaddr*)&src_addr; } (), src_addr.sizeof);
+		() @trusted { return cast(DatagramIOCallback)slot.readCallback; } ()(socket, IOStatus.ok, ret, src_addrc);
 	}
 
 	void send(DatagramSocketFD socket, const(ubyte)[] buffer, IOMode mode, Address target_address, DatagramIOCallback on_send_finish)
@@ -1012,29 +1024,20 @@ private void passToDNSCallback(DNSLookupID id, scope DNSLookupCallback cb, DNSSt
 {
 	import std.typecons : scoped;
 
-	static final class RefAddr : Address {
-		sockaddr* sa;
-		socklen_t len;
-		override @property sockaddr* name() { return sa; }
-		override @property const(sockaddr)* name() const { return sa; }
-		override @property socklen_t nameLen() const { return len; }
-	}
-
 	try {
-		typeof(scoped!RefAddr())[16] addrs_prealloc = [
-			scoped!RefAddr(), scoped!RefAddr(), scoped!RefAddr(), scoped!RefAddr(),
-			scoped!RefAddr(), scoped!RefAddr(), scoped!RefAddr(), scoped!RefAddr(),
-			scoped!RefAddr(), scoped!RefAddr(), scoped!RefAddr(), scoped!RefAddr(),
-			scoped!RefAddr(), scoped!RefAddr(), scoped!RefAddr(), scoped!RefAddr()
+		typeof(scoped!RefAddress())[16] addrs_prealloc = [
+			scoped!RefAddress(), scoped!RefAddress(), scoped!RefAddress(), scoped!RefAddress(),
+			scoped!RefAddress(), scoped!RefAddress(), scoped!RefAddress(), scoped!RefAddress(),
+			scoped!RefAddress(), scoped!RefAddress(), scoped!RefAddress(), scoped!RefAddress(),
+			scoped!RefAddress(), scoped!RefAddress(), scoped!RefAddress(), scoped!RefAddress()
 		];
 		//Address[16] addrs;
-		auto addrs = new Address[16]; // FIXME: avoid heap allocation
+		RefAddress[16] addrs;
 		auto ai = ai_orig;
 		size_t addr_count = 0;
 		while (ai !is null && addr_count < addrs.length) {
-			RefAddr ua = new RefAddr;//addrs_prealloc[addr_count]; // FIXME: avoid heap allocation
-			ua.sa = ai.ai_addr;
-			ua.len = ai.ai_addrlen;
+			RefAddress ua = addrs_prealloc[addr_count]; // FIXME: avoid heap allocation
+			ua.set(ai.ai_addr, ai.ai_addrlen);
 			addrs[addr_count] = ua;
 			addr_count++;
 			ai = ai.ai_next;
@@ -1043,7 +1046,6 @@ private void passToDNSCallback(DNSLookupID id, scope DNSLookupCallback cb, DNSSt
 		freeaddrinfo(ai_orig);
 	} catch (Exception e) assert(false, e.msg);
 }
-
 
 final class PosixEventDriverEvents(Loop : PosixEventLoop) : EventDriverEvents {
 @safe: /*@nogc:*/ nothrow:

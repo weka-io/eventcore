@@ -83,6 +83,7 @@ interface EventDriverSockets {
 	StreamListenSocketFD listenStream(scope Address bind_address, AcceptCallback on_accept);
 	void waitForConnections(StreamListenSocketFD sock, AcceptCallback on_accept);
 	ConnectionState getConnectionState(StreamSocketFD sock);
+	bool getLocalAddress(StreamSocketFD sock, scope RefAddress dst);
 	void setTCPNoDelay(StreamSocketFD socket, bool enable);
 	void setKeepAlive(StreamSocketFD socket, bool enable);
 	void read(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish);
@@ -232,12 +233,37 @@ interface EventDriverWatchers {
 	bool releaseRef(WatcherID descriptor);
 }
 
+final class RefAddress : Address {
+	version (Posix) import 	core.sys.posix.sys.socket : sockaddr, socklen_t;
+	version (Windows) import core.sys.windows.winsock2 : sockaddr, socklen_t;
+
+	private {
+		sockaddr* m_addr;
+		socklen_t m_addrLen;
+	}
+
+	this() @safe nothrow {}
+	this(sockaddr* addr, socklen_t addr_len) @safe nothrow { set(addr, addr_len); }
+
+	override @property sockaddr* name() { return m_addr; }
+	override @property const(sockaddr)* name() const { return m_addr; }
+	override @property socklen_t nameLen() const { return m_addrLen; }
+
+	void set(sockaddr* addr, socklen_t addr_len) @safe nothrow { m_addr = addr; m_addrLen = addr_len; }
+
+	void cap(socklen_t new_len)
+	@safe nothrow {
+		assert(new_len <= m_addrLen, "Cannot grow size of a RefAddress.");
+		m_addrLen = new_len;
+	}
+}
+
 
 alias ConnectCallback = void delegate(StreamSocketFD, ConnectStatus);
-alias AcceptCallback = void delegate(StreamListenSocketFD, StreamSocketFD);
+alias AcceptCallback = void delegate(StreamListenSocketFD, StreamSocketFD, scope RefAddress remote_address);
 alias IOCallback = void delegate(StreamSocketFD, IOStatus, size_t);
-alias DatagramIOCallback = void delegate(DatagramSocketFD, IOStatus, size_t, /*scope*/ Address);
-alias DNSLookupCallback = void delegate(DNSLookupID, DNSStatus, /*scope*/ Address[]);
+alias DatagramIOCallback = void delegate(DatagramSocketFD, IOStatus, size_t, scope RefAddress);
+alias DNSLookupCallback = void delegate(DNSLookupID, DNSStatus, scope RefAddress[]);
 alias FileIOCallback = void delegate(FileFD, IOStatus, size_t);
 alias EventCallback = void delegate(EventID);
 alias SignalCallback = void delegate(SignalListenID, SignalStatus, int);
