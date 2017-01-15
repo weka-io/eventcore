@@ -25,7 +25,7 @@ void main()
 		eventDriver.core.processEvents(Duration.max);
 }
 
-void onClientConnect(StreamListenSocketFD listener, StreamSocketFD client)
+void onClientConnect(StreamListenSocketFD listener, StreamSocketFD client, scope RefAddress)
 @trusted /*@nogc*/ nothrow {
 	import core.stdc.stdlib;
 	auto handler = cast(ClientHandler*)calloc(1, ClientHandler.sizeof);
