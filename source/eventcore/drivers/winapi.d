@@ -234,12 +234,12 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		assert(false, "TODO!");
 	}
 
-	override void write(FileFD file, ulong offset, const(ubyte)[] buffer, FileIOCallback on_write_finish)
+	override void write(FileFD file, ulong offset, const(ubyte)[] buffer, IOMode mode, FileIOCallback on_write_finish)
 	{
 		assert(false, "TODO!");
 	}
 
-	override void read(FileFD file, ulong offset, ubyte[] buffer, FileIOCallback on_read_finish)
+	override void read(FileFD file, ulong offset, ubyte[] buffer, IOMode mode, FileIOCallback on_read_finish)
 	{
 		assert(false, "TODO!");
 	}

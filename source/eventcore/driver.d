@@ -130,8 +130,8 @@ interface EventDriverFiles {
 
 	ulong getSize(FileFD file);
 
-	void write(FileFD file, ulong offset, const(ubyte)[] buffer, FileIOCallback on_write_finish);
-	void read(FileFD file, ulong offset, ubyte[] buffer, FileIOCallback on_read_finish);
+	void write(FileFD file, ulong offset, const(ubyte)[] buffer, IOMode mode, FileIOCallback on_write_finish);
+	void read(FileFD file, ulong offset, ubyte[] buffer, IOMode mode, FileIOCallback on_read_finish);
 	void cancelWrite(FileFD file);
 	void cancelRead(FileFD file);
 

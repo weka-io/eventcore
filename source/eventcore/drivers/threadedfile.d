@@ -177,7 +177,7 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 		}
 	}
 
-	final override void write(FileFD file, ulong offset, const(ubyte)[] buffer, FileIOCallback on_write_finish)
+	final override void write(FileFD file, ulong offset, const(ubyte)[] buffer, IOMode, FileIOCallback on_write_finish)
 	{
 		//assert(this.writable);
 		auto f = &m_files[file].write;
@@ -205,7 +205,7 @@ log("start task");
 		assert(res, "Cancelling write when no write is in progress.");
 	}
 
-	final override void read(FileFD file, ulong offset, ubyte[] buffer, FileIOCallback on_read_finish)
+	final override void read(FileFD file, ulong offset, ubyte[] buffer, IOMode, FileIOCallback on_read_finish)
 	{
 		auto f = &m_files[file].read;
 		assert(f.callback is null, "Concurrent file reads are not allowed.");
