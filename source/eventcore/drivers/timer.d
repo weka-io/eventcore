@@ -32,7 +32,8 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 
 	final package Duration getNextTimeout(long stdtime)
 	@safe nothrow {
-		return m_timerQueue.length ? (m_timerQueue.front.timeout - stdtime).hnsecs : Duration.max;
+		if (m_timerQueue.length == 0) return Duration.max;
+		return (m_timerQueue.front.timeout - stdtime).hnsecs;
 	}
 
 	final package bool process(long stdtime)
