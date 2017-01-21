@@ -1255,7 +1255,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop) : EventDriverEvents {
 		version (Windows) {
 			return m_events[id].refCount;
 		} else {
-			return m_loop.m_fds[descriptor].common.refCount;
+			return m_loop.m_fds[descriptor].common().refCount;
 		}
 	}
 }
