@@ -1132,7 +1132,16 @@ private void passToDNSCallback()(DNSLookupID id, scope DNSLookupCallback cb, DNS
 
 final class PosixEventDriverEvents(Loop : PosixEventLoop) : EventDriverEvents {
 @safe: /*@nogc:*/ nothrow:
-	private Loop m_loop;
+	private {
+		Loop m_loop;
+		version (Windows) {
+			static struct ES {
+				int refCount;
+				EventSlot slot;
+			}
+			ES[EventID] m_events;
+		}
+	}
 
 	this(Loop loop) { m_loop = loop; }
 
@@ -1145,6 +1154,11 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop) : EventDriverEvents {
 			m_loop.registerFD(id, EventMask.read);
 			m_loop.setNotifyCallback!(EventType.read)(id, &onEvent);
 			return id;
+		} else version (Windows) {
+			auto h = () @trusted { return CreateEvent(null, false, false, null); } ();
+			auto id = EventID(cast(int)h);
+			m_events[id] = ES(1, EventSlot(new ConsumableQueue!EventCallback)); // FIXME: avoid dynamic memory allocation
+			return id;
 		} else assert(false, "OS not supported!");	
 	}
 
@@ -1153,13 +1167,13 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop) : EventDriverEvents {
 		assert(event < m_loop.m_fds.length, "Invalid event ID passed to triggerEvent.");
 		if (notify_all) {
 			//log("emitting only for this thread (%s waiters)", m_fds[event].waiters.length);
-			foreach (w; m_loop.m_fds[event].event.waiters.consume) {
+			foreach (w; getSlot(event).waiters.consume) {
 				//log("emitting waiter %s %s", cast(void*)w.funcptr, w.ptr);
 				w(event);
 			}
 		} else {
-			if (!m_loop.m_fds[event].event.waiters.empty)
-				m_loop.m_fds[event].event.waiters.consumeOne()(event);
+			if (!getSlot(event).waiters.empty)
+				getSlot(event).waiters.consumeOne()(event);
 		}
 	}
 
@@ -1170,14 +1184,13 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop) : EventDriverEvents {
 		assert(event < thisus.m_loop.m_fds.length, "Invalid event ID passed to shared triggerEvent.");
 		long one = 1;
 		//log("emitting for all threads");
-		if (notify_all) atomicStore(thisus.m_loop.m_fds[event].event.triggerAll, true);
+		if (notify_all) atomicStore(thisus.getSlot(event).triggerAll, true);
 		() @trusted { .write(event, &one, one.sizeof); } ();
 	}
 
 	final override void wait(EventID event, EventCallback on_event)
 	{
-		assert(event < m_loop.m_fds.length, "Invalid event ID passed to waitForEvent.");
-		return m_loop.m_fds[event].event.waiters.put(on_event);
+		return getSlot(event).waiters.put(on_event);
 	}
 
 	final override void cancelWait(EventID event, EventCallback on_event)
@@ -1185,7 +1198,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop) : EventDriverEvents {
 		import std.algorithm.searching : countUntil;
 		import std.algorithm.mutation : remove;
 
-		m_loop.m_fds[event].event.waiters.removePending(on_event);
+		getSlot(event).waiters.removePending(on_event);
 	}
 
 	private void onEvent(FD fd)
@@ -1194,31 +1207,56 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop) : EventDriverEvents {
 		EventID event = cast(EventID)fd;
 		() @trusted { .read(event, &cnt, cnt.sizeof); } ();
 		import core.atomic : cas;
-		auto all = cas(&m_loop.m_fds[event].event.triggerAll, true, false);
+		auto all = cas(&getSlot(event).triggerAll, true, false);
 		trigger(event, all);
 	}
 
 	final override void addRef(EventID descriptor)
 	{
-		assert(m_loop.m_fds[descriptor.value].common.refCount > 0, "Adding reference to unreferenced event FD.");
-		m_loop.m_fds[descriptor.value].common.refCount++;
+		assert(getRC(descriptor) > 0, "Adding reference to unreferenced event FD.");
+		getRC(descriptor)++;
 	}
 
 	final override bool releaseRef(EventID descriptor)
 	{
-		assert(m_loop.m_fds[descriptor].common.refCount > 0, "Releasing reference to unreferenced event FD.");
-		if (--m_loop.m_fds[descriptor].common.refCount == 0) {
+		assert(getRC(descriptor) > 0, "Releasing reference to unreferenced event FD.");
+		if (--getRC(descriptor) == 0) {
 			() @trusted nothrow {
 				scope (failure) assert(false);
-				destroy(m_loop.m_fds[descriptor].event.waiters);
-				assert(m_loop.m_fds[descriptor].event.waiters is null);
+				destroy(getSlot(descriptor).waiters);
+				assert(getSlot(descriptor).waiters is null);
 			} ();
-			m_loop.unregisterFD(descriptor);
-			m_loop.clearFD(descriptor);
-			close(descriptor);
+			version (Windows) {
+				() @trusted { CloseHandle(cast(HANDLE)cast(int)descriptor); } ();
+				m_events.remove(descriptor);
+			} else {
+				m_loop.unregisterFD(descriptor);
+				m_loop.clearFD(descriptor);
+				close(descriptor);
+			}
 			return false;
 		}
 		return true;
+	}
+
+	private EventSlot* getSlot(EventID id)
+	{
+		version (Windows) {
+			assert(id in m_events, "Invalid event ID.");
+			return &m_events[id].slot;
+		} else {
+			assert(event < m_loop.m_fds.length, "Invalid event ID.");
+			return &m_loop.m_fds[descriptor].event;
+		}
+	}
+
+	private ref int getRC(EventID id)
+	{
+		version (Windows) {
+			return m_events[id].refCount;
+		} else {
+			return m_loop.m_fds[descriptor].common.refCount;
+		}
 	}
 }
 
