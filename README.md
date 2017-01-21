@@ -29,7 +29,7 @@ UDP Sockets      | yes               | yes              | no                | no
 USDS             | yes               | yes              | no                | no               
 DNS              | yes               | yes              | no                | no               
 Timers           | yes               | yes              | yes               | no               
-Events           | yes               | yes              | no                | no               
+Events           | yes               | yes              | yes               | no               
 Signals          | yes²              | yes²             | no                | no               
 Files            | yes               | yes              | no                | no               
 UI Integration   | no                | no               | yes               | no               

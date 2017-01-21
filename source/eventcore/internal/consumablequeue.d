@@ -4,8 +4,7 @@ module eventcore.internal.consumablequeue;
 */
 final class ConsumableQueue(T)
 {
-	@safe:
-	nothrow:
+	@safe nothrow:
 
 	private {
 		struct Slot {
