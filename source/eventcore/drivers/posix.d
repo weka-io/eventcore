@@ -1136,7 +1136,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop) : EventDriverEvents {
 		Loop m_loop;
 		version (Windows) {
 			static struct ES {
-				int refCount;
+				uint refCount;
 				EventSlot slot;
 			}
 			ES[EventID] m_events;
@@ -1239,23 +1239,23 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop) : EventDriverEvents {
 		return true;
 	}
 
-	private EventSlot* getSlot(EventID id)
+	private ref EventSlot getSlot(EventID id)
 	{
 		version (Windows) {
 			assert(id in m_events, "Invalid event ID.");
-			return &m_events[id].slot;
+			return m_events[id].slot;
 		} else {
 			assert(id < m_loop.m_fds.length, "Invalid event ID.");
-			return &m_loop.m_fds[id].event;
+			return m_loop.m_fds[id].event();
 		}
 	}
 
-	private ref int getRC(EventID id)
+	private ref uint getRC(EventID id)
 	{
 		version (Windows) {
 			return m_events[id].refCount;
 		} else {
-			return m_loop.m_fds[descriptor].common().refCount;
+			return m_loop.m_fds[id].common.refCount;
 		}
 	}
 }
