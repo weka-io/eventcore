@@ -11,11 +11,16 @@ version (Windows):
 
 import eventcore.driver;
 import eventcore.drivers.timer;
-import std.socket : Address;
-import core.time : Duration;
+import taggedalgebraic;
 import core.sys.windows.windows;
 import core.sys.windows.winsock2;
+import core.time : Duration;
+import std.experimental.allocator;
+import std.socket : Address;
 
+
+static assert(HANDLE.sizeof <= FD.BaseType.sizeof);
+static assert(FD(cast(int)INVALID_HANDLE_VALUE) == FD.init);
 
 final class WinAPIEventDriver : EventDriver {
 	private {
@@ -29,8 +34,13 @@ final class WinAPIEventDriver : EventDriver {
 		WinAPIEventDriverWatchers m_watchers;
 	}
 
+	static WinAPIEventDriver threadInstance;
+
 	this()
 	@safe {
+		assert(threadInstance is null);
+		threadInstance = this;
+
 		import std.exception : enforce;
 
 		WSADATA wd;
@@ -43,7 +53,7 @@ final class WinAPIEventDriver : EventDriver {
 		m_files = new WinAPIEventDriverFiles();
 		m_sockets = new WinAPIEventDriverSockets();
 		m_dns = new WinAPIEventDriverDNS();
-		m_watchers = new WinAPIEventDriverWatchers();
+		m_watchers = new WinAPIEventDriverWatchers(m_core);
 	}
 
 @safe: /*@nogc:*/ nothrow:
@@ -60,6 +70,8 @@ final class WinAPIEventDriver : EventDriver {
 
 	override void dispose()
 	{
+		assert(threadInstance !is null);
+		threadInstance = null;
 	}
 }
 
@@ -72,6 +84,8 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		LoopTimeoutTimerDriver m_timers;
 		HANDLE[] m_registeredEvents;
 		HANDLE m_fileCompletionEvent;
+
+		HandleSlot[HANDLE] m_handles; // FIXME: use allocator based hash map
 	}
 
 	this(LoopTimeoutTimerDriver timers)
@@ -186,6 +200,22 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		}
 
 		return got_event;
+	}
+
+	private ref SlotType setupSlot(SlotType)(HANDLE h)
+	{
+		assert(h !in m_handles, "Handle already in use.");
+		HandleSlot s;
+		s.refCount = 1;
+		s.specific = SlotType.init;
+		m_handles[h] = s;
+		return m_handles[h].specific.get!SlotType;
+	}
+
+	private void freeSlot(HANDLE h)
+	{
+		assert(h in m_handles, "Handle not in use - cannot free.");
+		m_handles.remove(h);
 	}
 }
 
@@ -471,20 +501,135 @@ final class WinAPIEventDriverTimers : EventDriverTimers {
 
 final class WinAPIEventDriverWatchers : EventDriverWatchers {
 @safe: /*@nogc:*/ nothrow:
+	private {
+		WinAPIEventDriverCore m_core;
+	}
+
+	this(WinAPIEventDriverCore core)
+	{
+		m_core = core;
+	}
+
 	override WatcherID watchDirectory(string path, bool recursive, FileChangesCallback callback)
 	{
-		assert(false, "TODO!");
+		import std.utf : toUTF16z;
+		auto handle = () @trusted {
+			scope (failure) assert(false);
+			return CreateFileW(path.toUTF16z, FILE_LIST_DIRECTORY,
+				FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+				null, OPEN_EXISTING,
+				FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED,
+				null);
+			} ();
+		
+		if (handle == INVALID_HANDLE_VALUE)
+			return WatcherID.invalid;
+
+		auto id = WatcherID(cast(int)handle);
+
+		auto slot = &m_core.setupSlot!WatcherSlot(handle);
+		slot.directory = path;
+		slot.recursive = recursive;
+		slot.callback = callback;
+		slot.buffer = () @trusted {
+			try return theAllocator.makeArray!ubyte(16384);
+			catch (Exception e) assert(false, "Failed to allocate directory watcher buffer.");
+		} ();
+
+		if (!triggerRead(handle, *slot)) {
+			releaseRef(id);
+			return WatcherID.invalid;
+		}
+
+		return id;
 	}
 
 	override void addRef(WatcherID descriptor)
 	{
-		assert(false, "TODO!");
+		m_core.m_handles[idToHandle(descriptor)].addRef();
 	}
 
 	override bool releaseRef(WatcherID descriptor)
 	{
-		assert(false, "TODO!");
+		bool freed;
+		auto handle = idToHandle(descriptor);
+		m_core.m_handles[handle].releaseRef(()nothrow{
+			CloseHandle(handle);
+			() @trusted {
+				try theAllocator.dispose(m_core.m_handles[handle].watcher.buffer);
+				catch (Exception e) assert(false, "Freeing directory watcher buffer failed.");
+			} ();
+			m_core.freeSlot(handle);
+			freed = true;
+		});
+		return !freed;
 	}
+
+	private static nothrow extern(System)
+	void onIOCompleted(DWORD dwError, DWORD cbTransferred, OVERLAPPED* overlapped)
+	{
+		import std.conv : to;
+
+		auto handle = overlapped.hEvent; // *file* handle
+		auto id = WatcherID(cast(int)handle);
+		auto slot = &WinAPIEventDriver.threadInstance.core.m_handles[handle].watcher();
+
+		if (dwError != 0) {
+			// FIXME: this must be propagated to the caller
+			//logWarn("Failed to read directory changes: %s", dwError);
+			return;
+		}
+
+		ubyte[] result = slot.buffer[0 .. cbTransferred];
+		do {
+			assert(result.length >= FILE_NOTIFY_INFORMATION.sizeof);
+			auto fni = () @trusted { return cast(FILE_NOTIFY_INFORMATION*)result.ptr; } ();
+			FileChange ch;
+			switch (fni.Action) {
+				default: ch.kind = FileChangeKind.modified; break;
+				case 0x1: ch.kind = FileChangeKind.added; break;
+				case 0x2: ch.kind = FileChangeKind.removed; break;
+				case 0x3: ch.kind = FileChangeKind.modified; break;
+				case 0x4: ch.kind = FileChangeKind.removed; break;
+				case 0x5: ch.kind = FileChangeKind.added; break;
+			}
+			ch.directory = slot.directory;
+			ch.isDirectory = false; // FIXME: is this right?
+			ch.name = () @trusted { scope (failure) assert(false); return to!string(fni.FileName[0 .. fni.FileNameLength/2]); } ();
+			slot.callback(id, ch);
+			if (fni.NextEntryOffset == 0) break;
+			result = result[fni.NextEntryOffset .. $];
+		} while (result.length > 0);
+
+		triggerRead(handle, *slot);
+	}
+
+	private static bool triggerRead(HANDLE handle, ref WatcherSlot slot)
+	{
+		enum UINT notifications = FILE_NOTIFY_CHANGE_FILE_NAME|
+			FILE_NOTIFY_CHANGE_DIR_NAME|FILE_NOTIFY_CHANGE_SIZE|
+			FILE_NOTIFY_CHANGE_LAST_WRITE;
+
+		slot.overlapped.Internal = 0;
+		slot.overlapped.InternalHigh = 0;
+		slot.overlapped.Offset = 0;
+		slot.overlapped.OffsetHigh = 0;
+		slot.overlapped.hEvent = handle;
+
+		BOOL ret;
+		() @trusted {
+			ret = ReadDirectoryChangesW(handle, slot.buffer.ptr, slot.buffer.length, slot.recursive,
+				notifications, null, &slot.overlapped, &onIOCompleted);
+		} ();
+
+		if (!ret) {
+			//logError("Failed to read directory changes in '%s'", m_path);
+			return false;
+		}
+		return true;
+	}
+
+	static private HANDLE idToHandle(WatcherID id) @trusted { return cast(HANDLE)cast(int)id; }
 }
 
 private long currStdTime()
@@ -492,4 +637,38 @@ private long currStdTime()
 	import std.datetime : Clock;
 	scope (failure) assert(false);
 	return Clock.currStdTime;
+}
+
+private struct HandleSlot {
+	static union SpecificTypes {
+		typeof(null) none;
+		WatcherSlot watcher;
+	}
+	int refCount;
+	TaggedAlgebraic!SpecificTypes specific;
+
+	@safe nothrow:
+
+	@property ref WatcherSlot watcher() { return specific.get!WatcherSlot; }
+
+	void addRef()
+	{
+		assert(refCount > 0);
+		refCount++;
+	}
+
+	void releaseRef(scope void delegate() @safe nothrow on_free)
+	{
+		assert(refCount > 0);
+		if (--refCount == 0)
+			on_free();
+	}
+}
+
+private struct WatcherSlot {
+	ubyte[] buffer;
+	OVERLAPPED overlapped;
+	string directory;
+	bool recursive;
+	FileChangesCallback callback;
 }

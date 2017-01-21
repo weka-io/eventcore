@@ -28,12 +28,12 @@ TCP Sockets      | yes               | yes              | no                | no
 UDP Sockets      | yes               | yes              | no                | no               
 USDS             | yes               | yes              | no                | no               
 DNS              | yes               | yes              | no                | no               
-Timers           | yes               | yes              | no                | no               
+Timers           | yes               | yes              | yes               | no               
 Events           | yes               | yes              | no                | no               
 Signals          | yes²              | yes²             | no                | no               
 Files            | yes               | yes              | no                | no               
-UI Integration   | no                | no               | no                | no               
-File watcher     | yes²              | yes²             | no                | no               
+UI Integration   | no                | no               | yes               | no               
+File watcher     | yes²              | yes²             | yes               | no               
 
 ² Currently only supported on Linux
 
