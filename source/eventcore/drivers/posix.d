@@ -1245,8 +1245,8 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop) : EventDriverEvents {
 			assert(id in m_events, "Invalid event ID.");
 			return &m_events[id].slot;
 		} else {
-			assert(event < m_loop.m_fds.length, "Invalid event ID.");
-			return &m_loop.m_fds[descriptor].event;
+			assert(id < m_loop.m_fds.length, "Invalid event ID.");
+			return &m_loop.m_fds[id].event;
 		}
 	}
 
