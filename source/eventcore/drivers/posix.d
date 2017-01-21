@@ -24,6 +24,7 @@ version (Posix) {
 	import core.sys.posix.fcntl;
 }
 version (Windows) {
+	import core.sys.windows.windows;
 	import core.sys.windows.winsock2;
 	alias sockaddr_storage = SOCKADDR_STORAGE;
 	alias EAGAIN = WSAEWOULDBLOCK;
@@ -58,8 +59,9 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 		else alias SignalsDriver = DummyEventDriverSignals!Loop;
 		alias TimerDriver = LoopTimeoutTimerDriver;
 		alias SocketsDriver = PosixEventDriverSockets!Loop;
-		/*version (linux) alias DNSDriver = EventDriverDNS_GAIA!(EventsDriver, SignalsDriver);
-		else*/ alias DNSDriver = EventDriverDNS_GAI!(EventsDriver, SignalsDriver);
+		version (Windows) alias DNSDriver = EventDriverDNS_GHBN!(EventsDriver, SignalsDriver);
+		//version (linux) alias DNSDriver = EventDriverDNS_GAIA!(EventsDriver, SignalsDriver);
+		else alias DNSDriver = EventDriverDNS_GAI!(EventsDriver, SignalsDriver);
 		alias FileDriver = ThreadedFileEventDriver!EventsDriver;
 		version (linux) alias WatcherDriver = InotifyEventDriverWatchers!Loop;
 		else alias WatcherDriver = PosixEventDriverWatchers!Loop;
@@ -830,7 +832,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 }
 
 
-/// getaddrinfo_a based asynchronous lookups
+/// getaddrinfo+thread based lookup - does not support true cancellation
+version (Posix)
 final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriverSignals) : EventDriverDNS {
 	import std.parallelism : task, taskPool;
 	import std.string : toStringz;
@@ -930,7 +933,7 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 }
 
 
-/// getaddrinfo+thread based lookup - does not support true cancellation
+/// getaddrinfo_a based asynchronous lookups
 final class EventDriverDNS_GAIA(Events : EventDriverEvents, Signals : EventDriverSignals) : EventDriverDNS {
 	import core.sys.posix.signal : SIGEV_SIGNAL, SIGRTMIN, sigevent;
 
@@ -1035,7 +1038,71 @@ version (linux) extern(C) {
 	int gai_cancel(gaicb *req);
 }
 
-private void passToDNSCallback(DNSLookupID id, scope DNSLookupCallback cb, DNSStatus status, addrinfo* ai_orig)
+
+/// ghbn based lookup - does not support cancellation and blocks the thread!
+final class EventDriverDNS_GHBN(Events : EventDriverEvents, Signals : EventDriverSignals) : EventDriverDNS {
+	import std.parallelism : task, taskPool;
+	import std.string : toStringz;
+
+	private {
+		static struct Lookup {
+			DNSLookupCallback callback;
+			bool success;
+			int retcode;
+			string name;
+		}
+		size_t m_maxHandle;
+	}
+
+	this(Events events, Signals signals)
+	{
+	}
+
+	void dispose()
+	{
+	}
+
+	override DNSLookupID lookupHost(string name, DNSLookupCallback on_lookup_finished)
+	{
+		import std.string : toStringz;
+
+		auto handle = DNSLookupID(m_maxHandle++);
+
+		auto he = () @trusted { return gethostbyname(name.toStringz); } ();
+		if (he is null) {
+			on_lookup_finished(handle, DNSStatus.error, null);
+			return handle;
+		}
+		switch (he.h_addrtype) {
+			default: assert(false, "Invalid address family returned from host lookup.");
+			case AF_INET: {
+				sockaddr_in sa;
+				sa.sin_family = AF_INET;
+				sa.sin_addr = () @trusted { return *cast(in_addr*)he.h_addr_list[0]; } ();
+				scope addr = new RefAddress(() @trusted { return cast(sockaddr*)&sa; } (), sa.sizeof);
+				RefAddress[1] aa;
+				aa[0] = addr;
+				on_lookup_finished(handle, DNSStatus.ok, aa);
+			} break;
+			case AF_INET6: {
+				sockaddr_in6 sa;
+				sa.sin6_family = AF_INET6;
+				sa.sin6_addr = () @trusted { return *cast(in6_addr*)he.h_addr_list[0]; } ();
+				scope addr = new RefAddress(() @trusted { return cast(sockaddr*)&sa; } (), sa.sizeof);
+				RefAddress[1] aa;
+				aa[0] = addr;
+				on_lookup_finished(handle, DNSStatus.ok, aa);
+			} break;
+		}
+
+		return handle;
+	}
+
+	override void cancelLookup(DNSLookupID) {}
+}
+
+
+private void passToDNSCallback()(DNSLookupID id, scope DNSLookupCallback cb, DNSStatus status, addrinfo* ai_orig)
 	@trusted nothrow
 {
 	import std.typecons : scoped;
