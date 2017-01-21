@@ -13,7 +13,7 @@ Driver            | Linux | Windows | OS X | FreeBSD
 ------------------|-------|---------|------|--------
 SelectEventDriver | yes   | yes     | yes¹ | yes¹
 EpollEventDriver  | yes   | no      | no   | no
-WinAPIEventDriver | no    | yes¹    | no   | no
+WinAPIEventDriver | no    | yes     | no   | no
 KqueueEventDriver | no    | no      | yes¹ | yes¹
 
 ¹ planned, but not currenly implemented
