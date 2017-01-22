@@ -17,11 +17,17 @@ d:
 env:
     - CONFIG=select
     - CONFIG=epoll
+    - CONFIG=kqueue
     - CONFIG=libasync
 
 matrix:
   allow_failures:
     - env: CONFIG=libasync
+  exclude:
+    - os: osx
+      env: CONFIG=epoll
+    - os: linux
+      env: CONFIG=kqueue
 
 script: ./travis-ci.sh
 

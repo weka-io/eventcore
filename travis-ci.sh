@@ -15,7 +15,7 @@ dub test --compiler=$DC -c $CONFIG
 if [ ${BUILD_EXAMPLE=1} -eq 1 ]; then
     for ex in $(\ls -1 examples/*.d); do
         echo "[INFO] Building example $ex"
-        dub build --compiler=$DC --single $ex # --override-config eventcore/$CONFIG
+        dub build --compiler=$DC --override-config eventcore/$CONFIG --single $ex
     done
     rm -rf examples/.dub/
     rm examples/*-example
@@ -23,6 +23,6 @@ fi
 if [ ${RUN_TEST=1} -eq 1 ]; then
     for ex in `\ls -1 tests/*.d`; do
         echo "[INFO] Running test $ex"
-        dub --temp-build --compiler=$DC --single $ex # --override-config eventcore/$CONFIG
+        dub --temp-build --compiler=$DC --override-config eventcore/$CONFIG --single $ex
     done
 fi
