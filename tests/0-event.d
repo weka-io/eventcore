@@ -13,6 +13,8 @@ import core.thread : Thread;
 bool s_done;
 shared EventDriverEvents ss_evts;
 
+// TODO: adjust to detect premature loop exit if only an event wait is active (no timer)
+
 void test(bool notify_all)
 {
 	auto id = eventDriver.events.create();
