@@ -1276,7 +1276,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 			return &m_events[cast(DatagramSocketFD)id];
 		} else {
 			assert(id < m_loop.m_fds.length, "Invalid event ID.");
-			return &m_loop.m_fds[id].event();
+			return () @trusted { return &m_loop.m_fds[id].event(); } ();
 		}
 	}
 
