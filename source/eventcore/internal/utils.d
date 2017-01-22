@@ -230,6 +230,34 @@ struct SmallIntegerSet(V : uint)
 	}
 }
 
+unittest {
+	uint[] ints = [0, 16, 31, 128, 4096, 65536];
+
+	SmallIntegerSet!uint set;
+	bool[uint] controlset;
+	foreach (i; ints) {
+		set.insert(i);
+		controlset[i] = true;
+	}
+
+	foreach (jidx, j; ints) {
+		size_t cnt = 0;
+		bool[int] seen;
+		foreach (i; set) {
+			assert(i in controlset);
+			assert(i !in seen);
+			seen[i] = true;
+			cnt++;
+		}
+		assert(cnt == ints.length - jidx);
+
+		set.remove(j);
+		controlset.remove(j);
+	}
+
+	foreach (i; set) assert(false);
+}
+
 @safe nothrow unittest {
 	SmallIntegerSet!uint s;
 
