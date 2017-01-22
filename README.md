@@ -25,14 +25,14 @@ Driver development status
 
 Feature          | SelectEventDriver | EpollEventDriver | WinAPIEventDriver | KqueueEventDriver
 -----------------|-------------------|------------------|-------------------|------------------
-TCP Sockets      | yes               | yes              | &mdash;           | &mdash;          
-UDP Sockets      | yes               | yes              | &mdash;           | &mdash;          
-USDS             | yes               | yes              | &mdash;           | &mdash;          
-DNS              | yes               | yes              | &mdash;           | &mdash;          
-Timers           | yes               | yes              | yes               | &mdash;          
-Events           | yes               | yes              | yes               | &mdash;          
+TCP Sockets      | yes               | yes              | &mdash;           | yes              
+UDP Sockets      | yes               | yes              | &mdash;           | yes              
+USDS             | yes               | yes              | &mdash;           | yes              
+DNS              | yes               | yes              | &mdash;           | yes              
+Timers           | yes               | yes              | yes               | yes              
+Events           | yes               | yes              | yes               | yes              
 Unix Signals     | yes²              | yes²             | &mdash;           | &mdash;          
-Files            | yes               | yes              | yes               | &mdash;          
+Files            | yes               | yes              | yes               | yes              
 UI Integration   | yes¹              | yes¹             | yes               | &mdash;          
 File watcher     | yes²              | yes²             | yes               | &mdash;          
 
