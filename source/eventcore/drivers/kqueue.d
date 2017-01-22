@@ -7,9 +7,9 @@
 module eventcore.drivers.kqueue;
 @safe: /*@nogc:*/ nothrow:
 
-/*version (FreeBSD) enum have_kqueue = true;
+version (FreeBSD) enum have_kqueue = true;
 else version (OSX) enum have_kqueue = true;
-else*/ enum have_kqueue = false;
+else enum have_kqueue = false;
 
 static if (have_kqueue):
 
@@ -17,7 +17,7 @@ public import eventcore.drivers.posix;
 import eventcore.internal.utils;
 
 import core.time : Duration;
-import core.sys.posix.sys.time : timespec;
+import core.sys.posix.sys.time : timespec, time_t;
 
 version (OSX) import core.sys.darwin.sys.event;
 else version (FreeBSD) import core.sys.freebsd.sys.event;
@@ -32,14 +32,14 @@ alias KqueueEventDriver = PosixEventDriver!KqueueEventLoop;
 final class KqueueEventLoop : PosixEventLoop {
 	private {
 		int m_queue;
-		kevent[] m_fds;
-		kevent[] m_events;
+		kevent_t[] m_changes;
+		kevent_t[] m_events;
 	}
 
 	this()
-	{
-		m_queue = kqueue();
-		enforce(m_queue >= 0, "Failed to create kqueue.");
+	@safe nothrow @nogc {
+		m_queue = () @trusted { return kqueue(); } ();
+		assert(m_queue >= 0, "Failed to create kqueue.");
 	}
 
 	override bool doProcessEvents(Duration timeout)
@@ -50,20 +50,26 @@ final class KqueueEventLoop : PosixEventLoop {
 		//print("wait %s", m_events.length);
 		timespec ts;
 		long secs, hnsecs;
-		dur.split!("seconds", "hnsecs")(secs, hnsecs);
+		timeout.split!("seconds", "hnsecs")(secs, hnsecs);
 		ts.tv_sec = cast(time_t)secs;
 		ts.tv_nsec = hnsecs * 100;
 
-		auto ret = kevent(m_queue, m_fds, m_fds.length, m_events, m_events.length, timeout == Duration.max ? null : &ts);
+		auto ret = kevent(m_queue, m_changes.ptr, cast(int)m_changes.length, m_events.ptr, cast(int)m_events.length, timeout == Duration.max ? null : &ts);
+		m_changes.length = 0;
+		m_changes.assumeSafeAppend();
 
 		if (ret > 0) {
 			foreach (ref evt; m_events[0 .. ret]) {
 				//print("event %s %s", evt.data.fd, evt.events);
-				auto fd = cast(FD)evt.ident;
-				if (evt.flags & EV_READ) notify!(EventType.read)(fd);
-				if (evt.flags & EV_WRITE) notify!(EventType.write)(fd);
-				if (evt.flags & EV_ERROR) notify!(EventType.status)(fd);
-				else if (evt.flags & EV_EOF) notify!(EventType.status)(fd);
+				assert(evt.ident <= uint.max);
+				auto fd = cast(FD)cast(int)evt.ident;
+				if (evt.flags & (EV_EOF|EV_ERROR))
+					notify!(EventType.status)(fd);
+				switch (evt.filter) {
+					default: break;
+					case EVFILT_READ: notify!(EventType.read)(fd); break;
+					case EVFILT_WRITE: notify!(EventType.write)(fd); break;
+				}
 				// EV_SIGNAL, EV_TIMEOUT
 			}
 			return true;
@@ -80,30 +86,32 @@ final class KqueueEventLoop : PosixEventLoop {
 	override void registerFD(FD fd, EventMask mask)
 	{
 		//print("register %s %s", fd, mask);
-		auto idx = allocSlot(fd);
-		kevent* ev = &m_events[idx];
+		kevent_t ev;
 		ev.ident = fd;
-		ev.flags = EV_ADD|EV_ET|EV_ENABLE;
+		ev.flags = EV_ADD|EV_CLEAR|EV_ENABLE;
 		if (mask & EventMask.read) ev.filter |= EVFILT_READ;
 		if (mask & EventMask.write) ev.filter |= EVFILT_WRITE;
-		if (mask & EventMask.status) ev.events |= EPOLLERR|EPOLLRDHUP;
+		//if (mask & EventMask.status) ev.events |= EPOLLERR|EPOLLRDHUP;
+		m_changes ~= ev;
 	}
 
 	override void unregisterFD(FD fd)
 	{
-		auto idx = m_eventMap[fd];
-		m_events[idx].flags = EV_REMOVE;
+		kevent_t ev;
+		ev.ident = fd;
+		ev.flags = EV_DELETE;
+		m_changes ~= ev;
 	}
 
 	override void updateFD(FD fd, EventMask mask)
 	{
 		//print("update %s %s", fd, mask);
-		auto idx = m_eventMap[fd];
-		epoll_event* ev = &m_events[idx];
+		kevent_t ev;
 		ev.filter = 0;
-		ev.events |= EPOLLET;
+		ev.flags |= EV_CLEAR;
 		if (mask & EventMask.read) ev.filter |= EVFILT_READ;
 		if (mask & EventMask.write) ev.filter |= EVFILT_WRITE;
-		if (mask & EventMask.status) ev.events |= EPOLLERR|EPOLLRDHUP;
+		//if (mask & EventMask.status) ev.events |= EPOLLERR|EPOLLRDHUP;
+		m_changes ~= ev;
 	}
 }
