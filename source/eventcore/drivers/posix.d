@@ -66,6 +66,7 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 		else alias DNSDriver = EventDriverDNS_GAI!(EventsDriver, SignalsDriver);
 		alias FileDriver = ThreadedFileEventDriver!EventsDriver;
 		version (linux) alias WatcherDriver = InotifyEventDriverWatchers!Loop;
+		else version (OSX) alias WatcherDriver = FSEventsEventDriverWatchers!Loop;
 		else alias WatcherDriver = PosixEventDriverWatchers!Loop;
 
 		Loop m_loop;
@@ -265,7 +266,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 				m_loop.setNotifyCallback!(EventType.write)(sock, &onConnect);
 			} else {
 				m_loop.clearFD(sock);
-				m_loop.unregisterFD(sock);
+				m_loop.unregisterFD(sock, EventMask.read|EventMask.write|EventMask.status);
 				invalidateSocket();
 				on_connect(sock, ConnectStatus.unknownError);
 				return sock;
@@ -416,7 +417,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			}
 		}
 
-		if (ret == 0) {
+		if (ret == 0 && buffer.length > 0) {
 			print("disconnect");
 			on_read_finish(socket, IOStatus.disconnected, 0);
 			return;
@@ -428,7 +429,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			return;
 		}
 
-		if (ret > 0) {
+		if (ret > 0 || buffer.length == 0) {
 			buffer = buffer[ret .. $];
 			if (mode != IOMode.all || buffer.length == 0) {
 				on_read_finish(socket, IOStatus.ok, ret);
@@ -864,7 +865,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	{
 		assert(m_loop.m_fds[fd].common.refCount > 0, "Releasing reference to unreferenced socket FD.");
 		if (--m_loop.m_fds[fd].common.refCount == 0) {
-			m_loop.unregisterFD(fd);
+			m_loop.unregisterFD(fd, EventMask.read|EventMask.write|EventMask.status);
 			m_loop.clearFD(fd);
 			closeSocket(fd);
 			return false;
@@ -1301,7 +1302,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 		version (linux) {
 			if (--getRC(descriptor) == 0) {
 				destroy();
-				m_loop.unregisterFD(descriptor);
+				m_loop.unregisterFD(descriptor, EventMask.read);
 				m_loop.clearFD(descriptor);
 				close(descriptor);
 				return false;
@@ -1377,7 +1378,7 @@ final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSigna
 		FD fd = cast(FD)descriptor;
 		assert(m_loop.m_fds[fd].common.refCount > 0, "Releasing reference to unreferenced event FD.");
 		if (--m_loop.m_fds[fd].common.refCount == 0) {
-			m_loop.unregisterFD(fd);
+			m_loop.unregisterFD(fd, EventMask.read);
 			m_loop.clearFD(fd);
 			close(fd);
 			return false;
@@ -1479,7 +1480,7 @@ final class InotifyEventDriverWatchers(Loop : PosixEventLoop) : EventDriverWatch
 		FD fd = cast(FD)descriptor;
 		assert(m_loop.m_fds[fd].common.refCount > 0, "Releasing reference to unreferenced event FD.");
 		if (--m_loop.m_fds[fd].common.refCount == 0) {
-			m_loop.unregisterFD(fd);
+			m_loop.unregisterFD(fd, EventMask.read);
 			m_loop.clearFD(fd);
 			m_watches.remove(fd);
 			/*errnoEnforce(*/close(fd)/* == 0)*/;
@@ -1544,6 +1545,36 @@ final class InotifyEventDriverWatchers(Loop : PosixEventLoop) : EventDriverWatch
 	}
 }
 
+version (OSX)
+final class FSEventsEventDriverWatchers(Loop : PosixEventLoop) : EventDriverWatchers {
+@safe: /*@nogc:*/ nothrow:
+	private Loop m_loop;
+
+	this(Loop loop) { m_loop = loop; }
+
+	final override WatcherID watchDirectory(string path, bool recursive, FileChangesCallback on_change)
+	{
+		/*FSEventStreamCreate
+		FSEventStreamScheduleWithRunLoop
+		FSEventStreamStart*/
+		assert(false, "TODO!");
+	}
+
+	final override void addRef(WatcherID descriptor)
+	{
+		assert(false, "TODO!");
+	}
+
+	final override bool releaseRef(WatcherID descriptor)
+	{
+		/*FSEventStreamStop
+		FSEventStreamUnscheduleFromRunLoop
+		FSEventStreamInvalidate
+		FSEventStreamRelease*/
+		assert(false, "TODO!");
+	}
+}
+
 final class PosixEventDriverWatchers(Loop : PosixEventLoop) : EventDriverWatchers {
 @safe: /*@nogc:*/ nothrow:
 	private Loop m_loop;
@@ -1585,9 +1616,9 @@ package class PosixEventLoop {
 	/// Registers the FD for general notification reception.
 	protected abstract void registerFD(FD fd, EventMask mask);
 	/// Unregisters the FD for general notification reception.
-	protected abstract void unregisterFD(FD fd);
+	protected abstract void unregisterFD(FD fd, EventMask mask);
 	/// Updates the event mask to use for listening for notifications.
-	protected abstract void updateFD(FD fd, EventMask mask);
+	protected abstract void updateFD(FD fd, EventMask old_mask, EventMask new_mask);
 
 	final protected void notify(EventType evt)(FD fd)
 	{

@@ -37,8 +37,9 @@ final class KqueueEventLoop : PosixEventLoop {
 	}
 
 	this()
-	@safe nothrow @nogc {
+	@safe nothrow {
 		m_queue = () @trusted { return kqueue(); } ();
+		m_events.length = 100;
 		assert(m_queue >= 0, "Failed to create kqueue.");
 	}
 
@@ -58,9 +59,11 @@ final class KqueueEventLoop : PosixEventLoop {
 		m_changes.length = 0;
 		m_changes.assumeSafeAppend();
 
+		print("kevent returned %s", ret);
+
 		if (ret > 0) {
 			foreach (ref evt; m_events[0 .. ret]) {
-				//print("event %s %s", evt.data.fd, evt.events);
+				print("event %s %s", evt.ident, evt.filter, evt.flags);
 				assert(evt.ident <= uint.max);
 				auto fd = cast(FD)cast(int)evt.ident;
 				if (evt.flags & (EV_EOF|EV_ERROR))
@@ -89,13 +92,18 @@ final class KqueueEventLoop : PosixEventLoop {
 		kevent_t ev;
 		ev.ident = fd;
 		ev.flags = EV_ADD|EV_CLEAR|EV_ENABLE;
-		if (mask & EventMask.read) ev.filter |= EVFILT_READ;
-		if (mask & EventMask.write) ev.filter |= EVFILT_WRITE;
+		if (mask & EventMask.read) {
+			ev.filter = EVFILT_READ;
+			m_changes ~= ev;
+		}
+		if (mask & EventMask.write) {
+			ev.filter = EVFILT_WRITE;
+			m_changes ~= ev;
+		}
 		//if (mask & EventMask.status) ev.events |= EPOLLERR|EPOLLRDHUP;
-		m_changes ~= ev;
 	}
 
-	override void unregisterFD(FD fd)
+	override void unregisterFD(FD fd, EventMask mask)
 	{
 		kevent_t ev;
 		ev.ident = fd;
@@ -103,15 +111,24 @@ final class KqueueEventLoop : PosixEventLoop {
 		m_changes ~= ev;
 	}
 
-	override void updateFD(FD fd, EventMask mask)
+	override void updateFD(FD fd, EventMask old_mask, EventMask new_mask)
 	{
 		//print("update %s %s", fd, mask);
 		kevent_t ev;
-		ev.filter = 0;
-		ev.flags |= EV_CLEAR;
-		if (mask & EventMask.read) ev.filter |= EVFILT_READ;
-		if (mask & EventMask.write) ev.filter |= EVFILT_WRITE;
+		auto changes = old_mask ^ new_mask;
+		
+		if (changes & EventMask.read) {
+			ev.filter = EVFILT_READ;
+			ev.flags = EV_CLEAR | (new_mask & EventMask.read ? EV_ADD : EV_DELETE);
+			m_changes ~= ev;
+		}
+		
+		if (changes & EventMask.write) {
+			ev.filter = EVFILT_WRITE;
+			ev.flags = EV_CLEAR | (new_mask & EventMask.write ? EV_ADD : EV_DELETE);
+			m_changes ~= ev;
+		}
+
 		//if (mask & EventMask.status) ev.events |= EPOLLERR|EPOLLRDHUP;
-		m_changes ~= ev;
 	}
 }

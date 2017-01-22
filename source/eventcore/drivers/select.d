@@ -76,11 +76,11 @@ final class SelectEventLoop : PosixEventLoop {
 	{
 	}
 
-	override void unregisterFD(FD fd)
+	override void unregisterFD(FD fd, EventMask mask)
 	{
 	}
 
-	override void updateFD(FD fd, EventMask mask)
+	override void updateFD(FD fd, EventMask old_mask, EventMask mask)
 	{
 	}
 }

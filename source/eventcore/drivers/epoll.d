@@ -75,13 +75,13 @@ final class EpollEventLoop : PosixEventLoop {
 		() @trusted { epoll_ctl(m_epoll, EPOLL_CTL_ADD, fd, &ev); } ();
 	}
 
-	override void unregisterFD(FD fd)
+	override void unregisterFD(FD fd, EventMask mask)
 	{
 		debug (EventCoreEpollDebug) print("Epoll unregister FD %s", fd);
 		() @trusted { epoll_ctl(m_epoll, EPOLL_CTL_DEL, fd, null); } ();
 	}
 
-	override void updateFD(FD fd, EventMask mask)
+	override void updateFD(FD fd, EventMask old_mask, EventMask mask)
 	{
 		debug (EventCoreEpollDebug) print("Epoll update FD %s: %s", fd, mask);
 		epoll_event ev;
