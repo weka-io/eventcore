@@ -25,8 +25,8 @@ env:
 
 matrix:
   allow_failures:
-    - env: CONFIG=libasync
   exclude:
+    - env: CONFIG=libasync
     - os: osx
       env: CONFIG=epoll
     - os: linux
@@ -35,6 +35,8 @@ matrix:
       d: dmd-2.071.2
     - os: osx
       d: dmd-2.070.2
+    - os: osx
+      d: ldc-1.1.0-beta6
     - os: osx
       d: ldc-1.0.0
 
