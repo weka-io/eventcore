@@ -1172,7 +1172,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 
 	final override void trigger(EventID event, bool notify_all = true)
 	{
-		auto slot = &getSlot(event);
+		auto slot = getSlot(event);
 		if (notify_all) {
 			//log("emitting only for this thread (%s waiters)", m_fds[event].waiters.length);
 			foreach (w; slot.waiters.consume) {
@@ -1194,7 +1194,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 		//log("emitting for all threads");
 		if (notify_all) atomicStore(thisus.getSlot(event).triggerAll, true);
 		version (Windows)
-			(cast(Sockets)m_sockets).send(cast(DatagramSocketFD)event, cast(ubyte[])m_buf, IOMode.once, null, &onSocketDataSent);
+			thisus.m_sockets.send(cast(DatagramSocketFD)event, thisus.m_buf, IOMode.once, null, &thisus.onSocketDataSent);
 		else
 			() @trusted { .write(event, &one, one.sizeof); } ();
 	}
@@ -1269,14 +1269,14 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 		return true;
 	}
 
-	private ref EventSlot getSlot(EventID id)
+	private EventSlot* getSlot(EventID id)
 	{
 		version (Windows) {
 			assert(cast(DatagramSocketFD)id in m_events, "Invalid event ID.");
-			return m_events[cast(DatagramSocketFD)id];
+			return &m_events[cast(DatagramSocketFD)id];
 		} else {
 			assert(id < m_loop.m_fds.length, "Invalid event ID.");
-			return m_loop.m_fds[id].event();
+			return &m_loop.m_fds[id].event();
 		}
 	}
 

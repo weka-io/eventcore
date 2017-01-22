@@ -217,14 +217,14 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		if (callback) m_eventCallbacks[event] = callback;
 	}
 
-	private ref SlotType setupSlot(SlotType)(HANDLE h)
+	private SlotType* setupSlot(SlotType)(HANDLE h)
 	{
 		assert(h !in m_handles, "Handle already in use.");
 		HandleSlot s;
 		s.refCount = 1;
 		s.specific = SlotType.init;
 		m_handles[h] = s;
-		return m_handles[h].specific.get!SlotType;
+		return () @trusted { return &m_handles[h].specific.get!SlotType(); } ();
 	}
 
 	private void freeSlot(HANDLE h)
@@ -404,7 +404,7 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		if (!() @trusted { return GetHandleInformation(handle, &f); } ())
 			return FileFD.init;
 
-		auto s = &m_core.setupSlot!FileSlot(handle);
+		auto s = m_core.setupSlot!FileSlot(handle);
 		s.read.handle = s.write.handle = handle;
 
 		return FileFD(system_handle);
@@ -413,7 +413,7 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 	override void close(FileFD file)
 	{
 		auto h = idToHandle(file);
-		auto slot = &m_core.m_handles[h].file();
+		auto slot = () @trusted { return &m_core.m_handles[h].file(); } ();
 		if (slot.read.handle != INVALID_HANDLE_VALUE) {
 			CloseHandle(h);
 			slot.read.handle = slot.write.handle = INVALID_HANDLE_VALUE;
@@ -774,7 +774,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 
 		auto id = WatcherID(cast(int)handle);
 
-		auto slot = &m_core.setupSlot!WatcherSlot(handle);
+		auto slot = m_core.setupSlot!WatcherSlot(handle);
 		slot.directory = path;
 		slot.recursive = recursive;
 		slot.callback = callback;
@@ -816,7 +816,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 
 		auto handle = overlapped.hEvent; // *file* handle
 		auto id = WatcherID(cast(int)handle);
-		auto slot = &WinAPIEventDriver.threadInstance.core.m_handles[handle].watcher();
+		auto slot = () @trusted { return &WinAPIEventDriver.threadInstance.core.m_handles[handle].watcher(); } ();
 
 		if (dwError != 0) {
 			// FIXME: this must be propagated to the caller
