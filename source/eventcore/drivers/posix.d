@@ -1263,8 +1263,8 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 				m_loop.unregisterFD(descriptor);
 				m_loop.clearFD(descriptor);
 				close(descriptor);
+				return false;
 			}
-			return false;
 		}
 		return true;
 	}
