@@ -15,7 +15,7 @@ SelectEventDriver    | yes     | yes     | yes¹    | yes¹    | &mdash; | &mdas
 EpollEventDriver     | yes     | &mdash; | &mdash; | &mdash; | &mdash; | &mdash;
 WinAPIEventDriver    | &mdash; | yes     | &mdash; | &mdash; | &mdash; | &mdash;
 KqueueEventDriver    | &mdash; | &mdash; | yes¹    | yes¹    | &mdash; | &mdash;
-LibasyncEevnetDriver | &mdash;¹| &mdash;¹| &mdash;¹| &mdash;¹| &mdash; | &mdash;
+LibasyncEventDriver  | &mdash;¹| &mdash;¹| &mdash;¹| &mdash;¹| &mdash; | &mdash;
 
 ¹ planned, but not currenly implemented
 
@@ -33,7 +33,7 @@ Timers           | yes               | yes              | yes               | ye
 Events           | yes               | yes              | yes               | yes              
 Unix Signals     | yes²              | yes²             | &mdash;           | &mdash;          
 Files            | yes               | yes              | yes               | yes              
-UI Integration   | yes¹              | yes¹             | yes               | &mdash;          
+UI Integration   | yes¹              | yes¹             | yes               | yes¹             
 File watcher     | yes²              | yes²             | yes               | &mdash;          
 
 Feature          | LibasyncEventDriver 
@@ -50,6 +50,7 @@ UI Integration   | &mdash;
 File watcher     | &mdash;             
 
 ¹ Manually, by adopting the X11 display connection socket
+
 ² Currently only supported on Linux
 
 
