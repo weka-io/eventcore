@@ -82,6 +82,7 @@ interface EventDriverCore {
 interface EventDriverSockets {
 @safe: /*@nogc:*/ nothrow:
 	StreamSocketFD connectStream(scope Address peer_address, scope Address bind_address, ConnectCallback on_connect);
+	StreamSocketFD adoptStream(int socket);
 	StreamListenSocketFD listenStream(scope Address bind_address, AcceptCallback on_accept);
 	void waitForConnections(StreamListenSocketFD sock, AcceptCallback on_accept);
 	ConnectionState getConnectionState(StreamSocketFD sock);
@@ -96,6 +97,7 @@ interface EventDriverSockets {
 	void shutdown(StreamSocketFD socket, bool shut_read, bool shut_write);
 
 	DatagramSocketFD createDatagramSocket(scope Address bind_address, scope Address target_address);
+	DatagramSocketFD adoptDatagramSocket(int socket);
 	bool setBroadcast(DatagramSocketFD socket, bool enable);
 	void receive(DatagramSocketFD socket, ubyte[] buffer, IOMode mode, DatagramIOCallback on_receive_finish);
 	void cancelReceive(DatagramSocketFD socket);

@@ -32,9 +32,10 @@ Timers           | yes               | yes              | yes               | &m
 Events           | yes               | yes              | yes               | &mdash;          
 Unix Signals     | yes²              | yes²             | &mdash;           | &mdash;          
 Files            | yes               | yes              | yes               | &mdash;          
-UI Integration   | &mdash;           | &mdash;          | yes               | &mdash;          
+UI Integration   | yes¹              | yes¹             | yes               | &mdash;          
 File watcher     | yes²              | yes²             | yes               | &mdash;          
 
+¹ Manually, by adopting the X11 display connection socket
 ² Currently only supported on Linux
 
 

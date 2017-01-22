@@ -12,6 +12,8 @@ import eventcore.drivers.threadedfile;
 import eventcore.internal.consumablequeue : ConsumableQueue;
 import eventcore.internal.utils;
 
+import std.algorithm.comparison : among;
+
 import std.socket : Address, AddressFamily, InternetAddress, Internet6Address, UnknownAddress;
 version (Posix) {
 	import std.socket : UnixAddress;
@@ -255,7 +257,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			on_connect(sock, ConnectStatus.connected);
 		} else {
 			auto err = getSocketError();
-			if (err == EINPROGRESS) {
+			if (err.among!(EAGAIN, EINPROGRESS)) {
 				with (m_loop.m_fds[sock].streamSocket) {
 					connectCallback = on_connect;
 					state = ConnectionState.connecting;
@@ -271,6 +273,18 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		}
 
 		return sock;
+	}
+
+	final override StreamSocketFD adoptStream(int socket)
+	{
+		auto fd = StreamSocketFD(socket);
+		if (m_loop.m_fds[fd].common.refCount) // FD already in use?
+			return StreamSocketFD.invalid;
+		setSocketNonBlocking(fd);
+		m_loop.initFD(fd);
+		m_loop.registerFD(fd, EventMask.read|EventMask.write|EventMask.status);
+		m_loop.m_fds[fd].specific = StreamSocketSlot.init;
+		return fd;
 	}
 
 	private void onConnect(FD sock)
@@ -348,6 +362,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			auto fd = cast(StreamSocketFD)sockfd;
 			m_loop.initFD(fd);
 			m_loop.m_fds[fd].specific = StreamSocketSlot.init;
+			m_loop.m_fds[fd].specific.state = ConnectionState.connected;
 			m_loop.registerFD(fd, EventMask.read|EventMask.write|EventMask.status);
 			//print("accept %d", sockfd);
 			scope RefAddress addrc = new RefAddress(() @trusted { return cast(sockaddr*)&addr; } (), addr_len);
@@ -394,7 +409,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 		if (ret < 0) {
 			auto err = getSocketError();
-			if (err != EAGAIN) {
+			if (!err.among!(EAGAIN, EINPROGRESS)) {
 				print("sock error %s!", err);
 				on_read_finish(socket, IOStatus.error, 0);
 				return;
@@ -458,7 +473,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		() @trusted { ret = .recv(socket, slot.readBuffer.ptr, slot.readBuffer.length, 0); } ();
 		if (ret < 0) {
 			auto err = getSocketError();
-			if (err != EAGAIN) {
+			if (!err.among!(EAGAIN, EINPROGRESS)) {
 				finalize(IOStatus.error);
 				return;
 			}
@@ -492,7 +507,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 		if (ret < 0) {
 			auto err = getSocketError();
-			if (err != EAGAIN) {
+			if (!err.among!(EAGAIN, EINPROGRESS)) {
 				on_write_finish(socket, IOStatus.error, 0);
 				return;
 			}
@@ -550,7 +565,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 		if (ret < 0) {
 			auto err = getSocketError();
-			if (err != EAGAIN) {
+			if (!err.among!(EAGAIN, EINPROGRESS)) {
 				m_loop.setNotifyCallback!(EventType.write)(socket, null);
 				slot.writeCallback(socket, IOStatus.error, slot.bytesRead);
 				return;
@@ -582,7 +597,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 		if (ret < 0) {
 			auto err = getSocketError();
-			if (err != EAGAIN) {
+			if (!err.among!(EAGAIN, EINPROGRESS)) {
 				on_data_available(socket, IOStatus.error, 0);
 				return;
 			}
@@ -627,7 +642,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		() @trusted { ret = recv(socket, &tmp, 1, MSG_PEEK); } ();
 		if (ret < 0) {
 			auto err = getSocketError();
-			if (err != EAGAIN) finalize(IOStatus.error);
+			if (!err.among!(EAGAIN, EINPROGRESS)) finalize(IOStatus.error);
 		} else finalize(ret ? IOStatus.ok : IOStatus.disconnected);
 	}
 
@@ -662,6 +677,18 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		return sock;
 	}
 
+	final override DatagramSocketFD adoptDatagramSocket(int socket)
+	{
+		auto fd = DatagramSocketFD(socket);
+		if (m_loop.m_fds[fd].common.refCount) // FD already in use?
+			return DatagramSocketFD.init;
+		setSocketNonBlocking(fd);
+		m_loop.initFD(fd);
+		m_loop.registerFD(fd, EventMask.read|EventMask.write|EventMask.status);
+		m_loop.m_fds[fd].specific = DgramSocketSlot.init;
+		return fd;
+	}
+
 	final override bool setBroadcast(DatagramSocketFD socket, bool enable)
 	{
 		int tmp_broad = enable;
@@ -681,7 +708,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 		if (ret < 0) {
 			auto err = getSocketError();
-			if (err != EAGAIN) {
+			if (!err.among!(EAGAIN, EINPROGRESS)) {
 				print("sock error %s!", err);
 				on_receive_finish(socket, IOStatus.error, 0, null);
 				return;
@@ -725,7 +752,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 		if (ret < 0) {
 			auto err = getSocketError();
-			if (err != EAGAIN) {
+			if (!err.among!(EAGAIN, EINPROGRESS)) {
 				m_loop.setNotifyCallback!(EventType.read)(socket, null);
 				slot.readCallback(socket, IOStatus.error, 0, null);
 				return;
@@ -751,7 +778,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 		if (ret < 0) {
 			auto err = getSocketError();
-			if (err != EAGAIN) {
+			if (!err.among!(EAGAIN, EINPROGRESS)) {
 				print("sock error %s!", err);
 				on_send_finish(socket, IOStatus.error, 0, null);
 				return;
@@ -796,7 +823,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 		if (ret < 0) {
 			auto err = getSocketError();
-			if (err != EAGAIN) {
+			if (!err.among!(EAGAIN, EINPROGRESS)) {
 				m_loop.setNotifyCallback!(EventType.write)(socket, null);
 				() @trusted { return cast(DatagramIOCallback)slot.writeCallback; } ()(socket, IOStatus.error, 0, null);
 				return;
@@ -1344,7 +1371,7 @@ final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSigna
 		signalfd_siginfo nfo;
 		do {
 			auto ret = () @trusted { return read(fd, &nfo, nfo.sizeof); } ();	
-			if (ret == -1 && errno == EAGAIN)
+			if (ret == -1 && errno.among!(EAGAIN, EINPROGRESS))
 				break;
 			auto cb = m_loop.m_fds[fd].signal.callback;
 			if (ret != nfo.sizeof) {
@@ -1456,7 +1483,7 @@ final class InotifyEventDriverWatchers(Loop : PosixEventLoop) : EventDriverWatch
 		while (true) {
 			auto ret = () @trusted { return read(id, &buf[0], buf.length); } ();
 
-			if (ret == -1 && errno == EAGAIN)
+			if (ret == -1 && errno.among!(EAGAIN, EINPROGRESS))
 				break;
 			assert(ret <= buf.length);
 

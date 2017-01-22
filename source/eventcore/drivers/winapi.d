@@ -241,6 +241,11 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		assert(false, "TODO!");
 	}
 
+	override StreamSocketFD adoptStream(int socket)
+	{
+		assert(false, "TODO!");
+	}
+
 	override StreamListenSocketFD listenStream(scope Address bind_address, AcceptCallback on_accept)
 	{
 		assert(false, "TODO!");
@@ -304,6 +309,11 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	override DatagramSocketFD createDatagramSocket(scope Address bind_address, scope Address target_address)
 	{
 		assert(false, "TODO!");
+	}
+
+	override DatagramSocketFD adoptDatagramSocket(int socket)
+	{
+		assert(false);
 	}
 
 	override bool setBroadcast(DatagramSocketFD socket, bool enable)
