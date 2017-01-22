@@ -15,10 +15,10 @@ configuration "epoll" {
 	versions "EventcoreEpollDriver"
 }
 
-configuration "kqueue" {
+/*configuration "kqueue" {
 	platforms "osx" "freebsd"
 	versions "EventcoreKqueueDriver"
-}
+}*/
 
 configuration "winapi" {
 	platforms "windows"

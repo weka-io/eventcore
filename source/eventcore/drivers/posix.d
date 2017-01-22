@@ -235,7 +235,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 				bret = bind(sock, bind_address.name, bind_address.nameLen);
 			} else {
 				scope bind_addr = new UnknownAddress;
-				bind_addr.name.sa_family = cast(ushort)address.addressFamily;
+				bind_addr.name.sa_family = cast(ubyte)address.addressFamily;
 				bind_addr.name.sa_data[] = 0;
 				bret = bind(sock, bind_addr.name, bind_addr.nameLen);
 			}
@@ -661,16 +661,34 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	final override DatagramSocketFD createDatagramSocket(scope Address bind_address, scope Address target_address)
 	{
 		auto sock = cast(DatagramSocketFD)createSocket(bind_address.addressFamily, SOCK_DGRAM);
-		if (sock == -1) return DatagramSocketFD.invalid;
+		if (sock == -1) {
+			return DatagramSocketFD.invalid;
+		}
 
 		if (bind_address && () @trusted { return bind(sock, bind_address.name, bind_address.nameLen); } () != 0) {
 			closeSocket(sock);
 			return DatagramSocketFD.init;
 		}
 
-		if (target_address && () @trusted { return connect(sock, target_address.name, target_address.nameLen); } () != 0) {
-			closeSocket(sock);
-			return DatagramSocketFD.init;
+		if (target_address) {
+			int ret;
+			if (target_address is bind_address) {
+				// special case of bind_address==target_address: determine the actual bind address
+				// in case of a zero port
+				sockaddr_storage sa;
+				socklen_t addr_len = sa.sizeof;
+				if (() @trusted { return getsockname(sock, cast(sockaddr*)&sa, &addr_len); } () != 0) {
+					closeSocket(sock);
+					return DatagramSocketFD.init;
+				}
+
+				ret = () @trusted { return connect(sock, cast(sockaddr*)&sa, addr_len); } ();
+			} else ret = () @trusted { return connect(sock, target_address.name, target_address.nameLen); } ();
+			
+			if (ret != 0) {
+				closeSocket(sock);
+				return DatagramSocketFD.init;
+			}
 		}
 
 		m_loop.initFD(sock);
@@ -712,7 +730,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		if (ret < 0) {
 			auto err = getSocketError();
 			if (!err.among!(EAGAIN, EINPROGRESS)) {
-				print("sock error %s!", err);
+				print("sock error %s for %s!", err, socket);
 				on_receive_finish(socket, IOStatus.error, 0, null);
 				return;
 			}
@@ -1169,7 +1187,8 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 	private {
 		Loop m_loop;
 		Sockets m_sockets;
-		version (Windows) {
+		version (linux) {}
+		else {
 			EventSlot[DatagramSocketFD] m_events;
 			ubyte[long.sizeof] m_buf;
 		}
@@ -1190,14 +1209,14 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 			m_loop.registerFD(id, EventMask.read);
 			m_loop.setNotifyCallback!(EventType.read)(id, &onEvent);
 			return id;
-		} else version (Windows) {
+		} else {
 			auto addr = new InternetAddress(0x7F000001, 0);
 			auto s = m_sockets.createDatagramSocket(addr, addr);
-			if (s == DatagramSocketFD.invalid) print("oops");
+			if (s == DatagramSocketFD.invalid) return EventID.invalid;
 			m_sockets.receive(s, m_buf, IOMode.once, &onSocketData);
 			m_events[s] = EventSlot(new ConsumableQueue!EventCallback); // FIXME: avoid dynamic memory allocation
 			return cast(EventID)s;
-		} else assert(false, "OS not supported!");	
+		}
 	}
 
 	final override void trigger(EventID event, bool notify_all = true)
@@ -1223,10 +1242,8 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 		long one = 1;
 		//log("emitting for all threads");
 		if (notify_all) atomicStore(thisus.getSlot(event).triggerAll, true);
-		version (Windows)
-			thisus.m_sockets.send(cast(DatagramSocketFD)event, thisus.m_buf, IOMode.once, null, &thisus.onSocketDataSent);
-		else
-			() @trusted { .write(event, &one, one.sizeof); } ();
+		version (linux) () @trusted { .write(event, &one, one.sizeof); } ();
+		else thisus.m_sockets.send(cast(DatagramSocketFD)event, thisus.m_buf, IOMode.once, null, &thisus.onSocketDataSent);
 	}
 
 	final override void wait(EventID event, EventCallback on_event)
@@ -1254,7 +1271,8 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 		trigger(event, all);
 	}
 
-	version (Windows) {
+	version (linux) {}
+	else {
 		private void onSocketDataSent(DatagramSocketFD s, IOStatus status, size_t, scope RefAddress)
 		{
 		}
@@ -1281,18 +1299,18 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 				assert(getSlot(descriptor).waiters is null);
 			} ();
 		}
-		version (Windows) {
-			if (!m_sockets.releaseRef(cast(DatagramSocketFD)descriptor)) {
-				destroy();
-				m_events.remove(cast(DatagramSocketFD)descriptor);
-				return false;
-			}
-		} else {
+		version (linux) {
 			if (--getRC(descriptor) == 0) {
 				destroy();
 				m_loop.unregisterFD(descriptor);
 				m_loop.clearFD(descriptor);
 				close(descriptor);
+				return false;
+			}
+		} else {
+			if (!m_sockets.releaseRef(cast(DatagramSocketFD)descriptor)) {
+				destroy();
+				m_events.remove(cast(DatagramSocketFD)descriptor);
 				return false;
 			}
 		}
@@ -1301,12 +1319,12 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 
 	private EventSlot* getSlot(EventID id)
 	{
-		version (Windows) {
-			assert(cast(DatagramSocketFD)id in m_events, "Invalid event ID.");
-			return &m_events[cast(DatagramSocketFD)id];
-		} else {
+		version (linux) {
 			assert(id < m_loop.m_fds.length, "Invalid event ID.");
 			return () @trusted { return &m_loop.m_fds[id].event(); } ();
+		} else {
+			assert(cast(DatagramSocketFD)id in m_events, "Invalid event ID.");
+			return &m_events[cast(DatagramSocketFD)id];
 		}
 	}
 

@@ -7,9 +7,9 @@
 module eventcore.drivers.kqueue;
 @safe: /*@nogc:*/ nothrow:
 
-version (FreeBSD) enum have_kqueue = true;
+/*version (FreeBSD) enum have_kqueue = true;
 else version (OSX) enum have_kqueue = true;
-else enum have_kqueue = false;
+else*/ enum have_kqueue = false;
 
 static if (have_kqueue):
 
