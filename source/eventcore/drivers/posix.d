@@ -143,7 +143,9 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 			return ExitReason.exited;
 		}
 
-		if (!waiterCount) return ExitReason.outOfWaiters;
+		if (!waiterCount) {
+			return ExitReason.outOfWaiters;
+		}
 
 		bool got_events;
 
@@ -167,7 +169,9 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 			m_exit = false;
 			return ExitReason.exited;
 		}
-		if (!waiterCount) return ExitReason.outOfWaiters;
+		if (!waiterCount) {
+			return ExitReason.outOfWaiters;
+		}
 		if (got_events) return ExitReason.idle;
 		return ExitReason.timeout;
 	}
@@ -1190,6 +1194,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop) : EventDriverEvents {
 
 	final override void wait(EventID event, EventCallback on_event)
 	{
+		m_loop.m_waiterCount++;
 		return getSlot(event).waiters.put(on_event);
 	}
 
@@ -1198,6 +1203,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop) : EventDriverEvents {
 		import std.algorithm.searching : countUntil;
 		import std.algorithm.mutation : remove;
 
+		m_loop.m_waiterCount--;
 		getSlot(event).waiters.removePending(on_event);
 	}
 
