@@ -17,7 +17,7 @@ enum testFilename = "test.dat";
 void main()
 {
 	version (OSX) writefln("Directory watchers are not yet supported on macOS. Skipping test.");
-	else:
+	else {
 
 	if (exists(testFilename))
 		remove(testFilename);
@@ -66,4 +66,6 @@ void main()
 	//assert(er == ExitReason.outOfWaiters); // FIXME: see above
 	assert(s_done);
 	s_done = false;
+
+	}
 }
