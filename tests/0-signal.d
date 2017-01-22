@@ -14,6 +14,9 @@ bool s_done;
 
 void main()
 {
+	version (OSX) writefln("Signals are not yet supported on macOS. Skipping test.");
+	else:
+
 	auto id = eventDriver.signals.listen(SIGRTMIN+1, (id, status, sig) {
 		assert(!s_done);
 		assert(status == SignalStatus.ok);
