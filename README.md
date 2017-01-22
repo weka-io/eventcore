@@ -30,7 +30,7 @@ USDS             | yes               | yes              | no                | no
 DNS              | yes               | yes              | no                | no               
 Timers           | yes               | yes              | yes               | no               
 Events           | yes               | yes              | yes               | no               
-Signals          | yes²              | yes²             | no                | no               
+Unix Signals     | yes²              | yes²             | no                | no               
 Files            | yes               | yes              | yes               | no               
 UI Integration   | no                | no               | yes               | no               
 File watcher     | yes²              | yes²             | yes               | no               
@@ -42,5 +42,5 @@ Open questions
 --------------
 
 - Error code reporting
-- Adopting existing file descriptors
+- Adopting existing file descriptors (done for files)
 - Enqueued writes
