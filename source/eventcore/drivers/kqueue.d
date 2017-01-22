@@ -53,7 +53,7 @@ final class KqueueEventLoop : PosixEventLoop {
 		long secs, hnsecs;
 		timeout.split!("seconds", "hnsecs")(secs, hnsecs);
 		ts.tv_sec = cast(time_t)secs;
-		ts.tv_nsec = hnsecs * 100;
+		ts.tv_nsec = cast(uint)hnsecs * 100;
 
 		auto ret = kevent(m_queue, m_changes.ptr, cast(int)m_changes.length, m_events.ptr, cast(int)m_events.length, timeout == Duration.max ? null : &ts);
 		m_changes.length = 0;
