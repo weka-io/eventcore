@@ -1,3 +1,20 @@
+/** Definition of the core event driver interface.
+
+	This module contains all declarations necessary for defining and using
+	event drivers. Event driver implementations will usually inherit from
+	`EventDriver` using a `final` class to avoid virtual function overhead.
+
+	Callback_Behavior:
+		All callbacks follow the same rules to enable generic implementation
+		of high-level libraries, such as vibe.d. Except for "listen" style
+		callbacks, each callback will only ever be called at most once.
+
+		If the operation does not get canceled, the callback will be called
+		exactly once. In case it gets manually canceled using the corresponding
+		API function, the callback is guaranteed to not be called. However,
+		the associated operation might still finish - either before the
+		cancellation function returns, or afterwards.
+*/
 module eventcore.driver;
 @safe: /*@nogc:*/ nothrow:
 
@@ -5,22 +22,40 @@ import core.time : Duration;
 import std.socket : Address;
 
 
+/** Encapsulates a full event driver.
+
+	This interface provides access to the individual driver features, as well as
+	a central `dispose` method that must be called before the driver gets
+	destroyed or before the process gets terminated.
+*/
 interface EventDriver {
 @safe: /*@nogc:*/ nothrow:
+	/// Core event loop functionality
 	@property EventDriverCore core();
+	/// Single shot and recurring timers
 	@property EventDriverTimers timers();
+	/// Cross-thread events (thread local access)
 	@property EventDriverEvents events();
+	/// Cross-thread events (cross-thread access)
 	@property shared(EventDriverEvents) events() shared;
+	/// UNIX/POSIX signal reception
 	@property EventDriverSignals signals();
+	/// Stream and datagram sockets
 	@property EventDriverSockets sockets();
+	/// DNS queries
 	@property EventDriverDNS dns();
+	/// Local file operations
 	@property EventDriverFiles files();
+	/// Directory change watching
 	@property EventDriverWatchers watchers();
 
 	/// Releases all resources associated with the driver
 	void dispose();
 }
 
+
+/** Provides generic event loop control.
+*/
 interface EventDriverCore {
 @safe: /*@nogc:*/ nothrow:
 	/** The number of pending callbacks.
@@ -48,7 +83,7 @@ interface EventDriverCore {
 	/** Causes `processEvents` to return with `ExitReason.exited` as soon as
 		possible.
 
-		A call to `processEvents` that is currently in progress will be notfied
+		A call to `processEvents` that is currently in progress will be notified
 		so that it returns immediately. If no call is in progress, the next call
 		to `processEvents` will immediately return with `ExitReason.exited`.
 	*/
@@ -79,35 +114,150 @@ interface EventDriverCore {
 	}
 }
 
+
+/** Provides access to socket functionality.
+
+	The interface supports two classes of sockets - stream sockets and datagram
+	sockets.
+*/
 interface EventDriverSockets {
 @safe: /*@nogc:*/ nothrow:
+	/** Connects to a stream listening socket.
+	*/
 	StreamSocketFD connectStream(scope Address peer_address, scope Address bind_address, ConnectCallback on_connect);
+
+	/** Adopts an existing stream socket.
+
+		The given socket must be in a connected state. It will be automatically
+		switched to non-blocking mode if necessary. Beware that this may have
+		side effects in other code that uses the socket and assumes blocking
+		operations.
+
+		Params:
+			socket: Socket file descriptor to adopt
+
+		Returns:
+			Returns a socket handle corresponding to the passed socket
+				descriptor. If the same file descriptor is already registered,
+				`StreamSocketFD.invalid` will be returned instead.
+	*/
 	StreamSocketFD adoptStream(int socket);
+
+	/// Creates a socket listening for incoming stream connections.
 	StreamListenSocketFD listenStream(scope Address bind_address, AcceptCallback on_accept);
+
+	/// Starts to wait for incoming connections on a listening socket.
 	void waitForConnections(StreamListenSocketFD sock, AcceptCallback on_accept);
+
+	/// Determines the current connection state.
 	ConnectionState getConnectionState(StreamSocketFD sock);
+
+	/// Retrieves the bind address of a socket.
 	bool getLocalAddress(StreamSocketFD sock, scope RefAddress dst);
+
+	/// Sets the `TCP_NODELAY` option on a socket
 	void setTCPNoDelay(StreamSocketFD socket, bool enable);
+
+	/// Sets to `SO_KEEPALIVE` socket option on a socket.
 	void setKeepAlive(StreamSocketFD socket, bool enable);
+	
+	/** Reads data from a stream socket.
+
+		Note that only a single read operation is allowed at once. The caller
+		needs to make sure that either `on_read_finish` got called, or
+		`cancelRead` was called before issuing the next call to `read`.
+		However, concurrent writes are legal.
+
+		Waiting_for_data_availability:
+			With the special combination of a zero-length buffer and `mode`
+			set to either `IOMode.once` or `IOMode.all`, this function will
+			wait until data is available on the socket without reading
+			anything.
+
+			Note that in this case the `IOStatus` parameter of the callback
+			will not reliably reflect a passive connection close. It is
+			necessary to actually read some data to make sure this case
+			is detected.
+	*/
 	void read(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish);
+
+	/** Cancels an ongoing read operation.
+
+		After this function has been called, the `IOCallback` specified in
+		the call to `read` is guaranteed to not be called.
+	*/
 	void cancelRead(StreamSocketFD socket);
+
+	/** Reads data from a stream socket.
+
+		Note that only a single write operation is allowed at once. The caller
+		needs to make sure that either `on_write_finish` got called, or
+		`cancelWrite` was called before issuing the next call to `write`.
+		However, concurrent reads are legal.
+	*/
 	void write(StreamSocketFD socket, const(ubyte)[] buffer, IOMode mode, IOCallback on_write_finish);
+
+	/** Cancels an ongoing write operation.
+
+		After this function has been called, the `IOCallback` specified in
+		the call to `write` is guaranteed to not be called.
+	*/
 	void cancelWrite(StreamSocketFD socket);
+
+	/** Waits for incoming data without actually reading it.
+	*/
 	void waitForData(StreamSocketFD socket, IOCallback on_data_available);
+
+	/** Initiates a connection close.
+	*/
 	void shutdown(StreamSocketFD socket, bool shut_read, bool shut_write);
 
+	/** Creates a connection-less datagram socket.
+
+		Params:
+			bind_address: The local bind address to use for the socket. It
+				will be able to receive any messages sent to this address.
+			target_address: Optional default target address. If this is
+				specified and the target address parameter of `send` is
+				left to `null`, it will be used instead.
+
+		Returns:
+			Returns a datagram socket handle if the socket was created
+			successfully. Otherwise returns `DatagramSocketFD.invalid`.
+	*/
 	DatagramSocketFD createDatagramSocket(scope Address bind_address, scope Address target_address);
+
+	/** Adopts an existing datagram socket.
+
+		The socket must be properly bound before this function is called.
+
+		Params:
+			socket: Socket file descriptor to adopt
+
+		Returns:
+			Returns a socket handle corresponding to the passed socket
+				descriptor. If the same file descriptor is already registered,
+				`DatagramSocketFD.invalid` will be returned instead.
+	*/
 	DatagramSocketFD adoptDatagramSocket(int socket);
+
+	/// Sets the `SO_BROADCAST` socket option.
 	bool setBroadcast(DatagramSocketFD socket, bool enable);
+
+	/// Receives a single datagram.
 	void receive(DatagramSocketFD socket, ubyte[] buffer, IOMode mode, DatagramIOCallback on_receive_finish);
+	/// Cancels an ongoing wait for an incoming datagram.
 	void cancelReceive(DatagramSocketFD socket);
+	/// Sends a single datagram.
 	void send(DatagramSocketFD socket, const(ubyte)[] buffer, IOMode mode, Address target_address, DatagramIOCallback on_send_finish);
+	/// Cancels an ongoing wait for an outgoing datagram.
 	void cancelSend(DatagramSocketFD socket);
 
-	/** Increments the reference count of the given resource.
+	/** Increments the reference count of the given socket.
 	*/
 	void addRef(SocketFD descriptor);
-	/** Decrements the reference count of the given resource.
+	
+	/** Decrements the reference count of the given socket.
 
 		Once the reference count reaches zero, all associated resources will be
 		freed and the resource descriptor gets invalidated.
@@ -118,12 +268,21 @@ interface EventDriverSockets {
 	bool releaseRef(SocketFD descriptor);
 }
 
+
+/** Performs asynchronous DNS queries.
+*/
 interface EventDriverDNS {
 @safe: /*@nogc:*/ nothrow:
+	/// Looks up addresses corresponding to the given DNS name.
 	DNSLookupID lookupHost(string name, DNSLookupCallback on_lookup_finished);
+
+	/// Cancels an ongoing DNS lookup.
 	void cancelLookup(DNSLookupID handle);
 }
 
+
+/** Provides read/write operations on the local file system.
+*/
 interface EventDriverFiles {
 @safe: /*@nogc:*/ nothrow:
 	FileFD open(string path, FileOpenMode mode);
@@ -137,11 +296,11 @@ interface EventDriverFiles {
 	void cancelWrite(FileFD file);
 	void cancelRead(FileFD file);
 
-	/** Increments the reference count of the given resource.
+	/** Increments the reference count of the given file.
 	*/
 	void addRef(FileFD descriptor);
 	
-	/** Decrements the reference count of the given resource.
+	/** Decrements the reference count of the given file.
 
 		Once the reference count reaches zero, all associated resources will be
 		freed and the resource descriptor gets invalidated.
@@ -152,19 +311,40 @@ interface EventDriverFiles {
 	bool releaseRef(FileFD descriptor);
 }
 
+/** Cross-thread notifications
+
+	"Events" can be used to wake up the event loop of a foreign thread. This is
+	the basis for all kinds of thread synchronization primitives, such as
+	mutexes, condition variables, message queues etc. Such primitives, in case
+	of extended wait periods, should use events rather than traditional means
+	to block, such as busy loops or kernel based wait mechanisms to avoid
+	stalling the event loop.
+*/
 interface EventDriverEvents {
 @safe: /*@nogc:*/ nothrow:
+	/// Creates a new cross-thread event.
 	EventID create();
+
+	/// Triggers an event owned by the current thread.
 	void trigger(EventID event, bool notify_all);
+	
+	/// Triggers an event possibly owned by a different thread.
 	void trigger(EventID event, bool notify_all) shared;
+
+	/** Waits until an event gets triggered.
+
+		Multiple concurrent waits are allowed.
+	*/
 	void wait(EventID event, EventCallback on_event);
+
+	/// Cancels an ongoing wait operation.
 	void cancelWait(EventID event, EventCallback on_event);
 
-	/** Increments the reference count of the given resource.
+	/** Increments the reference count of the given event.
 	*/
 	void addRef(EventID descriptor);
 	
-	/** Decrements the reference count of the given resource.
+	/** Decrements the reference count of the given event.
 
 		Once the reference count reaches zero, all associated resources will be
 		freed and the resource descriptor gets invalidated.
@@ -175,8 +355,29 @@ interface EventDriverEvents {
 	bool releaseRef(EventID descriptor);
 }
 
+
+/** Handling of POSIX signals.
+*/
 interface EventDriverSignals {
 @safe: /*@nogc:*/ nothrow:
+	/** Starts listening for the specified POSIX signal.
+
+		Note that if a default signal handler exists for the signal, it will be
+		disabled by using this function.
+
+		Params:
+			sig: The number of the signal to listen for
+			on_signal: Callback that gets called whenever a matching signal gets
+				received 
+
+		Returns:
+			Returns an identifier that identifies the resource associated with
+			the signal. Giving up ownership of this resource using `releaseRef`
+			will re-enable the default signal handler, if any was present.
+
+			For any error condition, `SignalListenID.invalid` will be returned
+			instead.
+	*/
 	SignalListenID listen(int sig, SignalCallback on_signal);
 
 	/** Increments the reference count of the given resource.
@@ -221,6 +422,7 @@ interface EventDriverTimers {
 
 interface EventDriverWatchers {
 @safe: /*@nogc:*/ nothrow:
+	/// Watches a directory or a directory sub tree for changes.
 	WatcherID watchDirectory(string path, bool recursive, FileChangesCallback callback);
 
 	/** Increments the reference count of the given resource.
@@ -238,6 +440,8 @@ interface EventDriverWatchers {
 	bool releaseRef(WatcherID descriptor);
 }
 
+
+// Helper class to enable fully stack allocated `std.socket.Address` instances.
 final class RefAddress : Address {
 	version (Posix) import 	core.sys.posix.sys.socket : sockaddr, socklen_t;
 	version (Windows) import core.sys.windows.winsock2 : sockaddr, socklen_t;
