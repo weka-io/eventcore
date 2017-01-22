@@ -9,12 +9,12 @@ This is a high-performance native event loop abstraction for D, focused on async
 Supported drivers and operating systems
 ---------------------------------------
 
-Driver            | Linux | Windows | OS X | FreeBSD
-------------------|-------|---------|------|--------
-SelectEventDriver | yes   | yes     | yes¹ | yes¹
-EpollEventDriver  | yes   | no      | no   | no
-WinAPIEventDriver | no    | yes     | no   | no
-KqueueEventDriver | no    | no      | yes¹ | yes¹
+Driver            | Linux   | Windows | macOS   | FreeBSD
+------------------|---------|---------|---------|--------
+SelectEventDriver | yes     | yes     | yes¹    | yes¹
+EpollEventDriver  | yes     | &mdash; | &mdash; | &mdash;
+WinAPIEventDriver | &mdash; | yes     | &mdash; | &mdash;
+KqueueEventDriver | &mdash; | &mdash; | yes¹    | yes¹
 
 ¹ planned, but not currenly implemented
 
@@ -24,16 +24,16 @@ Driver development status
 
 Feature          | SelectEventDriver | EpollEventDriver | WinAPIEventDriver | KqueueEventDriver
 -----------------|-------------------|------------------|-------------------|------------------
-TCP Sockets      | yes               | yes              | no                | no               
-UDP Sockets      | yes               | yes              | no                | no               
-USDS             | yes               | yes              | no                | no               
-DNS              | yes               | yes              | no                | no               
-Timers           | yes               | yes              | yes               | no               
-Events           | yes               | yes              | yes               | no               
-Unix Signals     | yes²              | yes²             | no                | no               
-Files            | yes               | yes              | yes               | no               
-UI Integration   | no                | no               | yes               | no               
-File watcher     | yes²              | yes²             | yes               | no               
+TCP Sockets      | yes               | yes              | &mdash;           | &mdash;          
+UDP Sockets      | yes               | yes              | &mdash;           | &mdash;          
+USDS             | yes               | yes              | &mdash;           | &mdash;          
+DNS              | yes               | yes              | &mdash;           | &mdash;          
+Timers           | yes               | yes              | yes               | &mdash;          
+Events           | yes               | yes              | yes               | &mdash;          
+Unix Signals     | yes²              | yes²             | &mdash;           | &mdash;          
+Files            | yes               | yes              | yes               | &mdash;          
+UI Integration   | &mdash;           | &mdash;          | yes               | &mdash;          
+File watcher     | yes²              | yes²             | yes               | &mdash;          
 
 ² Currently only supported on Linux
 
