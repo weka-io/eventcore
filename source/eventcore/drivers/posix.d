@@ -399,10 +399,10 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override void read(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish)
 	{
-		if (buffer.length == 0) {
+		/*if (buffer.length == 0) {
 			on_read_finish(socket, IOStatus.ok, 0);
 			return;
-		}
+		}*/
 
 		sizediff_t ret;
 		() @trusted { ret = .recv(socket, buffer.ptr, buffer.length, 0); } ();
@@ -417,11 +417,13 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		}
 
 		if (ret == 0) {
+			print("disconnect");
 			on_read_finish(socket, IOStatus.disconnected, 0);
 			return;
 		}
 
 		if (ret < 0 && mode == IOMode.immediate) {
+			print("wouldblock");
 			on_read_finish(socket, IOStatus.wouldBlock, 0);
 			return;
 		}
@@ -469,8 +471,9 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			slot.readCallback(socket, status, slot.bytesRead);
 		}
 
-		sizediff_t ret;
-		() @trusted { ret = .recv(socket, slot.readBuffer.ptr, slot.readBuffer.length, 0); } ();
+		sizediff_t ret = 0;
+		if (!slot.readBuffer.length)
+			() @trusted { ret = .recv(socket, slot.readBuffer.ptr, slot.readBuffer.length, 0); } ();
 		if (ret < 0) {
 			auto err = getSocketError();
 			if (!err.among!(EAGAIN, EINPROGRESS)) {
@@ -479,13 +482,13 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			}
 		}
 
-		if (ret == 0) {
+		if (ret == 0 && slot.readBuffer.length) {
 			slot.state = ConnectionState.passiveClose;
 			finalize(IOStatus.disconnected);
 			return;
 		}
 
-		if (ret > 0) {
+		if (ret > 0 || !slot.readBuffer.length) {
 			slot.bytesRead += ret;
 			slot.readBuffer = slot.readBuffer[ret .. $];
 			if (slot.readMode != IOMode.all || slot.readBuffer.length == 0) {
