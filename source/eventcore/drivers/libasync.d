@@ -169,7 +169,7 @@ final class LibasyncEventDriverSockets : EventDriverSockets {
 		assert(false, "TODO!");
 	}
 
-	override void send(DatagramSocketFD socket, const(ubyte)[] buffer, IOMode mode, Address target_address, DatagramIOCallback on_send_finish)
+	override void send(DatagramSocketFD socket, const(ubyte)[] buffer, IOMode mode, scope Address target_address, DatagramIOCallback on_send_finish)
 	{
 		assert(false, "TODO!");
 	}

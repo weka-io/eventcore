@@ -99,7 +99,7 @@ interface EventDriverSockets {
 	bool setBroadcast(DatagramSocketFD socket, bool enable);
 	void receive(DatagramSocketFD socket, ubyte[] buffer, IOMode mode, DatagramIOCallback on_receive_finish);
 	void cancelReceive(DatagramSocketFD socket);
-	void send(DatagramSocketFD socket, const(ubyte)[] buffer, IOMode mode, Address target_address, DatagramIOCallback on_send_finish);
+	void send(DatagramSocketFD socket, const(ubyte)[] buffer, IOMode mode, scope Address target_address, DatagramIOCallback on_send_finish);
 	void cancelSend(DatagramSocketFD socket);
 
 	/** Increments the reference count of the given resource.
