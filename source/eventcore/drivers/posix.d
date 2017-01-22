@@ -429,7 +429,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			return;
 		}
 
-		if (ret > 0 || buffer.length == 0) {
+		if (ret >= 0) {
 			buffer = buffer[ret .. $];
 			if (mode != IOMode.all || buffer.length == 0) {
 				on_read_finish(socket, IOStatus.ok, ret);
