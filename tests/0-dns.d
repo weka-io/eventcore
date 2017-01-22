@@ -16,8 +16,8 @@ void main()
 		assert(status == DNSStatus.ok);
 		assert(addrs.length >= 1);
 		foreach (a; addrs) {
-			scope (failure) assert(false);
-			writefln("%s (%s)", a.toAddrString(), a.toServiceNameString());
+			try 	writefln("addr %s (%s)", a.toAddrString(), a.toPortString());
+			catch (Exception e) assert(false, e.msg);
 		}
 		s_done = true;
 		eventDriver.core.exit();
