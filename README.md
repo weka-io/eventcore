@@ -9,12 +9,13 @@ This is a high-performance native event loop abstraction for D, focused on async
 Supported drivers and operating systems
 ---------------------------------------
 
-Driver            | Linux   | Windows | macOS   | FreeBSD
-------------------|---------|---------|---------|--------
-SelectEventDriver | yes     | yes     | yes¹    | yes¹
-EpollEventDriver  | yes     | &mdash; | &mdash; | &mdash;
-WinAPIEventDriver | &mdash; | yes     | &mdash; | &mdash;
-KqueueEventDriver | &mdash; | &mdash; | yes¹    | yes¹
+Driver               | Linux   | Windows | macOS   | FreeBSD | Android | iOS
+---------------------|---------|---------|---------|---------|---------|---------
+SelectEventDriver    | yes     | yes     | yes¹    | yes¹    | &mdash; | &mdash;
+EpollEventDriver     | yes     | &mdash; | &mdash; | &mdash; | &mdash; | &mdash;
+WinAPIEventDriver    | &mdash; | yes     | &mdash; | &mdash; | &mdash; | &mdash;
+KqueueEventDriver    | &mdash; | &mdash; | yes¹    | yes¹    | &mdash; | &mdash;
+LibasyncEevnetDriver | &mdash;¹| &mdash;¹| &mdash;¹| &mdash;¹| &mdash; | &mdash;
 
 ¹ planned, but not currenly implemented
 
@@ -34,6 +35,19 @@ Unix Signals     | yes²              | yes²             | &mdash;           | 
 Files            | yes               | yes              | yes               | &mdash;          
 UI Integration   | yes¹              | yes¹             | yes               | &mdash;          
 File watcher     | yes²              | yes²             | yes               | &mdash;          
+
+Feature          | LibasyncEventDriver 
+-----------------|---------------------
+TCP Sockets      | &mdash;             
+UDP Sockets      | &mdash;             
+USDS             | &mdash;             
+DNS              | &mdash;             
+Timers           | &mdash;             
+Events           | &mdash;             
+Unix Signals     | &mdash;             
+Files            | &mdash;             
+UI Integration   | &mdash;             
+File watcher     | &mdash;             
 
 ¹ Manually, by adopting the X11 display connection socket
 ² Currently only supported on Linux
