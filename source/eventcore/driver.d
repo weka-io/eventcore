@@ -594,7 +594,7 @@ struct Handle(string NAME, T, T invalid_value = T.init) {
 	alias value this;
 }
 
-alias FD = Handle!("fd", int, -1);
+alias FD = Handle!("fd", size_t, size_t.max);
 alias SocketFD = Handle!("socket", FD);
 alias StreamSocketFD = Handle!("streamSocket", SocketFD);
 alias StreamListenSocketFD = Handle!("streamListen", SocketFD);
