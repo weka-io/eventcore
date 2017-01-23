@@ -24,6 +24,7 @@ version (Posix) {
 	import core.sys.posix.unistd : close, read, write;
 	import core.stdc.errno : errno, EAGAIN, EINPROGRESS;
 	import core.sys.posix.fcntl;
+	alias sock_t = int;
 }
 version (Windows) {
 	import core.sys.windows.windows;
@@ -41,7 +42,6 @@ version (Windows) {
 version (linux) {
 	extern (C) int eventfd(uint initval, int flags);
 	enum EFD_NONBLOCK = 0x800;
-	alias sock_t = int;
 }
 
 
