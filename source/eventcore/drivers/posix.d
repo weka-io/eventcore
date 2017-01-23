@@ -1231,11 +1231,14 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 			//log("emitting only for this thread (%s waiters)", m_fds[event].waiters.length);
 			foreach (w; slot.waiters.consume) {
 				//log("emitting waiter %s %s", cast(void*)w.funcptr, w.ptr);
+				m_loop.m_waiterCount--;
 				w(event);
 			}
 		} else {
-			if (!slot.waiters.empty)
+			if (!slot.waiters.empty) {
+				m_loop.m_waiterCount--;
 				slot.waiters.consumeOne()(event);
+			}
 		}
 	}
 
@@ -1254,7 +1257,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 	final override void wait(EventID event, EventCallback on_event)
 	{
 		m_loop.m_waiterCount++;
-		return getSlot(event).waiters.put(on_event);
+		getSlot(event).waiters.put(on_event);
 	}
 
 	final override void cancelWait(EventID event, EventCallback on_event)
