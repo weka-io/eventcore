@@ -133,6 +133,7 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 	{
 		m_loop = loop;
 		m_timers = timers;
+		m_events = events;
 		m_wakeupEvent = events.create();
 	}
 
