@@ -55,19 +55,23 @@ void testDgram()
 			assert(bytes == pack2.length);
 		})(pack2, IOMode.once, baddr);
 
-		s_baseSocket.receive!((status, bts, scope addr) {
-			assert(status == IOStatus.ok);
-			assert(bts == pack2.length);
-			assert(s_rbuf[0 .. pack2.length] == pack2);
+		auto tm = eventDriver.timers.create();
+		eventDriver.timers.set(tm, 50.msecs, 0.msecs);
+		eventDriver.timers.wait(tm, (tm) {
+			s_baseSocket.receive!((status, bts, scope addr) {
+				assert(status == IOStatus.ok);
+				assert(bts == pack2.length);
+				assert(s_rbuf[0 .. pack2.length] == pack2);
 
-			destroy(s_baseSocket);
-			destroy(s_freeSocket);
-			destroy(s_connectedSocket);
-			s_done = true;
+				destroy(s_baseSocket);
+				destroy(s_freeSocket);
+				destroy(s_connectedSocket);
+				s_done = true;
 
-			// FIXME: this shouldn't ne necessary:
-			eventDriver.core.exit();
-		})(s_rbuf, IOMode.immediate);
+				// FIXME: this shouldn't ne necessary:
+				eventDriver.core.exit();
+			})(s_rbuf, IOMode.immediate);
+		});
 	})(s_rbuf, IOMode.once);
 	s_connectedSocket.send!((status, bytes) {
 		assert(status == IOStatus.ok);
