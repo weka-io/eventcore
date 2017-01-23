@@ -7,6 +7,7 @@ targetType "library"
 
 libs "anl" platform="linux"
 libs "ws2_32" "user32" platform="windows"
+sourceFiles "lib/ws2_32.lib" platform="windows-x86-dmd"
 
 dependency "taggedalgebraic" version="~>0.10.4"
 

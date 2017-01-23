@@ -30,7 +30,7 @@ Feature          | SelectEventDriver | EpollEventDriver | WinAPIEventDriver | Kq
 TCP Sockets      | yes               | yes              | &mdash;           | yes              
 UDP Sockets      | yes               | yes              | &mdash;           | yes              
 USDS             | yes               | yes              | &mdash;           | yes              
-DNS              | yes               | yes              | &mdash;           | yes              
+DNS              | yes               | yes              | yes               | yes              
 Timers           | yes               | yes              | yes               | yes              
 Events           | yes               | yes              | yes               | yes              
 Unix Signals     | yes²              | yes²             | &mdash;           | &mdash;          
