@@ -7,7 +7,7 @@ module test;
 import eventcore.core;
 import std.stdio : writefln;
 import core.stdc.signal;
-import core.sys.posix.signal : SIGRTMIN;
+import core.sys.posix.signal : SIGUSR1;
 import core.time : Duration, msecs;
 
 bool s_done;
@@ -17,10 +17,10 @@ void main()
 	version (OSX) writefln("Signals are not yet supported on macOS. Skipping test.");
 	else {
 
-	auto id = eventDriver.signals.listen(SIGRTMIN+1, (id, status, sig) {
+	auto id = eventDriver.signals.listen(SIGUSR1, (id, status, sig) {
 		assert(!s_done);
 		assert(status == SignalStatus.ok);
-		assert(sig == () @trusted { return SIGRTMIN+1; } ());
+		assert(sig == () @trusted { return SIGUSR1; } ());
 		s_done = true;
 		eventDriver.core.exit();
 	});
@@ -28,7 +28,7 @@ void main()
 	auto tm = eventDriver.timers.create();
 	eventDriver.timers.set(tm, 500.msecs, 0.msecs);
 	eventDriver.timers.wait(tm, (tm) {
-		() @trusted { raise(SIGRTMIN+1); } ();
+		() @trusted { raise(SIGUSR1); } ();
 	});
 
 	ExitReason er;
