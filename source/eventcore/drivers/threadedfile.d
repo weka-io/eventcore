@@ -169,7 +169,7 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 	{
 		version (linux) {
 			// stat_t seems to be defined wrong on linux/64
-			return .lseek(file, 0, SEEK_END);
+			return .lseek(cast(int)file, 0, SEEK_END);
 		} else {
 			stat_t st;
 			() @trusted { fstat(cast(int)file, &st); } ();
@@ -275,7 +275,7 @@ log("start processing");
 		version (Windows) {
 			assert(offset <= off_t.max);
 			.lseek(cast(int)file, cast(off_t)offset, SEEK_SET);
-		} else .lseek(file, offset, SEEK_SET);
+		} else .lseek(cast(int)file, offset, SEEK_SET);
 
 		scope (exit) {
 log("trigger event");

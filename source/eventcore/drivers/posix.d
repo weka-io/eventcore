@@ -225,20 +225,22 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override StreamSocketFD connectStream(scope Address address, scope Address bind_address, ConnectCallback on_connect)
 	{
-		auto sock = cast(StreamSocketFD)createSocket(address.addressFamily, SOCK_STREAM);
-		if (sock == -1) return StreamSocketFD.invalid;
+		auto sockfd = createSocket(address.addressFamily, SOCK_STREAM);
+		if (sockfd == -1) return StreamSocketFD.invalid;
 
-		void invalidateSocket() @nogc @trusted nothrow { closeSocket(sock); sock = StreamSocketFD.invalid; }
+		auto sock = cast(StreamSocketFD)sockfd;
+
+		void invalidateSocket() @nogc @trusted nothrow { closeSocket(sockfd); sock = StreamSocketFD.invalid; }
 
 		int bret;
 		() @trusted { // scope + bind()
 			if (bind_address !is null) {
-				bret = bind(sock, bind_address.name, bind_address.nameLen);
+				bret = bind(cast(sock_t)sock, bind_address.name, bind_address.nameLen);
 			} else {
 				scope bind_addr = new UnknownAddress;
 				bind_addr.name.sa_family = cast(ubyte)address.addressFamily;
 				bind_addr.name.sa_data[] = 0;
-				bret = bind(sock, bind_addr.name, bind_addr.nameLen);
+				bret = bind(cast(sock_t)sock, bind_addr.name, bind_addr.nameLen);
 			}
 		} ();
 
@@ -252,7 +254,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		m_loop.registerFD(sock, EventMask.read|EventMask.write|EventMask.status);
 		m_loop.m_fds[sock].specific = StreamSocketSlot.init;
 
-		auto ret = () @trusted { return connect(sock, address.name, address.nameLen); } ();
+		auto ret = () @trusted { return connect(cast(sock_t)sock, address.name, address.nameLen); } ();
 		if (ret == 0) {
 			m_loop.m_fds[sock].specific.state = ConnectionState.connected;
 			on_connect(sock, ConnectStatus.connected);
@@ -311,20 +313,23 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	final override StreamListenSocketFD listenStream(scope Address address, AcceptCallback on_accept)
 	{
 		log("Listen stream");
-		auto sock = cast(StreamListenSocketFD)createSocket(address.addressFamily, SOCK_STREAM);
+		auto sockfd = createSocket(address.addressFamily, SOCK_STREAM);
+		if (sockfd == -1) return StreamListenSocketFD.invalid;
 
-		void invalidateSocket() @nogc @trusted nothrow { closeSocket(sock); sock = StreamSocketFD.invalid; }
+		auto sock = cast(StreamListenSocketFD)sockfd;
+
+		void invalidateSocket() @nogc @trusted nothrow { closeSocket(sockfd); sock = StreamSocketFD.invalid; }
 
 		() @trusted {
 			int tmp_reuse = 1;
 			// FIXME: error handling!
-			if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &tmp_reuse, tmp_reuse.sizeof) != 0) {
+			if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &tmp_reuse, tmp_reuse.sizeof) != 0) {
 				log("setsockopt failed.");
 				invalidateSocket();
-			} else if (bind(sock, address.name, address.nameLen) != 0) {
+			} else if (bind(sockfd, address.name, address.nameLen) != 0) {
 				log("bind failed.");
 				invalidateSocket();
-			} else if (listen(sock, 128) != 0) {
+			} else if (listen(sockfd, 128) != 0) {
 				log("listen failed.");
 				invalidateSocket();
 			} else log("Success!");
@@ -356,7 +361,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			sock_t sockfd;
 			sockaddr_storage addr;
 			socklen_t addr_len = addr.sizeof;
-			() @trusted { sockfd = accept(listenfd, () @trusted { return cast(sockaddr*)&addr; } (), &addr_len); } ();
+			() @trusted { sockfd = accept(cast(sock_t)listenfd, () @trusted { return cast(sockaddr*)&addr; } (), &addr_len); } ();
 			if (sockfd == -1) break;
 
 			setSocketNonBlocking(cast(SocketFD)sockfd);
@@ -379,7 +384,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	bool getLocalAddress(StreamSocketFD sock, scope RefAddress dst)
 	{
 		socklen_t addr_len = dst.nameLen;
-		if (() @trusted { return getsockname(sock, dst.name, &addr_len); } () != 0)
+		if (() @trusted { return getsockname(cast(sock_t)sock, dst.name, &addr_len); } () != 0)
 			return false;
 		dst.cap(addr_len);
 		return true;
@@ -389,13 +394,13 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	final override void setTCPNoDelay(StreamSocketFD socket, bool enable)
 	{
 		int opt = enable;
-		() @trusted { setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, cast(char*)&opt, opt.sizeof); } ();
+		() @trusted { setsockopt(cast(sock_t)socket, IPPROTO_TCP, TCP_NODELAY, cast(char*)&opt, opt.sizeof); } ();
 	}
 
 	final override void setKeepAlive(StreamSocketFD socket, bool enable)
 	{
 		ubyte opt = enable;
-		() @trusted { setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, cast(char*)&opt, opt.sizeof); } ();
+		() @trusted { setsockopt(cast(sock_t)socket, SOL_SOCKET, SO_KEEPALIVE, cast(char*)&opt, opt.sizeof); } ();
 	}
 
 	final override void read(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish)
@@ -406,7 +411,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		}*/
 
 		sizediff_t ret;
-		() @trusted { ret = .recv(socket, buffer.ptr, min(buffer.length, int.max), 0); } ();
+		() @trusted { ret = .recv(cast(sock_t)socket, buffer.ptr, min(buffer.length, int.max), 0); } ();
 
 		if (ret < 0) {
 			auto err = getSocketError();
@@ -473,7 +478,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		}
 
 		sizediff_t ret = 0;
-		() @trusted { ret = .recv(socket, slot.readBuffer.ptr, min(slot.readBuffer.length, int.max), 0); } ();
+		() @trusted { ret = .recv(cast(sock_t)socket, slot.readBuffer.ptr, min(slot.readBuffer.length, int.max), 0); } ();
 		if (ret < 0) {
 			auto err = getSocketError();
 			if (!err.among!(EAGAIN, EINPROGRESS)) {
@@ -506,7 +511,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		}
 
 		sizediff_t ret;
-		() @trusted { ret = .send(socket, buffer.ptr, min(buffer.length, int.max), 0); } ();
+		() @trusted { ret = .send(cast(sock_t)socket, buffer.ptr, min(buffer.length, int.max), 0); } ();
 
 		if (ret < 0) {
 			auto err = getSocketError();
@@ -564,7 +569,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		auto socket = cast(StreamSocketFD)fd;
 
 		sizediff_t ret;
-		() @trusted { ret = .send(socket, slot.writeBuffer.ptr, min(slot.writeBuffer.length, int.max), 0); } ();
+		() @trusted { ret = .send(cast(sock_t)socket, slot.writeBuffer.ptr, min(slot.writeBuffer.length, int.max), 0); } ();
 
 		if (ret < 0) {
 			auto err = getSocketError();
@@ -596,7 +601,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	{
 		sizediff_t ret;
 		ubyte dummy;
-		() @trusted { ret = recv(socket, &dummy, 1, MSG_PEEK); } ();
+		() @trusted { ret = recv(cast(sock_t)socket, &dummy, 1, MSG_PEEK); } ();
 
 		if (ret < 0) {
 			auto err = getSocketError();
@@ -642,7 +647,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 		sizediff_t ret;
 		ubyte tmp;
-		() @trusted { ret = recv(socket, &tmp, 1, MSG_PEEK); } ();
+		() @trusted { ret = recv(cast(sock_t)socket, &tmp, 1, MSG_PEEK); } ();
 		if (ret < 0) {
 			auto err = getSocketError();
 			if (!err.among!(EAGAIN, EINPROGRESS)) finalize(IOStatus.error);
@@ -652,7 +657,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	final override void shutdown(StreamSocketFD socket, bool shut_read, bool shut_write)
 	{
 		auto st = m_loop.m_fds[socket].streamSocket.state;
-		() @trusted { .shutdown(socket, shut_read ? shut_write ? SHUT_RDWR : SHUT_RD : shut_write ? SHUT_WR : 0); } ();
+		() @trusted { .shutdown(cast(sock_t)socket, shut_read ? shut_write ? SHUT_RDWR : SHUT_RD : shut_write ? SHUT_WR : 0); } ();
 		if (st == ConnectionState.passiveClose) shut_read = true;
 		if (st == ConnectionState.activeClose) shut_write = true;
 		m_loop.m_fds[socket].streamSocket.state = shut_read ? shut_write ? ConnectionState.closed : ConnectionState.passiveClose : shut_write ? ConnectionState.activeClose : ConnectionState.connected;
@@ -660,13 +665,12 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override DatagramSocketFD createDatagramSocket(scope Address bind_address, scope Address target_address)
 	{
-		auto sock = cast(DatagramSocketFD)createSocket(bind_address.addressFamily, SOCK_DGRAM);
-		if (sock == -1) {
-			return DatagramSocketFD.invalid;
-		}
+		auto sockfd = createSocket(bind_address.addressFamily, SOCK_DGRAM);
+		if (sockfd == -1) return DatagramSocketFD.invalid;
+		auto sock = cast(DatagramSocketFD)sockfd;
 
-		if (bind_address && () @trusted { return bind(sock, bind_address.name, bind_address.nameLen); } () != 0) {
-			closeSocket(sock);
+		if (bind_address && () @trusted { return bind(sockfd, bind_address.name, bind_address.nameLen); } () != 0) {
+			closeSocket(sockfd);
 			return DatagramSocketFD.init;
 		}
 
@@ -677,16 +681,16 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 				// in case of a zero port
 				sockaddr_storage sa;
 				socklen_t addr_len = sa.sizeof;
-				if (() @trusted { return getsockname(sock, cast(sockaddr*)&sa, &addr_len); } () != 0) {
-					closeSocket(sock);
+				if (() @trusted { return getsockname(sockfd, cast(sockaddr*)&sa, &addr_len); } () != 0) {
+					closeSocket(sockfd);
 					return DatagramSocketFD.init;
 				}
 
-				ret = () @trusted { return connect(sock, cast(sockaddr*)&sa, addr_len); } ();
-			} else ret = () @trusted { return connect(sock, target_address.name, target_address.nameLen); } ();
+				ret = () @trusted { return connect(sockfd, cast(sockaddr*)&sa, addr_len); } ();
+			} else ret = () @trusted { return connect(sockfd, target_address.name, target_address.nameLen); } ();
 			
 			if (ret != 0) {
-				closeSocket(sock);
+				closeSocket(sockfd);
 				return DatagramSocketFD.init;
 			}
 		}
@@ -713,7 +717,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	final override bool setBroadcast(DatagramSocketFD socket, bool enable)
 	{
 		int tmp_broad = enable;
-		return () @trusted { return setsockopt(socket, SOL_SOCKET, SO_BROADCAST, &tmp_broad, tmp_broad.sizeof); } () == 0;
+		return () @trusted { return setsockopt(cast(sock_t)socket, SOL_SOCKET, SO_BROADCAST, &tmp_broad, tmp_broad.sizeof); } () == 0;
 	}
 
 	void receive(DatagramSocketFD socket, ubyte[] buffer, IOMode mode, DatagramIOCallback on_receive_finish)
@@ -725,7 +729,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		sizediff_t ret;
 		sockaddr_storage src_addr;
 		socklen_t src_addr_len = src_addr.sizeof;
-		() @trusted { ret = .recvfrom(socket, buffer.ptr, min(buffer.length, int.max), 0, cast(sockaddr*)&src_addr, &src_addr_len); } ();
+		() @trusted { ret = .recvfrom(cast(sock_t)socket, buffer.ptr, min(buffer.length, int.max), 0, cast(sockaddr*)&src_addr, &src_addr_len); } ();
 
 		if (ret < 0) {
 			auto err = getSocketError();
@@ -769,7 +773,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		sizediff_t ret;
 		sockaddr_storage src_addr;
 		socklen_t src_addr_len = src_addr.sizeof;
-		() @trusted { ret = .recvfrom(socket, slot.readBuffer.ptr, min(slot.readBuffer.length, int.max), 0, cast(sockaddr*)&src_addr, &src_addr_len); } ();
+		() @trusted { ret = .recvfrom(cast(sock_t)socket, slot.readBuffer.ptr, min(slot.readBuffer.length, int.max), 0, cast(sockaddr*)&src_addr, &src_addr_len); } ();
 
 		if (ret < 0) {
 			auto err = getSocketError();
@@ -791,10 +795,10 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 		sizediff_t ret;
 		if (target_address) {
-			() @trusted { ret = .sendto(socket, buffer.ptr, min(buffer.length, int.max), 0, target_address.name, target_address.nameLen); } ();
+			() @trusted { ret = .sendto(cast(sock_t)socket, buffer.ptr, min(buffer.length, int.max), 0, target_address.name, target_address.nameLen); } ();
 			m_loop.m_fds[socket].datagramSocket.targetAddr = target_address;
 		} else {
-			() @trusted { ret = .send(socket, buffer.ptr, min(buffer.length, int.max), 0); } ();
+			() @trusted { ret = .send(cast(sock_t)socket, buffer.ptr, min(buffer.length, int.max), 0); } ();
 		}
 
 		if (ret < 0) {
@@ -837,9 +841,9 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 		sizediff_t ret;
 		if (slot.targetAddr) {
-			() @trusted { ret = .sendto(socket, slot.writeBuffer.ptr, min(slot.writeBuffer.length, int.max), 0, slot.targetAddr.name, slot.targetAddr.nameLen); } ();
+			() @trusted { ret = .sendto(cast(sock_t)socket, slot.writeBuffer.ptr, min(slot.writeBuffer.length, int.max), 0, slot.targetAddr.name, slot.targetAddr.nameLen); } ();
 		} else {
-			() @trusted { ret = .send(socket, slot.writeBuffer.ptr, min(slot.writeBuffer.length, int.max), 0); } ();
+			() @trusted { ret = .send(cast(sock_t)socket, slot.writeBuffer.ptr, min(slot.writeBuffer.length, int.max), 0); } ();
 		}
 
 		if (ret < 0) {
@@ -867,19 +871,19 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		if (--m_loop.m_fds[fd].common.refCount == 0) {
 			m_loop.unregisterFD(fd, EventMask.read|EventMask.write|EventMask.status);
 			m_loop.clearFD(fd);
-			closeSocket(fd);
+			closeSocket(cast(sock_t)fd);
 			return false;
 		}
 		return true;
 	}
 
-	private SocketFD createSocket(AddressFamily family, int type)
+	private sock_t createSocket(AddressFamily family, int type)
 	{
 		sock_t sock;
 		() @trusted { sock = socket(family, type, 0); } ();
-		if (sock == -1) return SocketFD.invalid;
+		if (sock == -1) return -1;
 		setSocketNonBlocking(cast(SocketFD)sock);
-		return cast(SocketFD)sock;
+		return sock;
 	}
 }
 
@@ -940,7 +944,7 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 		version (linx) hints.ai_flags |= AI_V4MAPPED;
 		hints.ai_family = af;
 		() @trusted { lookup.retcode = getaddrinfo(lookup.name.toStringz(), null, af == AddressFamily.UNSPEC ? null : &hints, &lookup.result); } ();
-		events.trigger(event);
+		events.trigger(event, true);
 	}
 
 	override void cancelLookup(DNSLookupID handle)
@@ -1242,7 +1246,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 		long one = 1;
 		//log("emitting for all threads");
 		if (notify_all) atomicStore(thisus.getSlot(event).triggerAll, true);
-		version (linux) () @trusted { .write(event, &one, one.sizeof); } ();
+		version (linux) () @trusted { .write(cast(int)event, &one, one.sizeof); } ();
 		else thisus.m_sockets.send(cast(DatagramSocketFD)event, thisus.m_buf, IOMode.once, null, &thisus.onSocketDataSent);
 	}
 
@@ -1266,7 +1270,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 		EventID event = cast(EventID)fd;
 		version (linux) {
 			ulong cnt;
-			() @trusted { .read(event, &cnt, cnt.sizeof); } ();
+			() @trusted { .read(cast(int)event, &cnt, cnt.sizeof); } ();
 		}
 		import core.atomic : cas;
 		auto all = cas(&getSlot(event).triggerAll, true, false);
@@ -1306,7 +1310,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 				destroy();
 				m_loop.unregisterFD(descriptor, EventMask.read);
 				m_loop.clearFD(descriptor);
-				close(descriptor);
+				close(cast(int)descriptor);
 				return false;
 			}
 		} else {
@@ -1382,7 +1386,7 @@ final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSigna
 		if (--m_loop.m_fds[fd].common.refCount == 0) {
 			m_loop.unregisterFD(fd, EventMask.read);
 			m_loop.clearFD(fd);
-			close(fd);
+			close(cast(int)fd);
 			return false;
 		}
 		return true;
@@ -1393,7 +1397,7 @@ final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSigna
 		SignalListenID lid = cast(SignalListenID)fd;
 		signalfd_siginfo nfo;
 		do {
-			auto ret = () @trusted { return read(fd, &nfo, nfo.sizeof); } ();	
+			auto ret = () @trusted { return read(cast(int)fd, &nfo, nfo.sizeof); } ();	
 			if (ret == -1 && errno.among!(EAGAIN, EINPROGRESS))
 				break;
 			auto cb = m_loop.m_fds[fd].signal.callback;
@@ -1438,7 +1442,7 @@ final class InotifyEventDriverWatchers(Loop : PosixEventLoop) : EventDriverWatch
 
 	private {
 		Loop m_loop;
-		string[int][int] m_watches; // TODO: use a @nogc (allocator based) map
+		string[int][WatcherID] m_watches; // TODO: use a @nogc (allocator based) map
 	}
 
 	this(Loop loop) { m_loop = loop; }
@@ -1449,12 +1453,14 @@ final class InotifyEventDriverWatchers(Loop : PosixEventLoop) : EventDriverWatch
 		auto handle = () @trusted { return inotify_init1(IN_NONBLOCK); } ();
 		if (handle == -1) return WatcherID.invalid;
 
-		addWatch(handle, path);
+		auto ret = WatcherID(handle);
+
+		addWatch(ret, path);
 		if (recursive) {
 			try {
 				if (path.isDir) () @trusted {
 					foreach (de; path.dirEntries(SpanMode.shallow))
-						if (de.isDir) addWatch(handle, de.name);
+						if (de.isDir) addWatch(ret, de.name);
 				} ();
 			} catch (Exception e) {
 				// TODO: decide if this should be ignored or if the error should be forwarded
@@ -1468,7 +1474,7 @@ final class InotifyEventDriverWatchers(Loop : PosixEventLoop) : EventDriverWatch
 
 		processEvents(WatcherID(handle));
 
-		return WatcherID(handle);
+		return ret;
 	}
 
 	final override void addRef(WatcherID descriptor)
@@ -1484,8 +1490,8 @@ final class InotifyEventDriverWatchers(Loop : PosixEventLoop) : EventDriverWatch
 		if (--m_loop.m_fds[fd].common.refCount == 0) {
 			m_loop.unregisterFD(fd, EventMask.read);
 			m_loop.clearFD(fd);
-			m_watches.remove(fd);
-			/*errnoEnforce(*/close(fd)/* == 0)*/;
+			m_watches.remove(descriptor);
+			/*errnoEnforce(*/close(cast(int)fd)/* == 0)*/;
 			return false;
 		}
 
@@ -1504,7 +1510,7 @@ final class InotifyEventDriverWatchers(Loop : PosixEventLoop) : EventDriverWatch
 
 		ubyte[inotify_event.sizeof + FILENAME_MAX + 1] buf = void;
 		while (true) {
-			auto ret = () @trusted { return read(id, &buf[0], buf.length); } ();
+			auto ret = () @trusted { return read(cast(int)id, &buf[0], buf.length); } ();
 
 			if (ret == -1 && errno.among!(EAGAIN, EINPROGRESS))
 				break;
@@ -1535,14 +1541,14 @@ final class InotifyEventDriverWatchers(Loop : PosixEventLoop) : EventDriverWatch
 		}
 	}
 
-	private bool addWatch(int handle, string path)
+	private bool addWatch(WatcherID handle, string path)
 	{
 		import std.string : toStringz;
 		enum EVENTS = IN_CREATE | IN_DELETE | IN_DELETE_SELF | IN_MODIFY |
 			IN_MOVE_SELF | IN_MOVED_FROM | IN_MOVED_TO;
-		immutable wd = () @trusted { return inotify_add_watch(handle, path.toStringz, EVENTS); } ();
+		immutable wd = () @trusted { return inotify_add_watch(cast(int)handle, path.toStringz, EVENTS); } ();
 		if (wd == -1) return false;
-		m_watches[cast(int)handle][wd] = path;
+		m_watches[handle][wd] = path;
 		return true;
 	}
 }
@@ -1756,7 +1762,7 @@ enum EventMask {
 	status = 1<<2
 }
 
-private void closeSocket(SocketFD sockfd)
+private void closeSocket(sock_t sockfd)
 @nogc {
 	version (Windows) () @trusted { closesocket(sockfd); } ();
 	else close(sockfd);
@@ -1768,7 +1774,7 @@ private void setSocketNonBlocking(SocketFD sockfd)
 		uint enable = 1;
 		() @trusted { ioctlsocket(sockfd, FIONBIO, &enable); } ();
 	} else {
-		() @trusted { fcntl(sockfd, F_SETFL, O_NONBLOCK, 1); } ();
+		() @trusted { fcntl(cast(int)sockfd, F_SETFL, O_NONBLOCK, 1); } ();
 	}
 }
 

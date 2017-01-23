@@ -71,14 +71,14 @@ final class EpollEventLoop : PosixEventLoop {
 		if (mask & EventMask.read) ev.events |= EPOLLIN;
 		if (mask & EventMask.write) ev.events |= EPOLLOUT;
 		if (mask & EventMask.status) ev.events |= EPOLLERR|EPOLLRDHUP;
-		ev.data.fd = fd;
-		() @trusted { epoll_ctl(m_epoll, EPOLL_CTL_ADD, fd, &ev); } ();
+		ev.data.fd = cast(int)fd;
+		() @trusted { epoll_ctl(m_epoll, EPOLL_CTL_ADD, cast(int)fd, &ev); } ();
 	}
 
 	override void unregisterFD(FD fd, EventMask mask)
 	{
 		debug (EventCoreEpollDebug) print("Epoll unregister FD %s", fd);
-		() @trusted { epoll_ctl(m_epoll, EPOLL_CTL_DEL, fd, null); } ();
+		() @trusted { epoll_ctl(m_epoll, EPOLL_CTL_DEL, cast(int)fd, null); } ();
 	}
 
 	override void updateFD(FD fd, EventMask old_mask, EventMask mask)
@@ -90,8 +90,8 @@ final class EpollEventLoop : PosixEventLoop {
 		if (mask & EventMask.read) ev.events |= EPOLLIN;
 		if (mask & EventMask.write) ev.events |= EPOLLOUT;
 		if (mask & EventMask.status) ev.events |= EPOLLERR|EPOLLRDHUP;
-		ev.data.fd = fd;
-		() @trusted { epoll_ctl(m_epoll, EPOLL_CTL_MOD, fd, &ev); } ();
+		ev.data.fd = cast(int)fd;
+		() @trusted { epoll_ctl(m_epoll, EPOLL_CTL_MOD, cast(int)fd, &ev); } ();
 	}
 }
 

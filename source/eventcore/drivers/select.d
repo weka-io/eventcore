@@ -42,9 +42,9 @@ final class SelectEventLoop : PosixEventLoop {
 			FD_ZERO(&writefds);
 			FD_ZERO(&statusfds);
 		} ();
-		enumerateFDs!(EventType.read)((fd) @trusted { FD_SET(fd, &readfds); });
-		enumerateFDs!(EventType.write)((fd) @trusted { FD_SET(fd, &writefds); });
-		enumerateFDs!(EventType.status)((fd) @trusted { FD_SET(fd, &statusfds); });
+		enumerateFDs!(EventType.read)((fd) @trusted { FD_SET(cast(sock_t)fd, &readfds); });
+		enumerateFDs!(EventType.write)((fd) @trusted { FD_SET(cast(sock_t)fd, &writefds); });
+		enumerateFDs!(EventType.status)((fd) @trusted { FD_SET(cast(sock_t)fd, &statusfds); });
 
 //print("Wait for event... %s", timeout);
 //writefln("%.3f: select in", Clock.currAppTick.usecs * 1e-3);
@@ -53,15 +53,15 @@ final class SelectEventLoop : PosixEventLoop {
 //print("Done wait for event...");
 		if (ret > 0) {
 			enumerateFDs!(EventType.read)((fd) @trusted {
-				if (FD_ISSET(fd, &readfds))
+				if (FD_ISSET(cast(sock_t)fd, &readfds))
 					notify!(EventType.read)(fd);
 			});
 			enumerateFDs!(EventType.write)((fd) @trusted {
-				if (FD_ISSET(fd, &writefds))
+				if (FD_ISSET(cast(sock_t)fd, &writefds))
 					notify!(EventType.write)(fd);
 			});
 			enumerateFDs!(EventType.status)((fd) @trusted {
-				if (FD_ISSET(fd, &statusfds))
+				if (FD_ISSET(cast(sock_t)fd, &statusfds))
 					notify!(EventType.status)(fd);
 			});
 			return true;
