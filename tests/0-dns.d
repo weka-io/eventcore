@@ -1,6 +1,7 @@
 /++ dub.sdl:
 	name "test"
 	dependency "eventcore" path=".."
+	debugVersions "EventCoreLogDNS"
 +/
 module test;
 

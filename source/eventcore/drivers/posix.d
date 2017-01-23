@@ -923,6 +923,7 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 
 	override DNSLookupID lookupHost(string name, DNSLookupCallback on_lookup_finished)
 	{
+		debug (EventCoreLogDNS) print("lookup %s", name);
 		auto handle = getFreeHandle();
 		if (handle > m_maxHandle) m_maxHandle = handle;
 
@@ -934,18 +935,21 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 		auto t = task!taskFun(l, AddressFamily.UNSPEC, events, m_event);
 		try taskPool.put(t);
 		catch (Exception e) return DNSLookupID.invalid;
+		debug (EventCoreLogDNS) print("lookup handle: %s", handle);
 		return handle;
 	}
 
 	/// public
 	static void taskFun(Lookup* lookup, int af, shared(Events) events, EventID event)
 	{
+		debug (EventCoreLogDNS) print("lookup %s start", lookup.name);
 		addrinfo hints;
 		hints.ai_flags = AI_ADDRCONFIG;
 		version (linx) hints.ai_flags |= AI_V4MAPPED;
 		hints.ai_family = af;
 		() @trusted { lookup.retcode = getaddrinfo(lookup.name.toStringz(), null, af == AddressFamily.UNSPEC ? null : &hints, &lookup.result); } ();
 		events.trigger(event, true);
+		debug (EventCoreLogDNS) print("lookup %s finished", lookup.name);
 	}
 
 	override void cancelLookup(DNSLookupID handle)
@@ -956,11 +960,14 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 	private void onDNSSignal(EventID event)
 		@trusted nothrow
 	{
+		debug (EventCoreLogDNS) print("DNS event triggered");
+		m_events.wait(m_event, &onDNSSignal);
 		size_t lastmax;
 		foreach (i, ref l; m_lookups) {
 			if (i > m_maxHandle) break;
 			if (l.callback) {
 				if (l.result || l.retcode) {
+					debug (EventCoreLogDNS) print("found finished lookup %s for %s", i, l.name);
 					auto cb = l.callback;
 					auto ai = l.result;
 					DNSStatus status;
@@ -976,7 +983,7 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 				} else lastmax = i;
 			}
 		}
-		m_events.wait(m_event, &onDNSSignal);
+		debug (EventCoreLogDNS) print("Max active DNS handle: %s", m_maxHandle);
 	}
 
 	private DNSLookupID getFreeHandle()
