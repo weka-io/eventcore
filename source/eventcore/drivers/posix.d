@@ -933,7 +933,7 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 		l.callback = on_lookup_finished;
 		auto events = () @trusted { return cast(shared)m_events; } ();
 		auto t = task!taskFun(l, AddressFamily.UNSPEC, events, m_event);
-		try taskPool.put(t);
+		try t.executeInNewThread();//taskPool.put(t);
 		catch (Exception e) return DNSLookupID.invalid;
 		debug (EventCoreLogDNS) print("lookup handle: %s", handle);
 		return handle;
