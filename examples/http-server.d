@@ -47,9 +47,8 @@ struct ClientHandler {
 
 	void handleConnection()
 	{
-		int fd = client;
 		//import core.thread;
-		//() @trusted { print("Connection %d %s", fd, cast(void*)Thread.getThis()); } ();
+		//() @trusted { print("Connection %d %s", client, cast(void*)Thread.getThis()); } ();
 		readLine(&onRequestLine);
 	}
 
