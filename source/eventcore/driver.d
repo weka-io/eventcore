@@ -570,7 +570,8 @@ struct FileChange {
 }
 
 struct Handle(string NAME, T, T invalid_value = T.init) {
-	static if (is(T : Handle!(N, V, M), string N, V, int M)) alias BaseType = T.BaseType;
+	import std.traits : isInstanceOf;
+	static if (isInstanceOf!(.Handle, T)) alias BaseType = T.BaseType;
 	else alias BaseType = T;
 
 	alias name = NAME;
@@ -601,8 +602,8 @@ alias StreamListenSocketFD = Handle!("streamListen", SocketFD);
 alias DatagramSocketFD = Handle!("datagramSocket", SocketFD);
 alias FileFD = Handle!("file", FD);
 alias EventID = Handle!("event", FD);
-alias TimerID = Handle!("timer", int);
-alias WatcherID = Handle!("watcher", int);
-alias EventWaitID = Handle!("eventWait", int);
-alias SignalListenID = Handle!("signal", int);
-alias DNSLookupID = Handle!("dns", int);
+alias TimerID = Handle!("timer", size_t);
+alias WatcherID = Handle!("watcher", size_t);
+alias EventWaitID = Handle!("eventWait", size_t);
+alias SignalListenID = Handle!("signal", size_t);
+alias DNSLookupID = Handle!("dns", size_t);

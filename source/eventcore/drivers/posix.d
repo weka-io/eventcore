@@ -12,7 +12,7 @@ import eventcore.drivers.threadedfile;
 import eventcore.internal.consumablequeue : ConsumableQueue;
 import eventcore.internal.utils;
 
-import std.algorithm.comparison : among;
+import std.algorithm.comparison : among, min, max;
 
 import std.socket : Address, AddressFamily, InternetAddress, Internet6Address, UnknownAddress;
 version (Posix) {
@@ -33,6 +33,7 @@ version (Windows) {
 	enum SHUT_RDWR = SD_BOTH;
 	enum SHUT_RD = SD_RECEIVE;
 	enum SHUT_WR = SD_SEND;
+	alias sock_t = size_t;
 	extern (C) int read(int fd, void *buffer, uint count) nothrow;
 	extern (C) int write(int fd, const(void) *buffer, uint count) nothrow;
 	extern (C) int close(int fd) nothrow @safe;
@@ -40,6 +41,7 @@ version (Windows) {
 version (linux) {
 	extern (C) int eventfd(uint initval, int flags);
 	enum EFD_NONBLOCK = 0x800;
+	alias sock_t = int;
 }
 
 
@@ -124,7 +126,7 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 		Timers m_timers;
 		Events m_events;
 		bool m_exit = false;
-		FD m_wakeupEvent;
+		EventID m_wakeupEvent;
 	}
 
 	protected this(Loop loop, Timers timers, Events events)
@@ -138,7 +140,6 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 
 	final override ExitReason processEvents(Duration timeout)
 	{
-		import std.algorithm : min, max;
 		import core.time : hnsecs, seconds;
 
 		if (m_exit) {
@@ -182,8 +183,7 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 	final override void exit()
 	{
 		m_exit = true;
-		long one = 1;
-		() @trusted { .write(m_wakeupEvent, &one, one.sizeof); } ();
+		() @trusted { (cast(shared)m_events).trigger(m_wakeupEvent, true); } ();
 	}
 
 	final override void clearExitFlag()
@@ -353,7 +353,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	private void onAccept(FD listenfd)
 	{
 		foreach (i; 0 .. 20) {
-			int sockfd;
+			sock_t sockfd;
 			sockaddr_storage addr;
 			socklen_t addr_len = addr.sizeof;
 			() @trusted { sockfd = accept(listenfd, () @trusted { return cast(sockaddr*)&addr; } (), &addr_len); } ();
@@ -406,7 +406,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		}*/
 
 		sizediff_t ret;
-		() @trusted { ret = .recv(socket, buffer.ptr, buffer.length, 0); } ();
+		() @trusted { ret = .recv(socket, buffer.ptr, min(buffer.length, int.max), 0); } ();
 
 		if (ret < 0) {
 			auto err = getSocketError();
@@ -473,7 +473,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		}
 
 		sizediff_t ret = 0;
-		() @trusted { ret = .recv(socket, slot.readBuffer.ptr, slot.readBuffer.length, 0); } ();
+		() @trusted { ret = .recv(socket, slot.readBuffer.ptr, min(slot.readBuffer.length, int.max), 0); } ();
 		if (ret < 0) {
 			auto err = getSocketError();
 			if (!err.among!(EAGAIN, EINPROGRESS)) {
@@ -506,7 +506,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		}
 
 		sizediff_t ret;
-		() @trusted { ret = .send(socket, buffer.ptr, buffer.length, 0); } ();
+		() @trusted { ret = .send(socket, buffer.ptr, min(buffer.length, int.max), 0); } ();
 
 		if (ret < 0) {
 			auto err = getSocketError();
@@ -564,7 +564,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		auto socket = cast(StreamSocketFD)fd;
 
 		sizediff_t ret;
-		() @trusted { ret = .send(socket, slot.writeBuffer.ptr, slot.writeBuffer.length, 0); } ();
+		() @trusted { ret = .send(socket, slot.writeBuffer.ptr, min(slot.writeBuffer.length, int.max), 0); } ();
 
 		if (ret < 0) {
 			auto err = getSocketError();
@@ -725,7 +725,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		sizediff_t ret;
 		sockaddr_storage src_addr;
 		socklen_t src_addr_len = src_addr.sizeof;
-		() @trusted { ret = .recvfrom(socket, buffer.ptr, buffer.length, 0, cast(sockaddr*)&src_addr, &src_addr_len); } ();
+		() @trusted { ret = .recvfrom(socket, buffer.ptr, min(buffer.length, int.max), 0, cast(sockaddr*)&src_addr, &src_addr_len); } ();
 
 		if (ret < 0) {
 			auto err = getSocketError();
@@ -769,7 +769,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		sizediff_t ret;
 		sockaddr_storage src_addr;
 		socklen_t src_addr_len = src_addr.sizeof;
-		() @trusted { ret = .recvfrom(socket, slot.readBuffer.ptr, slot.readBuffer.length, 0, cast(sockaddr*)&src_addr, &src_addr_len); } ();
+		() @trusted { ret = .recvfrom(socket, slot.readBuffer.ptr, min(slot.readBuffer.length, int.max), 0, cast(sockaddr*)&src_addr, &src_addr_len); } ();
 
 		if (ret < 0) {
 			auto err = getSocketError();
@@ -791,10 +791,10 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 		sizediff_t ret;
 		if (target_address) {
-			() @trusted { ret = .sendto(socket, buffer.ptr, buffer.length, 0, target_address.name, target_address.nameLen); } ();
+			() @trusted { ret = .sendto(socket, buffer.ptr, min(buffer.length, int.max), 0, target_address.name, target_address.nameLen); } ();
 			m_loop.m_fds[socket].datagramSocket.targetAddr = target_address;
 		} else {
-			() @trusted { ret = .send(socket, buffer.ptr, buffer.length, 0); } ();
+			() @trusted { ret = .send(socket, buffer.ptr, min(buffer.length, int.max), 0); } ();
 		}
 
 		if (ret < 0) {
@@ -837,9 +837,9 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 		sizediff_t ret;
 		if (slot.targetAddr) {
-			() @trusted { ret = .sendto(socket, slot.writeBuffer.ptr, slot.writeBuffer.length, 0, slot.targetAddr.name, slot.targetAddr.nameLen); } ();
+			() @trusted { ret = .sendto(socket, slot.writeBuffer.ptr, min(slot.writeBuffer.length, int.max), 0, slot.targetAddr.name, slot.targetAddr.nameLen); } ();
 		} else {
-			() @trusted { ret = .send(socket, slot.writeBuffer.ptr, slot.writeBuffer.length, 0); } ();
+			() @trusted { ret = .send(socket, slot.writeBuffer.ptr, min(slot.writeBuffer.length, int.max), 0); } ();
 		}
 
 		if (ret < 0) {
@@ -875,7 +875,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	private SocketFD createSocket(AddressFamily family, int type)
 	{
-		int sock;
+		sock_t sock;
 		() @trusted { sock = socket(family, type, 0); } ();
 		if (sock == -1) return SocketFD.invalid;
 		setSocketNonBlocking(cast(SocketFD)sock);
@@ -1219,7 +1219,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 		}
 	}
 
-	final override void trigger(EventID event, bool notify_all = true)
+	final override void trigger(EventID event, bool notify_all)
 	{
 		auto slot = getSlot(event);
 		if (notify_all) {
@@ -1234,7 +1234,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 		}
 	}
 
-	final override void trigger(EventID event, bool notify_all = true)
+	final override void trigger(EventID event, bool notify_all)
 	shared @trusted {
 		import core.atomic : atomicStore;
 		auto thisus = cast(PosixEventDriverEvents)this;
@@ -1263,9 +1263,11 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 
 	private void onEvent(FD fd)
 	@trusted {
-		ulong cnt;
 		EventID event = cast(EventID)fd;
-		() @trusted { .read(event, &cnt, cnt.sizeof); } ();
+		version (linux) {
+			ulong cnt;
+			() @trusted { .read(event, &cnt, cnt.sizeof); } ();
+		}
 		import core.atomic : cas;
 		auto all = cas(&getSlot(event).triggerAll, true, false);
 		trigger(event, all);
@@ -1763,7 +1765,7 @@ private void closeSocket(SocketFD sockfd)
 private void setSocketNonBlocking(SocketFD sockfd)
 {
 	version (Windows) {
-		size_t enable = 1;
+		uint enable = 1;
 		() @trusted { ioctlsocket(sockfd, FIONBIO, &enable); } ();
 	} else {
 		() @trusted { fcntl(sockfd, F_SETFL, O_NONBLOCK, 1); } ();

@@ -174,7 +174,7 @@ struct AlgebraicChoppedVector(TCommon, TSpecific...)
 
 /** Efficient bit set of dynamic size.
 */
-struct SmallIntegerSet(V : uint)
+struct SmallIntegerSet(V : size_t)
 {
 	private {
 		uint[][4] m_bits;

@@ -162,7 +162,7 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 
 	void close(FileFD file)
 	{
-		() @trusted { .close(file); } ();
+		() @trusted { .close(cast(int)file); } ();
 	}
 
 	ulong getSize(FileFD file)
@@ -172,7 +172,7 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 			return .lseek(file, 0, SEEK_END);
 		} else {
 			stat_t st;
-			() @trusted { fstat(file, &st); } ();
+			() @trusted { fstat(cast(int)file, &st); } ();
 			return st.st_size;
 		}
 	}
@@ -240,7 +240,7 @@ log("start task");
 	{
 		auto f = () @trusted { return &m_files[descriptor]; } ();
 		if (!--f.refCount) {
-			.close(descriptor);
+			.close(cast(int)descriptor);
 			*f = FileInfo.init;
 			assert(!m_activeReads.contains(descriptor));
 			assert(!m_activeWrites.contains(descriptor));
@@ -274,18 +274,18 @@ log("start processing");
 		auto bytes = buffer;
 		version (Windows) {
 			assert(offset <= off_t.max);
-			.lseek(file, cast(off_t)offset, SEEK_SET);
+			.lseek(cast(int)file, cast(off_t)offset, SEEK_SET);
 		} else .lseek(file, offset, SEEK_SET);
 
 		scope (exit) {
 log("trigger event");
 			safeAtomicStore(f.bytesWritten, buffer.length - bytes.length);
-			() @trusted { return cast(shared)fd.m_events; } ().trigger(fd.m_readyEvent);
+			() @trusted { return cast(shared)fd.m_events; } ().trigger(fd.m_readyEvent, true);
 		}
 
 		while (bytes.length > 0) {
 			auto sz = min(bytes.length, 4096);
-			auto ret = () @trusted { return mixin("."~op)(file, bytes.ptr, cast(int)sz); } ();
+			auto ret = () @trusted { return mixin("."~op)(cast(int)file, bytes.ptr, cast(uint)sz); } ();
 			if (ret != sz) {
 				f.ioStatus = IOStatus.error;
 log("error");

@@ -872,7 +872,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 
 		BOOL ret;
 		() @trusted {
-			ret = ReadDirectoryChangesW(handle, slot.buffer.ptr, slot.buffer.length, slot.recursive,
+			ret = ReadDirectoryChangesW(handle, slot.buffer.ptr, cast(DWORD)slot.buffer.length, slot.recursive,
 				notifications, null, &slot.overlapped, &onIOCompleted);
 		} ();
 
