@@ -18,7 +18,7 @@ import eventcore.core;
 import eventcore.socket;
 import std.file : exists, remove;
 import std.socket : UnixAddress;
-import core.time : Duration;
+import core.time : Duration, msecs;
 
 ubyte[256] s_rbuf;
 bool s_done;
