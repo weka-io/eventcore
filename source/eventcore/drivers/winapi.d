@@ -433,7 +433,7 @@ final class WinAPIEventDriverDNS : EventDriverDNS {
 				size_t naddr = 0;
 				while (results) {
 					RefAddress addr = addr_storage[naddr];
-					addr.set(results.ai_addr, results.ai_addrlen);
+					addr.set(results.ai_addr, cast(socklen_t)results.ai_addrlen);
 					buf[naddr++] = addr;
 					results = results.ai_next;
 				}
