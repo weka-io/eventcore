@@ -70,6 +70,7 @@ final class ConsumableQueue(T)
 	*/
 	ConsumedRange consume()
 	@safe {
+		if (!m_pendingCount) return ConsumedRange(null, 0, 0);
 		auto first = (m_first + m_consumedCount) % m_storage.length;
 		auto count = m_pendingCount;
 		m_consumedCount += count;
