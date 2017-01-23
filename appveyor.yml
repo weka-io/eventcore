@@ -2,26 +2,33 @@ platform: x64
 environment:
  matrix:
   - DC: dmd
-    DVersion: 2.073.2
+    DVersion: 2.073.0
     arch: x64
+    config: select
   - DC: dmd
-    DVersion: 2.073.2
+    DVersion: 2.073.0
     arch: x86
+    config: select
   - DC: dmd
     DVersion: 2.072.2
     arch: x64
+    config: select
   - DC: dmd
     DVersion: 2.071.1
     arch: x86
+    config: select
   - DC: dmd
     DVersion: 2.070.0
     arch: x64
+    config: select
   - DC: ldc
     DVersion: 1.1.0-beta6
     arch: x86
+    config: select
   - DC: ldc
     DVersion: 1.0.0
     arch: x86
+    config: select
 
 matrix:
   allow_failures:
@@ -96,6 +103,7 @@ before_build:
   - '"%compilersetup%" %compilersetupargs%'
 
 build_script:
+ - dub build -b release --arch=%Darch% --compiler=%DC% --config=%CONFIG%
  - echo dummy build script - dont remove me
 
 test_script:
@@ -103,6 +111,5 @@ test_script:
  - echo %Darch%
  - echo %DC%
  - echo %PATH%
- - set CONFIG=select
  - '%DC% --version'
  - dub test --arch=%Darch% --compiler=%DC% --config=%CONFIG%
