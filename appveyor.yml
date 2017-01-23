@@ -23,11 +23,11 @@ environment:
     config: select
   - DC: ldc
     DVersion: 1.1.0-beta6
-    arch: x86
+    arch: x64
     config: select
   - DC: ldc
     DVersion: 1.0.0
-    arch: x86
+    arch: x64
     config: select
 
 matrix:
