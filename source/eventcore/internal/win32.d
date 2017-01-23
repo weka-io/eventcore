@@ -7,8 +7,6 @@ public import core.sys.windows.winsock2;
 
 extern(System) nothrow @nogc:
 
-BOOL GetFileSizeEx(HANDLE hFile, long *lpFileSize);
-
 enum {
 	FD_READ = 0x0001,
 	FD_WRITE = 0x0002,
