@@ -4,12 +4,12 @@
 	Epoll is an efficient API for asynchronous I/O on Linux, suitable for large
 	numbers of concurrently open sockets.
 */
-module eventcore.drivers.epoll;
+module eventcore.drivers.posix.epoll;
 @safe: /*@nogc:*/ nothrow:
 
 version (linux):
 
-public import eventcore.drivers.posix;
+public import eventcore.drivers.posix.driver;
 import eventcore.internal.utils;
 
 import core.time : Duration;

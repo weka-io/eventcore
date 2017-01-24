@@ -5,10 +5,10 @@
 	Windows. It has a good performance for small numbers of cuncurrently open
 	files/sockets, but is not suited for larger amounts.
 */
-module eventcore.drivers.select;
+module eventcore.drivers.posix.select;
 @safe: /*@nogc:*/ nothrow:
 
-public import eventcore.drivers.posix;
+public import eventcore.drivers.posix.driver;
 import eventcore.internal.utils;
 
 import core.time : Duration;

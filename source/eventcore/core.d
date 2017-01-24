@@ -2,9 +2,9 @@ module eventcore.core;
 
 public import eventcore.driver;
 
-import eventcore.drivers.select;
-import eventcore.drivers.epoll;
-import eventcore.drivers.kqueue;
+import eventcore.drivers.posix.select;
+import eventcore.drivers.posix.epoll;
+import eventcore.drivers.posix.kqueue;
 import eventcore.drivers.libasync;
 import eventcore.drivers.winapi;
 

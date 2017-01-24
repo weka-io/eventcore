@@ -4,7 +4,7 @@
 	Kqueue is an efficient API for asynchronous I/O on BSD flavors, including
 	OS X/macOS, suitable for large numbers of concurrently open sockets.
 */
-module eventcore.drivers.kqueue;
+module eventcore.drivers.posix.kqueue;
 @safe: /*@nogc:*/ nothrow:
 
 version (FreeBSD) enum have_kqueue = true;
@@ -13,7 +13,7 @@ else enum have_kqueue = false;
 
 static if (have_kqueue):
 
-public import eventcore.drivers.posix;
+public import eventcore.drivers.posix.driver;
 import eventcore.internal.utils;
 
 import core.time : Duration;
