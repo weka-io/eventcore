@@ -4,10 +4,14 @@ module eventcore.drivers.posix.signals;
 import eventcore.driver;
 import eventcore.drivers.posix.driver;
 
+import std.algorithm.comparison : among;
+
 
 final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSignals {
 @safe: /*@nogc:*/ nothrow:
+	import core.stdc.errno : errno, EAGAIN, EINPROGRESS;
 	import core.sys.posix.signal;
+	import core.sys.posix.unistd : close, read, write;
 	import core.sys.linux.sys.signalfd;
 
 	private Loop m_loop;

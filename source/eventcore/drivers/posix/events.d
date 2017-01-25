@@ -8,7 +8,8 @@ import eventcore.internal.consumablequeue : ConsumableQueue;
 import std.socket : InternetAddress;
 
 version (linux) {
-	extern (C) int eventfd(uint initval, int flags);
+	nothrow @nogc extern (C) int eventfd(uint initval, int flags);
+	import core.sys.posix.unistd : close, read, write;
 	enum EFD_NONBLOCK = 0x800;
 }
 

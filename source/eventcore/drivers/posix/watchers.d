@@ -7,7 +7,9 @@ import eventcore.drivers.posix.driver;
 
 final class InotifyEventDriverWatchers(Loop : PosixEventLoop) : EventDriverWatchers
 {
+	import core.stdc.errno : errno, EAGAIN, EINPROGRESS;
 	import core.sys.posix.fcntl, core.sys.posix.unistd, core.sys.linux.sys.inotify;
+	import std.algorithm.comparison : among;
 	import std.file;
 
 	private {
