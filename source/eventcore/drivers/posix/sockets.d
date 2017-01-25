@@ -48,16 +48,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		void invalidateSocket() @nogc @trusted nothrow { closeSocket(sockfd); sock = StreamSocketFD.invalid; }
 
 		int bret;
-		() @trusted { // scope + bind()
-			if (bind_address !is null) {
-				bret = bind(cast(sock_t)sock, bind_address.name, bind_address.nameLen);
-			} else {
-				scope bind_addr = new UnknownAddress;
-				bind_addr.name.sa_family = cast(ubyte)address.addressFamily;
-				bind_addr.name.sa_data[] = 0;
-				bret = bind(cast(sock_t)sock, bind_addr.name, bind_addr.nameLen);
-			}
-		} ();
+		if (bind_address !is null)
+			() @trusted { bret = bind(cast(sock_t)sock, bind_address.name, bind_address.nameLen); } ();
 
 		if (bret != 0) {
 			invalidateSocket();
