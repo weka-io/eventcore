@@ -144,6 +144,11 @@ void testStream()
 
 void main()
 {
+	scope (exit) {
+		if (exists(addr1)) remove(addr1);
+		if (exists(addr2)) remove(addr2);
+		if (exists(addr3)) remove(addr3);
+	}
 	testStream();
 	testDgram();
 }
