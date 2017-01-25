@@ -3,7 +3,7 @@ module eventcore.drivers.posix.dns;
 
 import eventcore.driver;
 import eventcore.drivers.posix.driver;
-import eventcore.internal.utils : ChoppedVector;
+import eventcore.internal.utils : ChoppedVector, print;
 
 import std.socket : Address, AddressFamily, InternetAddress, Internet6Address, UnknownAddress;
 version (Posix) {
