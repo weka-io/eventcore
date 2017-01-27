@@ -94,7 +94,8 @@ final class LibasyncEventDriverSockets : EventDriverSockets {
 		assert(false, "TODO!");
 	}
 
-	override StreamListenSocketFD listenStream(scope Address bind_address, AcceptCallback on_accept)
+	alias listenStream = EventDriverSockets.listenStream;
+	override StreamListenSocketFD listenStream(scope Address bind_address, ListenStreamOptions options, AcceptCallback on_accept)
 	{
 		assert(false, "TODO!");
 	}

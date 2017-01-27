@@ -144,7 +144,11 @@ interface EventDriverSockets {
 	StreamSocketFD adoptStream(int socket);
 
 	/// Creates a socket listening for incoming stream connections.
-	StreamListenSocketFD listenStream(scope Address bind_address, AcceptCallback on_accept);
+	StreamListenSocketFD listenStream(scope Address bind_address, StreamListenOptions options, AcceptCallback on_accept);
+
+	final StreamListenSocketFD listenStream(scope Address bind_address, AcceptCallback on_accept) {
+		return listenStream(bind_address, StreamListenOptions.defaults, on_accept);
+	}
 
 	/// Starts to wait for incoming connections on a listening socket.
 	void waitForConnections(StreamListenSocketFD sock, AcceptCallback on_accept);
@@ -502,6 +506,11 @@ enum ConnectionState {
 	passiveClose,
 	activeClose,
 	closed
+}
+
+enum StreamListenOptions {
+	defaults = 0,
+	reusePort = 1<<0,
 }
 
 /**

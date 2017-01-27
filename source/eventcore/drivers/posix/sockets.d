@@ -17,6 +17,9 @@ version (Posix) {
 	import core.sys.posix.unistd : close, read, write;
 	import core.stdc.errno : errno, EAGAIN, EINPROGRESS;
 	import core.sys.posix.fcntl;
+
+	version (linux) enum SO_REUSEPORT = 15;
+	else enum SO_REUSEPORT = 0x200;
 }
 version (Windows) {
 	import core.sys.windows.windows;
@@ -117,7 +120,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		}
 	}
 
-	final override StreamListenSocketFD listenStream(scope Address address, AcceptCallback on_accept)
+	alias listenStream = EventDriverSockets.listenStream;
+	final override StreamListenSocketFD listenStream(scope Address address, StreamListenOptions options, AcceptCallback on_accept)
 	{
 		log("Listen stream");
 		auto sockfd = createSocket(address.addressFamily, SOCK_STREAM);
@@ -131,15 +135,28 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			int tmp_reuse = 1;
 			// FIXME: error handling!
 			if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &tmp_reuse, tmp_reuse.sizeof) != 0) {
-				log("setsockopt failed.");
+				log("setsockopt SO_REUSEADDR failed.");
 				invalidateSocket();
-			} else if (bind(sockfd, address.name, address.nameLen) != 0) {
+				return;
+			}
+			version (Windows) {} else {
+				if ((options & StreamListenOptions.reusePort) && setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &tmp_reuse, tmp_reuse.sizeof) != 0) {
+					log("setsockopt SO_REUSEPORT failed.");
+					invalidateSocket();
+					return;
+				}
+			}
+			if (bind(sockfd, address.name, address.nameLen) != 0) {
 				log("bind failed.");
 				invalidateSocket();
-			} else if (listen(sockfd, 128) != 0) {
+				return;
+			}
+			if (listen(sockfd, 128) != 0) {
 				log("listen failed.");
 				invalidateSocket();
-			} else log("Success!");
+				return;
+			}
+			log("Success!");
 		} ();
 
 		if (sock == StreamListenSocketFD.invalid)
