@@ -192,7 +192,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			auto fd = cast(StreamSocketFD)sockfd;
 			m_loop.initFD(fd);
 			m_loop.m_fds[fd].specific = StreamSocketSlot.init;
-			m_loop.m_fds[fd].specific.state = ConnectionState.connected;
+			m_loop.m_fds[fd].streamSocket.state = ConnectionState.connected;
 			m_loop.registerFD(fd, EventMask.read|EventMask.write|EventMask.status);
 			//print("accept %d", sockfd);
 			scope RefAddress addrc = new RefAddress(() @trusted { return cast(sockaddr*)&addr; } (), addr_len);
