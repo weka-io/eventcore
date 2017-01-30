@@ -65,6 +65,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		m_loop.initFD(sock);
 		m_loop.registerFD(sock, EventMask.read|EventMask.write|EventMask.status);
 		m_loop.m_fds[sock].specific = StreamSocketSlot.init;
+		m_loop.setNotifyCallback!(EventType.status)(sock, &onConnectError);
 
 		auto ret = () @trusted { return connect(cast(sock_t)sock, address.name, address.nameLen); } ();
 		if (ret == 0) {
@@ -108,9 +109,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		with (m_loop.m_fds[sock].streamSocket) {
 			state = ConnectionState.connected;
 			assert(connectCallback !is null);
-			auto cb = connectCallback;
+			connectCallback(cast(StreamSocketFD)sock, ConnectStatus.connected);
 			connectCallback = null;
-			cb(cast(StreamSocketFD)sock, ConnectStatus.connected);
 		}
 	}
 
@@ -119,8 +119,9 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		// FIXME: determine the correct kind of error!
 		with (m_loop.m_fds[sock].streamSocket) {
 			state = ConnectionState.closed;
-			connectCallback(cast(StreamSocketFD)sock, ConnectStatus.refused);
+			auto cb = connectCallback;
 			connectCallback = null;
+			if (cb) cb(cast(StreamSocketFD)sock, ConnectStatus.refused);
 		}
 	}
 
@@ -198,6 +199,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			m_loop.m_fds[fd].specific = StreamSocketSlot.init;
 			m_loop.m_fds[fd].streamSocket.state = ConnectionState.connected;
 			m_loop.registerFD(fd, EventMask.read|EventMask.write|EventMask.status);
+			m_loop.setNotifyCallback!(EventType.status)(fd, &onConnectError);
 			//print("accept %d", sockfd);
 			scope RefAddress addrc = new RefAddress(() @trusted { return cast(sockaddr*)&addr; } (), addr_len);
 			m_loop.m_fds[listenfd].streamListen.acceptCallback(cast(StreamListenSocketFD)listenfd, fd, addrc);

@@ -48,10 +48,9 @@ final class EpollEventLoop : PosixEventLoop {
 			foreach (ref evt; m_events[0 .. ret]) {
 				debug (EventCoreEpollDebug) print("Epoll event on %s: %s", evt.data.fd, evt.events);
 				auto fd = cast(FD)evt.data.fd;
+				if (evt.events & (EPOLLERR|EPOLLHUP|EPOLLRDHUP)) notify!(EventType.status)(fd);
 				if (evt.events & EPOLLIN) notify!(EventType.read)(fd);
 				if (evt.events & EPOLLOUT) notify!(EventType.write)(fd);
-				if (evt.events & EPOLLERR) notify!(EventType.status)(fd);
-				else if (evt.events & EPOLLHUP) notify!(EventType.status)(fd);
 			}
 			return true;
 		} else return false;
@@ -70,7 +69,7 @@ final class EpollEventLoop : PosixEventLoop {
 		ev.events |= EPOLLET;
 		if (mask & EventMask.read) ev.events |= EPOLLIN;
 		if (mask & EventMask.write) ev.events |= EPOLLOUT;
-		if (mask & EventMask.status) ev.events |= EPOLLERR|EPOLLRDHUP;
+		if (mask & EventMask.status) ev.events |= EPOLLERR|EPOLLRDHUP|EPOLLRDHUP;
 		ev.data.fd = cast(int)fd;
 		() @trusted { epoll_ctl(m_epoll, EPOLL_CTL_ADD, cast(int)fd, &ev); } ();
 	}
