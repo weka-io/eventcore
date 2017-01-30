@@ -66,6 +66,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		m_loop.registerFD(sock, EventMask.read|EventMask.write|EventMask.status);
 		m_loop.m_fds[sock].specific = StreamSocketSlot.init;
 		m_loop.setNotifyCallback!(EventType.status)(sock, &onConnectError);
+		releaseRef(sock); // setNotifyCallback adds a reference, but waiting for status/disconnect should not affect the ref count
 
 		auto ret = () @trusted { return connect(cast(sock_t)sock, address.name, address.nameLen); } ();
 		if (ret == 0) {
@@ -200,6 +201,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			m_loop.m_fds[fd].streamSocket.state = ConnectionState.connected;
 			m_loop.registerFD(fd, EventMask.read|EventMask.write|EventMask.status);
 			m_loop.setNotifyCallback!(EventType.status)(fd, &onConnectError);
+			releaseRef(fd); // setNotifyCallback adds a reference, but waiting for status/disconnect should not affect the ref count
 			//print("accept %d", sockfd);
 			scope RefAddress addrc = new RefAddress(() @trusted { return cast(sockaddr*)&addr; } (), addr_len);
 			m_loop.m_fds[listenfd].streamListen.acceptCallback(cast(StreamListenSocketFD)listenfd, fd, addrc);
@@ -696,6 +698,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	final override bool releaseRef(SocketFD fd)
 	{
 		assert(m_loop.m_fds[fd].common.refCount > 0, "Releasing reference to unreferenced socket FD.");
+		print("release %s %s", fd, m_loop.m_fds[fd].common.refCount);
 		if (--m_loop.m_fds[fd].common.refCount == 0) {
 			m_loop.unregisterFD(fd, EventMask.read|EventMask.write|EventMask.status);
 			m_loop.clearFD(fd);
