@@ -108,9 +108,9 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		m_loop.setNotifyCallback!(EventType.write)(sock, null);
 		with (m_loop.m_fds[sock].streamSocket) {
 			state = ConnectionState.connected;
-			assert(connectCallback !is null);
-			connectCallback(cast(StreamSocketFD)sock, ConnectStatus.connected);
+			auto cb = connectCallback;
 			connectCallback = null;
+			if (cb) cb(cast(StreamSocketFD)sock, ConnectStatus.connected);
 		}
 	}
 
@@ -253,13 +253,11 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		}
 
 		if (ret == 0 && buffer.length > 0) {
-			print("disconnect");
 			on_read_finish(socket, IOStatus.disconnected, 0);
 			return;
 		}
 
 		if (ret < 0 && mode == IOMode.immediate) {
-			print("wouldblock");
 			on_read_finish(socket, IOStatus.wouldBlock, 0);
 			return;
 		}
