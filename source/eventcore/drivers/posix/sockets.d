@@ -43,6 +43,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override StreamSocketFD connectStream(scope Address address, scope Address bind_address, ConnectCallback on_connect)
 	{
+		assert(on_connect !is null);
+
 		auto sockfd = createSocket(address.addressFamily, SOCK_STREAM);
 		if (sockfd == -1) return StreamSocketFD.invalid;
 
@@ -105,8 +107,10 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		m_loop.setNotifyCallback!(EventType.write)(sock, null);
 		with (m_loop.m_fds[sock].streamSocket) {
 			state = ConnectionState.connected;
-			connectCallback(cast(StreamSocketFD)sock, ConnectStatus.connected);
+			assert(connectCallback !is null);
+			auto cb = connectCallback;
 			connectCallback = null;
+			cb(cast(StreamSocketFD)sock, ConnectStatus.connected);
 		}
 	}
 
