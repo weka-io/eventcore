@@ -422,6 +422,9 @@ interface EventDriverTimers {
 			Returns `false` $(I iff) the last reference was removed by this call.
 	*/
 	bool releaseRef(TimerID descriptor);
+
+	/// Determines if the given timer's reference count equals one.
+	bool isUnique(TimerID descriptor) const;
 }
 
 interface EventDriverWatchers {

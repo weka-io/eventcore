@@ -88,6 +88,7 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		assert(tm !is null);
 		tm.id = id;
 		tm.refCount = 1;
+		tm.timeout = long.max;
 		m_timers[id] = tm;
 		return id;
 	}
@@ -138,6 +139,7 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 
 	final override void wait(TimerID timer, TimerCallback callback)
 	{
+		import eventcore.internal.utils; print("emit timer");
 		assert(!m_timers[timer].callback, "Calling wait() no a timer that is already waiting.");
 		m_timers[timer].callback = callback;
 	}
@@ -178,6 +180,12 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		}
 
 		return true;
+	}
+
+	final bool isUnique(TimerID descriptor)
+	const {
+		if (descriptor == TimerID.init) return false;
+		return m_timers[descriptor].refCount == 1;
 	}
 }
 
