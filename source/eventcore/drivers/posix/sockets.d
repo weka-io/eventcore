@@ -698,7 +698,6 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	final override bool releaseRef(SocketFD fd)
 	{
 		assert(m_loop.m_fds[fd].common.refCount > 0, "Releasing reference to unreferenced socket FD.");
-		print("release %s %s", fd, m_loop.m_fds[fd].common.refCount);
 		if (--m_loop.m_fds[fd].common.refCount == 0) {
 			m_loop.unregisterFD(fd, EventMask.read|EventMask.write|EventMask.status);
 			m_loop.clearFD(fd);
