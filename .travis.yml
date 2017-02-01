@@ -11,7 +11,7 @@ d:
   # catching most DMD version related build failures early
   - dmd-2.073.0
   - dmd-2.070.2
-  - ldc-1.1.0-beta6
+  - ldc-1.1.0
   - ldc-1.0.0
   - dmd-beta
   - dmd-2.072.2
@@ -36,7 +36,7 @@ matrix:
     - os: osx
       d: dmd-2.070.2
     - os: osx
-      d: ldc-1.1.0-beta6
+      d: ldc-1.1.0
     - os: osx
       d: ldc-1.0.0
 
