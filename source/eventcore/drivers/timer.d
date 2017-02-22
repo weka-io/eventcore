@@ -124,6 +124,7 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 				m_timerQueue.linearRemove(upper.release.take(1));
 				break;
 			}
+			upper.popFront();
 		}
 	}
 
