@@ -57,11 +57,15 @@ final class WinAPIEventDriverEvents : EventDriverEvents {
 		auto pe = event in m_events;
 		assert(pe !is null, "Invalid event ID passed to triggerEvent.");
 		if (notify_all) {
-			foreach (w; pe.waiters.consume)
+			foreach (w; pe.waiters.consume) {
+				m_core.removeWaiter();
 				w(event);
+			}
 		} else {
-			if (!pe.waiters.empty)
+			if (!pe.waiters.empty) {
+				m_core.removeWaiter();
 				pe.waiters.consumeOne()(event);
+			}
 		}
 	}
 
@@ -82,6 +86,7 @@ final class WinAPIEventDriverEvents : EventDriverEvents {
 
 	override void wait(EventID event, EventCallback on_event)
 	{
+		m_core.addWaiter();
 		return m_events[event].waiters.put(on_event);
 	}
 
@@ -91,6 +96,7 @@ final class WinAPIEventDriverEvents : EventDriverEvents {
 		import std.algorithm.mutation : remove;
 
 		m_events[event].waiters.removePending(on_event);
+		m_core.removeWaiter();
 	}
 
 	override void addRef(EventID descriptor)
