@@ -35,6 +35,9 @@ final class WinAPIEventDriverCore : EventDriverCore {
 
 	override size_t waiterCount() { return m_waiterCount; }
 
+	package void addWaiter() { m_waiterCount++; }
+	package void removeWaiter() { m_waiterCount--; }
+
 	override ExitReason processEvents(Duration timeout = Duration.max)
 	{
 		import std.algorithm : min;
@@ -63,7 +66,7 @@ final class WinAPIEventDriverCore : EventDriverCore {
 				if (m_exit) {
 					m_exit = false;
 					return ExitReason.exited;
-				}
+				} else if (got_event) break;
 				if (timeout != Duration.max)
 					timeout -= (now - prev_step).hnsecs;
 			} while (timeout > 0.seconds);
@@ -108,8 +111,10 @@ final class WinAPIEventDriverCore : EventDriverCore {
 				timeout_msecs, QS_ALLEVENTS, MWMO_ALERTABLE|MWMO_INPUTAVAILABLE); } ();
 			
 			if (ret >= WAIT_OBJECT_0 && ret < WAIT_OBJECT_0 + m_registeredEvents.length) {
-				if (auto pc = m_registeredEvents[ret - WAIT_OBJECT_0] in m_eventCallbacks)
+				if (auto pc = m_registeredEvents[ret - WAIT_OBJECT_0] in m_eventCallbacks) {
 					(*pc)();
+					got_event = true;
+				}
 			}
 			/*if (ret == WAIT_OBJECT_0) {
 				got_event = true;
@@ -125,10 +130,9 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		MSG msg;
 		//uint cnt = 0;
 		while (() @trusted { return PeekMessageW(&msg, null, 0, 0, PM_REMOVE); } ()) {
-			if( msg.message == WM_QUIT ) {
-				m_exit = true;
-				return false;
-			}
+			if (msg.message == WM_QUIT && m_exit)
+				break;
+
 			() @trusted {
 				TranslateMessage(&msg);
 				DispatchMessageW(&msg);
