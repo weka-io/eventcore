@@ -2,37 +2,41 @@ platform: x64
 environment:
  matrix:
   - DC: dmd
-    DVersion: 2.073.0
+    DVersion: 2.073.1
     arch: x64
-    config: select
+    config: winapi
   - DC: dmd
-    DVersion: 2.073.0
+    DVersion: 2.073.1
     arch: x86
-    config: select
+    config: winapi
   - DC: dmd
-    DVersion: 2.073.0
+    DVersion: 2.073.1
     arch: x86_mscoff
+    config: winapi
+  - DC: dmd
+    DVersion: 2.073.1
+    arch: x86
     config: select
   - DC: dmd
     DVersion: 2.072.2
     arch: x64
-    config: select
+    config: winapi
   - DC: dmd
     DVersion: 2.071.1
     arch: x86
-    config: select
+    config: winapi
   - DC: dmd
     DVersion: 2.070.0
     arch: x64
-    config: select
+    config: winapi
   - DC: ldc
     DVersion: 1.1.0-beta6
     arch: x64
-    config: select
+    config: winapi
   - DC: ldc
     DVersion: 1.0.0
     arch: x64
-    config: select
+    config: winapi
 
 matrix:
   allow_failures:
@@ -91,6 +95,10 @@ before_build:
             $env:compilersetupargs = "x86";
             $env:Darch = "x86";
           }
+        elseif($env:arch -eq "x86_mscoff"){
+            $env:compilersetupargs = "x86";
+            $env:Darch = "x86_mscoff";
+        }
         elseif($env:arch -eq "x64"){
             $env:compilersetupargs = "amd64";
             $env:Darch = "x86_64";
