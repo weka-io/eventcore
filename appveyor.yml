@@ -8,7 +8,7 @@ environment:
   - DC: dmd
     DVersion: 2.073.1
     arch: x86
-    config: winapi
+    config: winapi-optlink
   - DC: dmd
     DVersion: 2.073.1
     arch: x86_mscoff
@@ -16,7 +16,7 @@ environment:
   - DC: dmd
     DVersion: 2.073.1
     arch: x86
-    config: select
+    config: select-optlink
   - DC: dmd
     DVersion: 2.072.2
     arch: x64
@@ -24,7 +24,7 @@ environment:
   - DC: dmd
     DVersion: 2.071.1
     arch: x86
-    config: winapi
+    config: winapi-optlink
   - DC: dmd
     DVersion: 2.070.0
     arch: x64
