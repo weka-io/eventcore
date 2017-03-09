@@ -110,12 +110,14 @@ final class WinAPIEventDriverCore : EventDriverCore {
 			auto ret = () @trusted { return MsgWaitForMultipleObjectsEx(cast(DWORD)m_registeredEvents.length, m_registeredEvents.ptr,
 				timeout_msecs, QS_ALLEVENTS, MWMO_ALERTABLE|MWMO_INPUTAVAILABLE); } ();
 			
-			if (ret >= WAIT_OBJECT_0 && ret < WAIT_OBJECT_0 + m_registeredEvents.length) {
+			if (ret == WAIT_IO_COMPLETION) got_event = true;
+			else if (ret >= WAIT_OBJECT_0 && ret < WAIT_OBJECT_0 + m_registeredEvents.length) {
 				if (auto pc = m_registeredEvents[ret - WAIT_OBJECT_0] in m_eventCallbacks) {
 					(*pc)();
 					got_event = true;
 				}
 			}
+
 			/*if (ret == WAIT_OBJECT_0) {
 				got_event = true;
 				Win32TCPConnection[] to_remove;
