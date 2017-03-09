@@ -10,6 +10,10 @@ environment:
     arch: x86
     config: select
   - DC: dmd
+    DVersion: 2.073.0
+    arch: x86_mscoff
+    config: select
+  - DC: dmd
     DVersion: 2.072.2
     arch: x64
     config: select
