@@ -213,7 +213,16 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		return m_loop.m_fds[sock].streamSocket.state;
 	}
 
-	bool getLocalAddress(StreamSocketFD sock, scope RefAddress dst)
+	final override bool getLocalAddress(StreamSocketFD sock, scope RefAddress dst)
+	{
+		socklen_t addr_len = dst.nameLen;
+		if (() @trusted { return getpeername(cast(sock_t)sock, dst.name, &addr_len); } () != 0)
+			return false;
+		dst.cap(addr_len);
+		return true;
+	}
+
+	final override bool getRemoteAddress(StreamSocketFD sock, scope RefAddress dst)
 	{
 		socklen_t addr_len = dst.nameLen;
 		if (() @trusted { return getsockname(cast(sock_t)sock, dst.name, &addr_len); } () != 0)
@@ -221,7 +230,6 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		dst.cap(addr_len);
 		return true;
 	}
-
 
 	final override void setTCPNoDelay(StreamSocketFD socket, bool enable)
 	{

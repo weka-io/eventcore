@@ -159,6 +159,9 @@ interface EventDriverSockets {
 	/// Retrieves the bind address of a socket.
 	bool getLocalAddress(StreamSocketFD sock, scope RefAddress dst);
 
+	/// Retrieves the address of the connected peer.
+	bool getRemoteAddress(StreamSocketFD sock, scope RefAddress dst);
+
 	/// Sets the `TCP_NODELAY` option on a socket
 	void setTCPNoDelay(StreamSocketFD socket, bool enable);
 

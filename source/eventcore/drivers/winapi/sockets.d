@@ -40,6 +40,11 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		assert(false, "TODO!");
 	}
 
+	override bool getRemoteAddress(StreamSocketFD sock, scope RefAddress dst)
+	{
+		assert(false, "TODO!");
+	}
+
 	override void setTCPNoDelay(StreamSocketFD socket, bool enable)
 	{
 		assert(false, "TODO!");
