@@ -35,12 +35,12 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		assert(false, "TODO!");
 	}
 
-	override bool getLocalAddress(StreamSocketFD sock, scope RefAddress dst)
+	override bool getLocalAddress(SocketFD sock, scope RefAddress dst)
 	{
 		assert(false, "TODO!");
 	}
 
-	override bool getRemoteAddress(StreamSocketFD sock, scope RefAddress dst)
+	override bool getRemoteAddress(SocketFD sock, scope RefAddress dst)
 	{
 		assert(false, "TODO!");
 	}

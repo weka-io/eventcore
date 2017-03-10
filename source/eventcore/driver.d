@@ -157,10 +157,10 @@ interface EventDriverSockets {
 	ConnectionState getConnectionState(StreamSocketFD sock);
 
 	/// Retrieves the bind address of a socket.
-	bool getLocalAddress(StreamSocketFD sock, scope RefAddress dst);
+	bool getLocalAddress(SocketFD sock, scope RefAddress dst);
 
 	/// Retrieves the address of the connected peer.
-	bool getRemoteAddress(StreamSocketFD sock, scope RefAddress dst);
+	bool getRemoteAddress(SocketFD sock, scope RefAddress dst);
 
 	/// Sets the `TCP_NODELAY` option on a socket
 	void setTCPNoDelay(StreamSocketFD socket, bool enable);
@@ -247,6 +247,10 @@ interface EventDriverSockets {
 				`DatagramSocketFD.invalid` will be returned instead.
 	*/
 	DatagramSocketFD adoptDatagramSocket(int socket);
+
+	/** Sets an address to use as the default target address for sent datagrams.
+	*/
+	void setTargetAddress(DatagramSocketFD socket, scope Address target_address);
 
 	/// Sets the `SO_BROADCAST` socket option.
 	bool setBroadcast(DatagramSocketFD socket, bool enable);

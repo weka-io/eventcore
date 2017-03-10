@@ -213,7 +213,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		return m_loop.m_fds[sock].streamSocket.state;
 	}
 
-	final override bool getLocalAddress(StreamSocketFD sock, scope RefAddress dst)
+	final override bool getLocalAddress(SocketFD sock, scope RefAddress dst)
 	{
 		socklen_t addr_len = dst.nameLen;
 		if (() @trusted { return getpeername(cast(sock_t)sock, dst.name, &addr_len); } () != 0)
@@ -222,7 +222,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		return true;
 	}
 
-	final override bool getRemoteAddress(StreamSocketFD sock, scope RefAddress dst)
+	final override bool getRemoteAddress(SocketFD sock, scope RefAddress dst)
 	{
 		socklen_t addr_len = dst.nameLen;
 		if (() @trusted { return getsockname(cast(sock_t)sock, dst.name, &addr_len); } () != 0)
@@ -550,6 +550,11 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		m_loop.registerFD(fd, EventMask.read|EventMask.write|EventMask.status);
 		m_loop.m_fds[fd].specific = DgramSocketSlot.init;
 		return fd;
+	}
+
+	final override void setTargetAddress(DatagramSocketFD socket, scope Address target_address)
+	{
+		() @trusted { connect(cast(sock_t)socket, target_address.name, target_address.nameLen); } ();
 	}
 
 	final override bool setBroadcast(DatagramSocketFD socket, bool enable)
