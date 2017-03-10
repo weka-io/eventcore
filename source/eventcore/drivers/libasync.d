@@ -95,7 +95,7 @@ final class LibasyncEventDriverSockets : EventDriverSockets {
 	}
 
 	alias listenStream = EventDriverSockets.listenStream;
-	override StreamListenSocketFD listenStream(scope Address bind_address, ListenStreamOptions options, AcceptCallback on_accept)
+	override StreamListenSocketFD listenStream(scope Address bind_address, StreamListenOptions options, AcceptCallback on_accept)
 	{
 		assert(false, "TODO!");
 	}
@@ -110,7 +110,12 @@ final class LibasyncEventDriverSockets : EventDriverSockets {
 		assert(false, "TODO!");
 	}
 
-	override bool getLocalAddress(StreamSocketFD sock, scope RefAddress dst)
+	override bool getLocalAddress(SocketFD sock, scope RefAddress dst)
+	{
+		assert(false, "TODO!");
+	}
+
+	override bool getRemoteAddress(SocketFD sock, scope RefAddress dst)
 	{
 		assert(false, "TODO!");
 	}
@@ -165,6 +170,10 @@ final class LibasyncEventDriverSockets : EventDriverSockets {
 		assert(false);
 	}
 
+	override void setTargetAddress(DatagramSocketFD socket, scope Address target_address)
+	{
+		assert(false);
+	}
 
 	override bool setBroadcast(DatagramSocketFD socket, bool enable)
 	{
@@ -369,6 +378,11 @@ final class LibasyncEventDriverTimers : EventDriverTimers {
 	}
 
 	override bool releaseRef(TimerID descriptor)
+	{
+		assert(false, "TODO!");
+	}
+
+	override bool isUnique(TimerID descriptor) const
 	{
 		assert(false, "TODO!");
 	}
