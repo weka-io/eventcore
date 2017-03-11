@@ -95,6 +95,11 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		assert(false);
 	}
 
+	override void setTargetAddress(DatagramSocketFD socket, scope Address target_address)
+	{
+		assert(false);
+	}
+
 	override bool setBroadcast(DatagramSocketFD socket, bool enable)
 	{
 		assert(false, "TODO!");
