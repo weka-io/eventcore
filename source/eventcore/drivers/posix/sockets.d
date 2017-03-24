@@ -216,7 +216,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	final override bool getLocalAddress(SocketFD sock, scope RefAddress dst)
 	{
 		socklen_t addr_len = dst.nameLen;
-		if (() @trusted { return getpeername(cast(sock_t)sock, dst.name, &addr_len); } () != 0)
+		if (() @trusted { return getsockname(cast(sock_t)sock, dst.name, &addr_len); } () != 0)
 			return false;
 		dst.cap(addr_len);
 		return true;
@@ -225,7 +225,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	final override bool getRemoteAddress(SocketFD sock, scope RefAddress dst)
 	{
 		socklen_t addr_len = dst.nameLen;
-		if (() @trusted { return getsockname(cast(sock_t)sock, dst.name, &addr_len); } () != 0)
+		if (() @trusted { return getpeername(cast(sock_t)sock, dst.name, &addr_len); } () != 0)
 			return false;
 		dst.cap(addr_len);
 		return true;
