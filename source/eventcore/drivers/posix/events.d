@@ -35,7 +35,9 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 	final override EventID create()
 	{
 		version (linux) {
-			auto id = cast(EventID)eventfd(0, EFD_NONBLOCK);
+			auto eid = eventfd(0, EFD_NONBLOCK);
+			if (eid == -1) return EventID.invalid;
+			auto id = cast(EventID)eid;
 			m_loop.initFD(id);
 			m_loop.m_fds[id].specific = EventSlot(new ConsumableQueue!EventCallback); // FIXME: avoid dynamic memory allocation
 			m_loop.registerFD(id, EventMask.read);
