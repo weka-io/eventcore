@@ -118,6 +118,7 @@ struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
 			while (l <= chunkidx) l *= 2;
 			() @trusted {
 				auto newptr = cast(ChunkPtr*)realloc(m_chunks.ptr, l * ChunkPtr.length);
+				assert(newptr !is null, "Failed to allocate chunk index!");
 				m_chunks = newptr[0 .. l];
 			} ();
 		}
@@ -125,6 +126,7 @@ struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
 		while (m_chunkCount <= chunkidx) {
 			() @trusted { 
 				auto ptr = cast(ChunkPtr)calloc(chunkSize, T.sizeof);
+				assert(ptr !is null, "Failed to allocate chunk!");
 				GC.addRange(ptr, chunkSize * T.sizeof);
 				m_chunks[m_chunkCount++] = ptr;
 			} ();
