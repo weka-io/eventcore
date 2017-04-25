@@ -59,7 +59,7 @@ final class KqueueEventLoop : PosixEventLoop {
 		m_changes.length = 0;
 		m_changes.assumeSafeAppend();
 
-		print("kevent returned %s", ret);
+		//print("kevent returned %s", ret);
 
 		if (ret > 0) {
 			foreach (ref evt; m_events[0 .. ret]) {
