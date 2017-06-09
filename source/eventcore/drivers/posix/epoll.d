@@ -69,7 +69,7 @@ final class EpollEventLoop : PosixEventLoop {
 		ev.events |= EPOLLET;
 		if (mask & EventMask.read) ev.events |= EPOLLIN;
 		if (mask & EventMask.write) ev.events |= EPOLLOUT;
-		if (mask & EventMask.status) ev.events |= EPOLLERR|EPOLLRDHUP|EPOLLRDHUP;
+		if (mask & EventMask.status) ev.events |= EPOLLERR|EPOLLHUP|EPOLLRDHUP;
 		ev.data.fd = cast(int)fd;
 		() @trusted { epoll_ctl(m_epoll, EPOLL_CTL_ADD, cast(int)fd, &ev); } ();
 	}
@@ -88,7 +88,7 @@ final class EpollEventLoop : PosixEventLoop {
 		//ev.events = EPOLLONESHOT;
 		if (mask & EventMask.read) ev.events |= EPOLLIN;
 		if (mask & EventMask.write) ev.events |= EPOLLOUT;
-		if (mask & EventMask.status) ev.events |= EPOLLERR|EPOLLRDHUP;
+		if (mask & EventMask.status) ev.events |= EPOLLERR|EPOLLHUP|EPOLLRDHUP;
 		ev.data.fd = cast(int)fd;
 		() @trusted { epoll_ctl(m_epoll, EPOLL_CTL_MOD, cast(int)fd, &ev); } ();
 	}
