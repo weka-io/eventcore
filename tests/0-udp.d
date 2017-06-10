@@ -55,9 +55,6 @@ void main()
 				destroy(s_connectedSocket);
 				s_done = true;
 				log("done.");
-
-				// FIXME: this shouldn't be necessary:
-				eventDriver.core.exit();
 			})(s_rbuf, IOMode.immediate);
 		});
 	})(s_rbuf, IOMode.once);
@@ -70,7 +67,7 @@ void main()
 	ExitReason er;
 	do er = eventDriver.core.processEvents(Duration.max);
 	while (er == ExitReason.idle);
-	//assert(er == ExitReason.outOfWaiters); // FIXME: see above
+	assert(er == ExitReason.outOfWaiters);
 	assert(s_done);
 }
 

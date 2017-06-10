@@ -39,8 +39,8 @@ void main()
 				assert(change.kind == FileChangeKind.removed);
 				assert(change.directory == ".");
 				assert(change.name == testFilename);
+				eventDriver.watchers.releaseRef(id);
 				s_done = true;
-				eventDriver.core.exit();
 				break;
 		}
 	});
@@ -63,7 +63,7 @@ void main()
 	ExitReason er;
 	do er = eventDriver.core.processEvents(Duration.max);
 	while (er == ExitReason.idle);
-	//assert(er == ExitReason.outOfWaiters); // FIXME: see above
+	assert(er == ExitReason.outOfWaiters);
 	assert(s_done);
 	s_done = false;
 

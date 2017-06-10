@@ -43,9 +43,6 @@ void main()
 				destroy(server);
 				destroy(client);
 				s_done = true;
-
-				// FIXME: this shouldn't ne necessary:
-				eventDriver.core.exit();
 			})(s_rbuf, IOMode.immediate);
 		})(s_rbuf[0 .. 0], IOMode.once);
 	});
@@ -67,7 +64,7 @@ void main()
 	ExitReason er;
 	do er = eventDriver.core.processEvents(Duration.max);
 	while (er == ExitReason.idle);
-	//assert(er == ExitReason.outOfWaiters); // FIXME: see above
+	assert(er == ExitReason.outOfWaiters);
 	assert(s_done);
 	s_done = false;
 

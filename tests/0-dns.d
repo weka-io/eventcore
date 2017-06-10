@@ -17,17 +17,16 @@ void main()
 		assert(status == DNSStatus.ok);
 		assert(addrs.length >= 1);
 		foreach (a; addrs) {
-			try 	writefln("addr %s (%s)", a.toAddrString(), a.toPortString());
+			try writefln("addr %s (%s)", a.toAddrString(), a.toPortString());
 			catch (Exception e) assert(false, e.msg);
 		}
 		s_done = true;
-		eventDriver.core.exit();
 	});
 
 	ExitReason er;
 	do er = eventDriver.core.processEvents(Duration.max);
 	while (er == ExitReason.idle);
-	//assert(er == ExitReason.outOfWaiters); // FIXME: see above
+	assert(er == ExitReason.outOfWaiters);
 	assert(s_done);
 	s_done = false;
 }

@@ -27,7 +27,6 @@ void test(bool notify_all)
 			assert(!s_done);
 			s_done = true;
 			eventDriver.timers.cancelWait(tm);
-			eventDriver.core.exit();
 		});
 	});
 
@@ -51,7 +50,7 @@ void test(bool notify_all)
 	ExitReason er;
 	do er = eventDriver.core.processEvents(Duration.max);
 	while (er == ExitReason.idle);
-	//assert(er == ExitReason.outOfWaiters); // FIXME: see above
+	assert(er == ExitReason.outOfWaiters);
 	assert(s_done);
 	s_done = false;
 }
