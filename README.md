@@ -72,6 +72,5 @@ File watcher     | &mdash;
 ### Open questions
 
 - Error code reporting
-- Adopting existing file descriptors (done for files)
 - Enqueued writes
 - Use the type system to prohibit passing thread-local handles to foreign threads
