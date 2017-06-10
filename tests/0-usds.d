@@ -118,9 +118,6 @@ void testStream()
 				destroy(server);
 				destroy(client);
 				s_done = true;
-
-				// FIXME: this shouldn't ne necessary:
-				eventDriver.core.exit();
 			})(s_rbuf, IOMode.once);
 		})(s_rbuf, IOMode.once);
 	});
@@ -137,7 +134,7 @@ void testStream()
 	ExitReason er;
 	do er = eventDriver.core.processEvents(Duration.max);
 	while (er == ExitReason.idle);
-	//assert(er == ExitReason.outOfWaiters); // FIXME: see above
+	assert(er == ExitReason.outOfWaiters);
 	assert(s_done);
 	s_done = false;
 }

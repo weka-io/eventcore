@@ -32,23 +32,30 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 		m_sockets = sockets;
 	}
 
+	package @property Loop loop() { return m_loop; }
+
 	final override EventID create()
+	{
+		return createInternal(false);
+	}
+
+	package(eventcore) EventID createInternal(bool is_internal = true)
 	{
 		version (linux) {
 			auto eid = eventfd(0, EFD_NONBLOCK);
 			if (eid == -1) return EventID.invalid;
 			auto id = cast(EventID)eid;
-			m_loop.initFD(id);
-			m_loop.m_fds[id].specific = EventSlot(new ConsumableQueue!EventCallback); // FIXME: avoid dynamic memory allocation
+			m_loop.initFD(id, FDFlags.internal);
+			m_loop.m_fds[id].specific = EventSlot(new ConsumableQueue!EventCallback, false, is_internal); // FIXME: avoid dynamic memory allocation
 			m_loop.registerFD(id, EventMask.read);
 			m_loop.setNotifyCallback!(EventType.read)(id, &onEvent);
 			return id;
 		} else {
 			auto addr = new InternetAddress(0x7F000001, 0);
-			auto s = m_sockets.createDatagramSocket(addr, addr);
+			auto s = m_sockets.createDatagramSocketInternal(addr, addr, true);
 			if (s == DatagramSocketFD.invalid) return EventID.invalid;
 			m_sockets.receive(s, m_buf, IOMode.once, &onSocketData);
-			m_events[s] = EventSlot(new ConsumableQueue!EventCallback); // FIXME: avoid dynamic memory allocation
+			m_events[s] = EventSlot(new ConsumableQueue!EventCallback, false, is_internal); // FIXME: avoid dynamic memory allocation
 			return cast(EventID)s;
 		}
 	}
@@ -60,12 +67,12 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 			//log("emitting only for this thread (%s waiters)", m_fds[event].waiters.length);
 			foreach (w; slot.waiters.consume) {
 				//log("emitting waiter %s %s", cast(void*)w.funcptr, w.ptr);
-				m_loop.m_waiterCount--;
+				if (!isInternal(event)) m_loop.m_waiterCount--;
 				w(event);
 			}
 		} else {
 			if (!slot.waiters.empty) {
-				m_loop.m_waiterCount--;
+				if (!isInternal(event)) m_loop.m_waiterCount--;
 				slot.waiters.consumeOne()(event);
 			}
 		}
@@ -85,7 +92,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 
 	final override void wait(EventID event, EventCallback on_event)
 	{
-		m_loop.m_waiterCount++;
+		if (!isInternal(event)) m_loop.m_waiterCount++;
 		getSlot(event).waiters.put(on_event);
 	}
 
@@ -94,7 +101,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 		import std.algorithm.searching : countUntil;
 		import std.algorithm.mutation : remove;
 
-		m_loop.m_waiterCount--;
+		if (!isInternal(event)) m_loop.m_waiterCount--;
 		getSlot(event).waiters.removePending(on_event);
 	}
 
@@ -171,10 +178,16 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 	{
 		return m_loop.m_fds[id].common.refCount;
 	}
+
+	private bool isInternal(EventID id)
+	{
+		return getSlot(id).isInternal;
+	}
 }
 
 package struct EventSlot {
 	alias Handle = EventID;
 	ConsumableQueue!EventCallback waiters;
 	shared bool triggerAll;
+	bool isInternal;
 }

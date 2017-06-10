@@ -180,7 +180,10 @@ struct SmallIntegerSet(V : size_t)
 {
 	private {
 		uint[][4] m_bits;
+		size_t m_count;
 	}
+
+	@property bool empty() const { return m_count == 0; }
 
 	void insert(V i)
 	{
@@ -189,6 +192,7 @@ struct SmallIntegerSet(V : size_t)
 			i /= 32;
 			if (i >= m_bits[j].length)
 				m_bits[j].length = nextPOT(i+1);
+			if (j == 0 && !(m_bits[j][i] & b)) m_count++;
 			m_bits[j][i] |= b;
 		}
 	}
@@ -199,6 +203,7 @@ struct SmallIntegerSet(V : size_t)
 			uint b = 1u << (i%32);
 			i /= 32;
 			if (!m_bits[j][i]) break;
+			if (j == 0 && m_bits[j][i] & b) m_count--;
 			m_bits[j][i] &= ~b;
 			if (m_bits[j][i]) break;
 		}
@@ -237,10 +242,13 @@ unittest {
 
 	SmallIntegerSet!uint set;
 	bool[uint] controlset;
+
+	assert(set.empty);
 	foreach (i; ints) {
 		set.insert(i);
 		controlset[i] = true;
 	}
+	assert(!set.empty);
 
 	foreach (jidx, j; ints) {
 		size_t cnt = 0;
@@ -256,6 +264,7 @@ unittest {
 		set.remove(j);
 		controlset.remove(j);
 	}
+	assert(set.empty);
 
 	foreach (i; set) assert(false);
 }

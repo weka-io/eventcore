@@ -21,8 +21,8 @@ void main()
 		assert(!s_done);
 		assert(status == SignalStatus.ok);
 		assert(sig == () @trusted { return SIGUSR1; } ());
+		eventDriver.signals.releaseRef(id);
 		s_done = true;
-		eventDriver.core.exit();
 	});
 
 	auto tm = eventDriver.timers.create();
@@ -34,7 +34,7 @@ void main()
 	ExitReason er;
 	do er = eventDriver.core.processEvents(Duration.max);
 	while (er == ExitReason.idle);
-	//assert(er == ExitReason.outOfWaiters); // FIXME: see above
+	assert(er == ExitReason.outOfWaiters);
 	assert(s_done);
 	s_done = false;
 

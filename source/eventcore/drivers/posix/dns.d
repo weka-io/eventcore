@@ -45,7 +45,7 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 	this(Events events, Signals signals)
 	{
 		m_events = events;
-		m_event = events.create();
+		m_event = events.createInternal();
 		m_events.wait(m_event, &onDNSSignal);
 	}
 
@@ -70,6 +70,7 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 		try t.executeInNewThread();//taskPool.put(t);
 		catch (Exception e) return DNSLookupID.invalid;
 		debug (EventCoreLogDNS) print("lookup handle: %s", handle);
+		m_events.loop.m_waiterCount++;
 		return handle;
 	}
 
@@ -89,6 +90,7 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 	override void cancelLookup(DNSLookupID handle)
 	{
 		m_lookups[handle].callback = null;
+		m_events.loop.m_waiterCount--;
 	}
 
 	private void onDNSSignal(EventID event)
@@ -113,6 +115,7 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 					l.result = null;
 					l.retcode = 0;
 					if (i == m_maxHandle) m_maxHandle = lastmax;
+					m_events.loop.m_waiterCount--;
 					passToDNSCallback(cast(DNSLookupID)cast(int)i, cb, status, ai);
 				} else lastmax = i;
 			}
@@ -152,7 +155,7 @@ final class EventDriverDNS_GAIA(Events : EventDriverEvents, Signals : EventDrive
 	{
 		m_signals = signals;
 		m_dnsSignal = () @trusted { return SIGRTMIN; } ();
-		m_sighandle = signals.listen(m_dnsSignal, &onDNSSignal);
+		m_sighandle = signals.listenInternal(m_dnsSignal, &onDNSSignal);
 	}
 
 	void dispose()
@@ -177,6 +180,7 @@ final class EventDriverDNS_GAIA(Events : EventDriverEvents, Signals : EventDrive
 			return DNSLookupID.invalid;
 
 		m_lookups[handle].callback = on_lookup_finished;
+		m_events.loop.m_waiterCount++;
 
 		return handle;
 	}
@@ -185,6 +189,7 @@ final class EventDriverDNS_GAIA(Events : EventDriverEvents, Signals : EventDrive
 	{
 		gai_cancel(&m_lookups[handle].ctx);
 		m_lookups[handle].callback = null;
+		m_events.loop.m_waiterCount--;
 	}
 
 	private void onDNSSignal(SignalListenID, SignalStatus status, int signal)
@@ -204,6 +209,7 @@ final class EventDriverDNS_GAIA(Events : EventDriverEvents, Signals : EventDrive
 			auto ai = l.ctx.ar_result;
 			l.callback = null;
 			l.ctx.ar_result = null;
+			m_events.loop.m_waiterCount--;
 			passToDNSCallback(cast(DNSLookupID)cast(int)i, cb, status, ai);
 		}
 	}

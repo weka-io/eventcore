@@ -18,11 +18,6 @@ void main()
 	auto f = eventDriver.files.open("test.txt", FileOpenMode.createTrunc);
 	assert(eventDriver.files.getSize(f) == 0);
 	auto data = cast(const(ubyte)[])"Hello, World!";
-	auto tm = eventDriver.timers.create();
-	eventDriver.timers.set(tm, 500.msecs, 0.msecs);
-	eventDriver.timers.wait(tm, (tm) {
-		assert(false, "File operation stalled.");
-	});
 
 	eventDriver.files.write(f, 0, data[0 .. 7], IOMode.all, (f, status, nbytes) {
 		assert(status == IOStatus.ok);
@@ -48,7 +43,6 @@ void main()
 					} ();
 					eventDriver.files.releaseRef(f);
 					s_done = true;
-					eventDriver.core.exit();
 				});
 			});
 		});
@@ -57,7 +51,7 @@ void main()
 	ExitReason er;
 	do er = eventDriver.core.processEvents(Duration.max);
 	while (er == ExitReason.idle);
-	//assert(er == ExitReason.outOfWaiters); // FIXME: see above
+	assert(er == ExitReason.outOfWaiters);
 	assert(s_done);
 	s_done = false;
 }

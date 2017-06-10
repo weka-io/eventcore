@@ -62,7 +62,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			return sock;
 		}
 
-		m_loop.initFD(sock);
+		m_loop.initFD(sock, FDFlags.none);
 		m_loop.registerFD(sock, EventMask.read|EventMask.write|EventMask.status);
 		m_loop.m_fds[sock].specific = StreamSocketSlot.init;
 		m_loop.setNotifyCallback!(EventType.status)(sock, &onConnectError);
@@ -98,7 +98,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		if (m_loop.m_fds[fd].common.refCount) // FD already in use?
 			return StreamSocketFD.invalid;
 		setSocketNonBlocking(fd);
-		m_loop.initFD(fd);
+		m_loop.initFD(fd, FDFlags.none);
 		m_loop.registerFD(fd, EventMask.read|EventMask.write|EventMask.status);
 		m_loop.m_fds[fd].specific = StreamSocketSlot.init;
 		return fd;
@@ -168,7 +168,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		if (sock == StreamListenSocketFD.invalid)
 			return sock;
 
-		m_loop.initFD(sock);
+		m_loop.initFD(sock, FDFlags.none);
 		m_loop.m_fds[sock].specific = StreamListenSocketSlot.init;
 
 		if (on_accept) waitForConnections(sock, on_accept);
@@ -196,7 +196,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 			setSocketNonBlocking(cast(SocketFD)sockfd);
 			auto fd = cast(StreamSocketFD)sockfd;
-			m_loop.initFD(fd);
+			m_loop.initFD(fd, FDFlags.none);
 			m_loop.m_fds[fd].specific = StreamSocketSlot.init;
 			m_loop.m_fds[fd].streamSocket.state = ConnectionState.connected;
 			m_loop.registerFD(fd, EventMask.read|EventMask.write|EventMask.status);
@@ -503,6 +503,11 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override DatagramSocketFD createDatagramSocket(scope Address bind_address, scope Address target_address)
 	{
+		return createDatagramSocketInternal(bind_address, target_address, false);
+	}
+
+	package DatagramSocketFD createDatagramSocketInternal(scope Address bind_address, scope Address target_address, bool is_internal = true)
+	{
 		auto sockfd = createSocket(bind_address.addressFamily, SOCK_DGRAM);
 		if (sockfd == -1) return DatagramSocketFD.invalid;
 		auto sock = cast(DatagramSocketFD)sockfd;
@@ -533,7 +538,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			}
 		}
 
-		m_loop.initFD(sock);
+		m_loop.initFD(sock, is_internal ? FDFlags.internal : FDFlags.none);
 		m_loop.m_fds[sock].specific = DgramSocketSlot.init;
 		m_loop.registerFD(sock, EventMask.read|EventMask.write|EventMask.status);
 
@@ -546,7 +551,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		if (m_loop.m_fds[fd].common.refCount) // FD already in use?
 			return DatagramSocketFD.init;
 		setSocketNonBlocking(fd);
-		m_loop.initFD(fd);
+		m_loop.initFD(fd, FDFlags.none);
 		m_loop.registerFD(fd, EventMask.read|EventMask.write|EventMask.status);
 		m_loop.m_fds[fd].specific = DgramSocketSlot.init;
 		return fd;
@@ -710,8 +715,11 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override bool releaseRef(SocketFD fd)
 	{
+		import taggedalgebraic : hasType;
 		assert(m_loop.m_fds[fd].common.refCount > 0, "Releasing reference to unreferenced socket FD.");
-		if (--m_loop.m_fds[fd].common.refCount == 0) {
+		// listening sockets have an incremented the reference count because of setNotifyCallback
+		int base_refcount = m_loop.m_fds[fd].specific.hasType!StreamListenSocketSlot ? 1 : 0;
+		if (--m_loop.m_fds[fd].common.refCount == base_refcount) {
 			m_loop.unregisterFD(fd, EventMask.read|EventMask.write|EventMask.status);
 			m_loop.clearFD(fd);
 			closeSocket(cast(sock_t)fd);

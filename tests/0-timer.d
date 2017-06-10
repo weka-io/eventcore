@@ -34,10 +34,11 @@ void main()
 				s_cnt++;
 				assert(dur > 100.msecs * s_cnt);
 				assert(dur < 100.msecs * s_cnt + 20.msecs);
+				assert(s_cnt <= 3);
 
 				if (s_cnt == 3) {
 					s_done = true;
-					eventDriver.core.exit();
+					eventDriver.timers.stop(timer);
 				} else eventDriver.timers.wait(tm, &secondTier);
 			} catch (Exception e) {
 				assert(false, e.msg);
@@ -52,7 +53,7 @@ void main()
 	ExitReason er;
 	do er = eventDriver.core.processEvents(Duration.max);
 	while (er == ExitReason.idle);
-	//assert(er == ExitReason.outOfWaiters); // FIXME: see above
+	assert(er == ExitReason.outOfWaiters);
 	assert(s_done);
 	s_done = false;
 }

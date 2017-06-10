@@ -30,6 +30,8 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		ms_allocator.parent = Mallocator.instance;
 	}
 
+	package @property size_t pendingCount() const @safe nothrow { return m_timerQueue.length; }
+
 	final package Duration getNextTimeout(long stdtime)
 	@safe nothrow {
 		if (m_timerQueue.length == 0) return Duration.max;
