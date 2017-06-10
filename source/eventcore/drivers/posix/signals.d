@@ -20,6 +20,11 @@ final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSigna
 
 	override SignalListenID listen(int sig, SignalCallback on_signal)
 	{
+		return listenInternal(sig, on_signal, false);
+	}
+
+	package SignalListenID listenInternal(int sig, SignalCallback on_signal, bool is_internal = true)
+	{
 		auto fd = () @trusted {
 			sigset_t sset;
 			sigemptyset(&sset);
@@ -32,7 +37,7 @@ final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSigna
 		} ();
 
 
-		m_loop.initFD(cast(FD)fd);
+		m_loop.initFD(cast(FD)fd, is_internal ? FDFlags.internal : FDFlags.none);
 		m_loop.m_fds[fd].specific = SignalSlot(on_signal);
 		m_loop.registerFD(cast(FD)fd, EventMask.read);
 		m_loop.setNotifyCallback!(EventType.read)(cast(FD)fd, &onSignal);
@@ -52,7 +57,7 @@ final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSigna
 	{
 		FD fd = cast(FD)descriptor;
 		assert(m_loop.m_fds[fd].common.refCount > 0, "Releasing reference to unreferenced event FD.");
-		if (--m_loop.m_fds[fd].common.refCount == 0) {
+		if (--m_loop.m_fds[fd].common.refCount == 1) { // NOTE: 1 because setNotifyCallback adds a second reference
 			m_loop.unregisterFD(fd, EventMask.read);
 			m_loop.clearFD(fd);
 			close(cast(int)fd);
@@ -89,6 +94,11 @@ final class DummyEventDriverSignals(Loop : PosixEventLoop) : EventDriverSignals 
 	this(Loop loop) { m_loop = loop; }
 
 	override SignalListenID listen(int sig, SignalCallback on_signal)
+	{
+		return listenInternal(sig, on_signal, false);
+	}
+
+	package SignalListenID listenInternal(int sig, SignalCallback on_signal, bool is_internal = true)
 	{
 		assert(false);
 	}

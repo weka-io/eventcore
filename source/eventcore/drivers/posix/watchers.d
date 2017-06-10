@@ -39,7 +39,7 @@ final class InotifyEventDriverWatchers(Loop : PosixEventLoop) : EventDriverWatch
 			}
 		}
 
-		m_loop.initFD(FD(handle));
+		m_loop.initFD(FD(handle), FDFlags.none);
 		m_loop.registerFD(FD(handle), EventMask.read);
 		m_loop.setNotifyCallback!(EventType.read)(FD(handle), &onChanges);
 		m_loop.m_fds[handle].specific = WatcherSlot(callback);
@@ -59,7 +59,7 @@ final class InotifyEventDriverWatchers(Loop : PosixEventLoop) : EventDriverWatch
 	{
 		FD fd = cast(FD)descriptor;
 		assert(m_loop.m_fds[fd].common.refCount > 0, "Releasing reference to unreferenced event FD.");
-		if (--m_loop.m_fds[fd].common.refCount == 0) {
+		if (--m_loop.m_fds[fd].common.refCount == 1) { // NOTE: 1 because setNotifyCallback increments the reference count
 			m_loop.unregisterFD(fd, EventMask.read);
 			m_loop.clearFD(fd);
 			m_watches.remove(descriptor);
@@ -103,10 +103,10 @@ final class InotifyEventDriverWatchers(Loop : PosixEventLoop) : EventDriverWatch
 				ch.directory = m_watches[id][ev.wd];
 				ch.isDirectory = (ev.mask & IN_ISDIR) != 0;
 				ch.name = name;
-				addRef(id);
-				auto cb = m_loop.m_fds[	id].watcher.callback;
+				addRef(id); // assure that the id doesn't get invalidated until after the callback
+				auto cb = m_loop.m_fds[id].watcher.callback;
 				cb(id, ch);
-				if (!releaseRef(id)) break;
+				if (!releaseRef(id)) return;
 
 				rem = rem[inotify_event.sizeof + ev.len .. $];
 			}

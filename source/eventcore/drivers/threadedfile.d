@@ -99,6 +99,7 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 		SmallIntegerSet!FileFD m_activeReads;
 		SmallIntegerSet!FileFD m_activeWrites;
 		EventID m_readyEvent;
+		bool m_waiting;
 		Events m_events;
 	}
 
@@ -108,7 +109,6 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 	{
 		m_events = events;
 		m_readyEvent = events.create();
-		m_events.wait(m_readyEvent, &onReady);
 	}
 
 	void dispose()
@@ -191,7 +191,9 @@ log("start task");
 				m_fileThreadPool.isDaemon = true;
 			}
 			m_fileThreadPool.put(task!(taskFun!("write", const(ubyte)))(this, file, offset, buffer));
+			startWaiting();
 		} catch (Exception e) {
+			m_activeWrites.remove(file);
 			on_write_finish(file, IOStatus.error, 0);
 			return;
 		}
@@ -201,6 +203,7 @@ log("start task");
 	{
 		auto f = &m_files[file].write;
 		m_activeWrites.remove(file);
+		m_events.trigger(m_readyEvent, true); // ensure that no stale wait operation is left behind
 		auto res = () @trusted { return cas(&f.status, ThreadedFileStatus.processing, ThreadedFileStatus.cancelling); } ();
 		assert(res, "Cancelling write when no write is in progress.");
 	}
@@ -217,7 +220,9 @@ log("start task");
 				m_fileThreadPool.isDaemon = true;
 			}
 			m_fileThreadPool.put(task!(taskFun!("read", ubyte))(this, file, offset, buffer));
+			startWaiting();
 		} catch (Exception e) {
+			m_activeReads.remove(file);
 			on_read_finish(file, IOStatus.error, 0);
 			return;
 		}
@@ -227,6 +232,7 @@ log("start task");
 	{
 		auto f = &m_files[file].read;
 		m_activeReads.remove(file);
+		m_events.trigger(m_readyEvent, true); // ensure that no stale wait operation is left behind
 		auto res = () @trusted { return cas(&f.status, ThreadedFileStatus.processing, ThreadedFileStatus.cancelling); } ();
 		assert(res, "Cancelling read when no write is in progress.");
 	}
@@ -252,7 +258,7 @@ log("start task");
 	/// private
 	static void taskFun(string op, UB)(ThreadedFileEventDriver fd, FileFD file, ulong offset, UB[] buffer)
 	{
-log("ready event");
+log("task fun");
 		IOInfo* f = mixin("&fd.m_files[file]."~op);
 log("wait for cancel");
 
@@ -318,7 +324,17 @@ log("ready event");
 			m_files[f].write.flush(f);
 		}
 
-		m_events.wait(m_readyEvent, &onReady);
+		m_waiting = false;
+		startWaiting();
+	}
+
+	private void startWaiting()
+	{
+		if (!m_waiting && (!m_activeWrites.empty || !m_activeReads.empty)) {
+			log("wait for ready");
+			m_events.wait(m_readyEvent, &onReady);
+			m_waiting = true;
+		}
 	}
 }
 

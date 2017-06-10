@@ -115,10 +115,10 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 		m_loop = loop;
 		m_timers = timers;
 		m_events = events;
-		m_wakeupEvent = events.create();
+		m_wakeupEvent = events.createInternal();
 	}
 
-	@property size_t waiterCount() const { return m_loop.m_waiterCount; }
+	@property size_t waiterCount() const { return m_loop.m_waiterCount + m_timers.pendingCount; }
 
 	final override ExitReason processEvents(Duration timeout)
 	{
@@ -241,25 +241,34 @@ package class PosixEventLoop {
 		assert((callback !is null) != (m_fds[fd.value].common.callback[evt] !is null),
 			"Overwriting notification callback.");
 		// ensure that the FD doesn't get closed before the callback gets called.
-		if (callback !is null) {
-			m_waiterCount++;
-			m_fds[fd.value].common.refCount++;
-		} else {
-			m_fds[fd.value].common.refCount--;
-			m_waiterCount--;
+		with (m_fds[fd.value]) {
+			if (callback !is null) {
+				if (!(common.flags & FDFlags.internal)) m_waiterCount++;
+				common.refCount++;
+			} else {
+				common.refCount--;
+				if (!(common.flags & FDFlags.internal)) m_waiterCount--;
+			}
+			common.callback[evt] = callback;
 		}
-		m_fds[fd.value].common.callback[evt] = callback;
 	}
 
-	package void initFD(FD fd)
+	package void initFD(FD fd, FDFlags flags)
 	{
-		m_fds[fd.value].common.refCount = 1;
+		with (m_fds[fd.value]) {
+			common.refCount = 1;
+			common.flags = flags;
+		}
 	}
 
 	package void clearFD(FD fd)
 	{
 		if (m_fds[fd.value].common.userDataDestructor)
 			() @trusted { m_fds[fd.value].common.userDataDestructor(m_fds[fd.value].common.userData.ptr); } ();
+		if (!(m_fds[fd.value].common.flags & FDFlags.internal))
+			foreach (cb; m_fds[fd.value].common.callback)
+				if (cb !is null)
+					m_waiterCount--;
 		m_fds[fd.value] = m_fds.FullField.init;
 	}
 }
@@ -272,6 +281,7 @@ alias FDSlotCallback = void delegate(FD);
 private struct FDSlot {
 	FDSlotCallback[EventType.max+1] callback;
 	uint refCount;
+	FDFlags flags;
 
 	DataInitializer userDataDestructor;
 	ubyte[16*size_t.sizeof] userData;
@@ -283,6 +293,11 @@ private struct FDSlot {
 		if (callback[EventType.status] !is null) ret |= EventMask.status;
 		return ret;
 	}
+}
+
+enum FDFlags {
+	none = 0,
+	internal = 1<<0,
 }
 
 enum EventType {
