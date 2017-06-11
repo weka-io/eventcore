@@ -33,13 +33,13 @@ configuration "select" {
 configuration "winapi-optlink" {
 	platforms "windows-x86-dmd"
 	versions "EventcoreWinAPIDriver"
-	sourceFiles "lib/ws2_32.lib"
+	sourceFiles "lib/ws2_32.lib" "lib/kernel32.lib"
 }
 
 configuration "select-optlink" {
 	platforms "windows-x86-dmd"
 	versions "EventcoreSelectDriver"
-	sourceFiles "lib/ws2_32.lib"
+	sourceFiles "lib/ws2_32.lib" "lib/kernel32.lib"
 }
 
 configuration "libasync" {
