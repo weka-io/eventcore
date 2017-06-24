@@ -40,16 +40,16 @@ Driver development status
 
 Feature          | SelectEventDriver | EpollEventDriver | WinAPIEventDriver | KqueueEventDriver
 -----------------|-------------------|------------------|-------------------|------------------
-TCP Sockets      | yes               | yes              | &mdash;           | yes              
+TCP Sockets      | yes               | yes              | yes               | yes              
 UDP Sockets      | yes               | yes              | &mdash;           | yes              
 USDS             | yes               | yes              | &mdash;           | yes              
 DNS              | yes               | yes              | yes               | yes              
 Timers           | yes               | yes              | yes               | yes              
 Events           | yes               | yes              | yes               | yes              
-Unix Signals     | yes²              | yes²             | &mdash;           | &mdash;          
+Unix Signals     | yes²              | yes              | &mdash;           | &mdash;          
 Files            | yes               | yes              | yes               | yes              
 UI Integration   | yes¹              | yes¹             | yes               | yes¹             
-File watcher     | yes²              | yes²             | yes               | &mdash;          
+File watcher     | yes²              | yes              | yes               | &mdash;          
 
 Feature          | LibasyncEventDriver 
 -----------------|---------------------
