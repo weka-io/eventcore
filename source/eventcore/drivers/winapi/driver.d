@@ -53,7 +53,7 @@ final class WinAPIEventDriver : EventDriver {
 		m_core = new WinAPIEventDriverCore(m_timers);
 		m_events = new WinAPIEventDriverEvents(m_core);
 		m_files = new WinAPIEventDriverFiles(m_core);
-		m_sockets = new WinAPIEventDriverSockets();
+		m_sockets = new WinAPIEventDriverSockets(m_core);
 		m_dns = new WinAPIEventDriverDNS();
 		m_watchers = new WinAPIEventDriverWatchers(m_core);
 	}
