@@ -103,8 +103,9 @@ interface EventDriverCore {
 	/// ditto
 	protected void* rawUserData(DatagramSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
 
-	/** Retrieves a reference to a user-defined value associated with a descriptor.
+	/** Deprecated - use `EventDriverSockets.userData` instead.
 	*/
+	deprecated("Use `EventDriverSockets.userData` instead.")
 	@property final ref T userData(T, FD)(FD descriptor)
 	@trusted {
 		import std.conv : emplace;
@@ -277,6 +278,21 @@ interface EventDriverSockets {
 			Returns `false` $(I iff) the last reference was removed by this call.
 	*/
 	bool releaseRef(SocketFD descriptor);
+
+	/// Low-level user data access. Use `getUserData` instead.
+	protected void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
+	/// ditto
+	protected void* rawUserData(DatagramSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
+
+	/** Retrieves a reference to a user-defined value associated with a descriptor.
+	*/
+	@property final ref T userData(T, FD)(FD descriptor)
+	@trusted {
+		import std.conv : emplace;
+		static void init(void* ptr) { emplace(cast(T*)ptr); }
+		static void destr(void* ptr) { destroy(*cast(T*)ptr); }
+		return *cast(T*)rawUserData(descriptor, T.sizeof, &init, &destr);
+	}
 }
 
 

@@ -728,6 +728,30 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		return true;
 	}
 
+	final protected override void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+	@system {
+		return rawUserDataImpl(descriptor, size, initialize, destroy);
+	}
+
+	final protected override void* rawUserData(DatagramSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+	@system {
+		return rawUserDataImpl(descriptor, size, initialize, destroy);
+	}
+
+	private void* rawUserDataImpl(FD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+	@system {
+		auto fds = &m_loop.m_fds[descriptor].common;
+		assert(fds.userDataDestructor is null || fds.userDataDestructor is destroy,
+			"Requesting user data with differing type (destructor).");
+		assert(size <= fds.userData.length, "Requested user data is too large.");
+		if (size > fds.userData.length) assert(false);
+		if (!fds.userDataDestructor) {
+			initialize(fds.userData.ptr);
+			fds.userDataDestructor = destroy;
+		}
+		return m_loop.m_fds[descriptor].common.userData.ptr;
+	}
+
 	private sock_t createSocket(AddressFamily family, int type)
 	{
 		sock_t sock;

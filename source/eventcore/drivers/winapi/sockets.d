@@ -134,4 +134,14 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	{
 		assert(false, "TODO!");
 	}
+
+	protected override void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system
+	{
+		assert(false, "TODO!");
+	}
+
+	protected override void* rawUserData(DatagramSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system
+	{
+		assert(false, "TODO!");
+	}
 }
