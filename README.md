@@ -27,10 +27,13 @@ Supported compilers
 
 The following compilers are tested and supported:
 
-- DMD 2.073.0
+- DMD 2.074.1
+- DMD 2.073.2
 - DMD 2.072.2
 - DMD 2.071.2
 - DMD 2.070.2
+- LDC 1.3.0
+- LDC 1.2.0
 - LDC 1.1.0
 - LDC 1.0.0
 
