@@ -389,7 +389,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		if (fd == INVALID_SOCKET)
 			return DatagramSocketFD.invalid;
 
-		auto sock = adoptDatagramSocket(fd);
+		auto sock = adoptDatagramSocketInternal(fd);
 
 		if (target_address !is null)
 			setTargetAddress(sock, target_address);
@@ -398,6 +398,11 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	}
 
 	final override DatagramSocketFD adoptDatagramSocket(int socket)
+	{
+		return adoptDatagramSocketInternal(socket);
+	}
+
+	private DatagramSocketFD adoptDatagramSocketInternal(SOCKET socket)
 	{
 		auto fd = DatagramSocketFD(socket);
 		if (m_sockets[fd].common.refCount) // FD already in use?
