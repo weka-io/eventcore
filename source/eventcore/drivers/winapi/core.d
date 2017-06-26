@@ -33,7 +33,7 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		registerEvent(m_fileCompletionEvent);
 	}
 
-	override size_t waiterCount() { return m_waiterCount; }
+	override size_t waiterCount() { return m_waiterCount + m_timers.pendingCount; }
 
 	package void addWaiter() { m_waiterCount++; }
 	package void removeWaiter() { m_waiterCount--; }
