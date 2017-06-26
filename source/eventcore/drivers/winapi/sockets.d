@@ -92,8 +92,9 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		if (m_sockets[fd].common.refCount) // FD already in use?
 			return StreamSocketFD.invalid;
 
-		uint enable = 1;
-		() @trusted { ioctlsocket(socket, FIONBIO, &enable); } ();
+		// done by wsaasyncselect
+		//uint enable = 1;
+		//() @trusted { ioctlsocket(socket, FIONBIO, &enable); } ();
 
 		void setupOverlapped(ref WSAOVERLAPPEDX overlapped) @trusted @nogc nothrow {
 			overlapped.Internal = 0;
@@ -200,16 +201,15 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	override void read(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish)
 	{
-		WSABUF buf;
-		buf.len = buffer.length;
-		buf.buf = () @trusted { return buffer.ptr; } ();
+		auto slot = () @trusted { return &m_sockets[socket].streamSocket(); } ();
+		slot.read.buffer = buffer;
+		slot.read.mode = mode;
+		slot.read.wsabuf[0].len = buffer.length;
+		slot.read.wsabuf[0].buf = () @trusted { return buffer.ptr; } ();
 
-		m_sockets[socket].streamSocket.read.buffer = buffer;
-		m_sockets[socket].streamSocket.read.mode = mode;
-
-		auto ovl = mode == IOMode.immediate ? null : &m_sockets[socket].streamSocket.read.overlapped;
+		auto ovl = mode == IOMode.immediate ? null : &slot.read.overlapped;
 		DWORD flags = 0;
-		auto ret = () @trusted { return WSARecv(socket, &buf, 1, null, &flags, ovl, &onIOReadCompleted); } ();
+		auto ret = () @trusted { return WSARecv(socket, &slot.read.wsabuf[0], slot.read.wsabuf.length, null, &flags, ovl, &onIOReadCompleted); } ();
 		if (ret == SOCKET_ERROR) {
 			auto err = WSAGetLastError();
 			if (err == WSA_IO_PENDING) {
@@ -222,7 +222,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 				return;
 			}
 		}
-		m_sockets[socket].streamSocket.read.callback = on_read_finish;
+		slot.read.callback = on_read_finish;
 		m_core.addWaiter();
 	}
 
@@ -255,12 +255,11 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			return;
 		}
 
-		WSABUF buf;
-		buf.len = slot.streamSocket.read.buffer.length;
-		buf.buf = () @trusted { return cast(ubyte*)slot.streamSocket.read.buffer.ptr; } ();
+		slot.streamSocket.read.wsabuf[0].len = slot.streamSocket.read.buffer.length;
+		slot.streamSocket.read.wsabuf[0].buf = () @trusted { return cast(ubyte*)slot.streamSocket.read.buffer.ptr; } ();
 		auto ovl = slot.streamSocket.read.mode == IOMode.immediate ? null : &slot.streamSocket.read.overlapped;
 		DWORD flags = 0;
-		auto ret = () @trusted { return WSARecv(slot.common.fd, &buf, 1, null, &flags, ovl, &onIOReadCompleted); } ();
+		auto ret = () @trusted { return WSARecv(slot.common.fd, &slot.streamSocket.read.wsabuf[0], slot.streamSocket.read.wsabuf.length, null, &flags, ovl, &onIOReadCompleted); } ();
 		if (ret == SOCKET_ERROR) {
 			auto err = WSAGetLastError();
 			if (err == WSA_IO_PENDING) {
@@ -275,15 +274,14 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	override void write(StreamSocketFD socket, const(ubyte)[] buffer, IOMode mode, IOCallback on_write_finish)
 	{
-		WSABUF buf;
-		buf.len = buffer.length;
-		buf.buf = () @trusted { return cast(ubyte*)buffer.ptr; } ();
-
-		m_sockets[socket].streamSocket.write.buffer = buffer;
-		m_sockets[socket].streamSocket.write.mode = mode;
+		auto slot = () @trusted { return &m_sockets[socket].streamSocket(); } ();
+		slot.write.buffer = buffer;
+		slot.write.mode = mode;
+		slot.write.wsabuf[0].len = buffer.length;
+		slot.write.wsabuf[0].buf = () @trusted { return cast(ubyte*)buffer.ptr; } ();
 
 		auto ovl = mode == IOMode.immediate ? null : &m_sockets[socket].streamSocket.write.overlapped;
-		auto ret = () @trusted { return WSASend(socket, &buf, 1, null, 0, ovl, &onIOWriteCompleted); } ();
+		auto ret = () @trusted { return WSASend(socket, &slot.write.wsabuf[0], slot.write.wsabuf.length, null, 0, ovl, &onIOWriteCompleted); } ();
 		if (ret == SOCKET_ERROR) {
 			auto err = WSAGetLastError();
 			if (err == WSA_IO_PENDING) {
@@ -328,11 +326,10 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			return;
 		}
 
-		WSABUF buf;
-		buf.len = slot.streamSocket.write.buffer.length;
-		buf.buf = () @trusted { return cast(ubyte*)slot.streamSocket.write.buffer.ptr; } ();
+		slot.streamSocket.write.wsabuf[0].len = slot.streamSocket.write.buffer.length;
+		slot.streamSocket.write.wsabuf[0].buf = () @trusted { return cast(ubyte*)slot.streamSocket.write.buffer.ptr; } ();
 		auto ovl = slot.streamSocket.write.mode == IOMode.immediate ? null : &slot.streamSocket.write.overlapped;
-		auto ret = () @trusted { return WSASend(slot.common.fd, &buf, 1, null, 0, ovl, &onIOWriteCompleted); } ();
+		auto ret = () @trusted { return WSASend(slot.common.fd, &slot.streamSocket.write.wsabuf[0], slot.streamSocket.write.wsabuf.length, null, 0, ovl, &onIOWriteCompleted); } ();
 		if (ret == SOCKET_ERROR) {
 			auto err = WSAGetLastError();
 			if (err == WSA_IO_PENDING) {
@@ -592,6 +589,7 @@ static struct StreamDirection(bool RO) {
 	WSAOVERLAPPEDX overlapped;
 	static if (RO) const(ubyte)[] buffer;
 	else ubyte[] buffer;
+	WSABUF[1] wsabuf;
 	size_t bytesTransferred;
 	IOMode mode;
 	IOCallback callback;
