@@ -44,7 +44,7 @@ Driver development status
 Feature          | SelectEventDriver | EpollEventDriver | WinAPIEventDriver | KqueueEventDriver
 -----------------|-------------------|------------------|-------------------|------------------
 TCP Sockets      | yes               | yes              | yes               | yes              
-UDP Sockets      | yes               | yes              | &mdash;           | yes              
+UDP Sockets      | yes               | yes              | yes               | yes              
 USDS             | yes               | yes              | &mdash;           | yes              
 DNS              | yes               | yes              | yes               | yes              
 Timers           | yes               | yes              | yes               | yes              
