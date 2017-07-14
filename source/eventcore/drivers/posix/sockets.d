@@ -129,7 +129,6 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	alias listenStream = EventDriverSockets.listenStream;
 	final override StreamListenSocketFD listenStream(scope Address address, StreamListenOptions options, AcceptCallback on_accept)
 	{
-		log("Listen stream");
 		auto sockfd = createSocket(address.addressFamily, SOCK_STREAM);
 		if (sockfd == -1) return StreamListenSocketFD.invalid;
 
@@ -141,28 +140,23 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			int tmp_reuse = 1;
 			// FIXME: error handling!
 			if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &tmp_reuse, tmp_reuse.sizeof) != 0) {
-				log("setsockopt SO_REUSEADDR failed.");
 				invalidateSocket();
 				return;
 			}
 			version (Windows) {} else {
 				if ((options & StreamListenOptions.reusePort) && setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &tmp_reuse, tmp_reuse.sizeof) != 0) {
-					log("setsockopt SO_REUSEPORT failed.");
 					invalidateSocket();
 					return;
 				}
 			}
 			if (bind(sockfd, address.name, address.nameLen) != 0) {
-				log("bind failed.");
 				invalidateSocket();
 				return;
 			}
 			if (listen(sockfd, 128) != 0) {
-				log("listen failed.");
 				invalidateSocket();
 				return;
 			}
-			log("Success!");
 		} ();
 
 		if (sock == StreamListenSocketFD.invalid)
@@ -178,7 +172,6 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override void waitForConnections(StreamListenSocketFD sock, AcceptCallback on_accept)
 	{
-		log("wait for conn");
 		m_loop.registerFD(sock, EventMask.read);
 		m_loop.m_fds[sock].streamListen.acceptCallback = on_accept;
 		m_loop.setNotifyCallback!(EventType.read)(sock, &onAccept);
