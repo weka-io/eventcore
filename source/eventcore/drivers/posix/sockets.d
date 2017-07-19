@@ -350,21 +350,16 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 				on_write_finish(socket, IOStatus.error, 0);
 				return;
 			}
+
+			if (mode == IOMode.immediate) {
+				on_write_finish(socket, IOStatus.wouldBlock, 0);
+				return;
+			}
 		}
 
 		size_t bytes_written = 0;
 
-		if (ret == 0) {
-			on_write_finish(socket, IOStatus.disconnected, 0);
-			return;
-		}
-
-		if (ret < 0 && mode == IOMode.immediate) {
-			on_write_finish(socket, IOStatus.wouldBlock, 0);
-			return;
-		}
-
-		if (ret > 0) {
+		if (ret >= 0) {
 			bytes_written += ret;
 			buffer = buffer[ret .. $];
 			if (mode != IOMode.all || buffer.length == 0) {
@@ -380,7 +375,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		with (m_loop.m_fds[socket].streamSocket) {
 			writeCallback = on_write_finish;
 			writeMode = mode;
-			bytesWritten = ret > 0 ? ret : 0;
+			bytesWritten = ret >= 0 ? ret : 0;
 			writeBuffer = buffer;
 		}
 
@@ -411,13 +406,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			}
 		}
 
-		if (ret == 0) {
-			m_loop.setNotifyCallback!(EventType.write)(socket, null);
-			slot.writeCallback(cast(StreamSocketFD)socket, IOStatus.disconnected, slot.bytesWritten);
-			return;
-		}
-
-		if (ret > 0) {
+		if (ret >= 0) {
 			slot.bytesWritten += ret;
 			slot.writeBuffer = slot.writeBuffer[ret .. $];
 			if (slot.writeMode != IOMode.all || slot.writeBuffer.length == 0) {
@@ -524,7 +513,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 				ret = () @trusted { return connect(sockfd, cast(sockaddr*)&sa, addr_len); } ();
 			} else ret = () @trusted { return connect(sockfd, target_address.name, target_address.nameLen); } ();
-			
+
 			if (ret != 0) {
 				closeSocket(sockfd);
 				return DatagramSocketFD.init;
