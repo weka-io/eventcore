@@ -4,6 +4,7 @@
 module eventcore.drivers.timer;
 
 import eventcore.driver;
+import eventcore.internal.dlist;
 
 
 final class LoopTimeoutTimerDriver : EventDriverTimers {
@@ -20,7 +21,7 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 	private {
 		static FreeList!(Mallocator, TimerSlot.sizeof) ms_allocator;
 		TimerSlot*[TimerID] m_timers;
-		Array!(TimerSlot*) m_timerQueue;
+		StackDList!TimerSlot m_timerQueue;
 		TimerID m_lastTimerID;
 		TimerSlot*[] m_firedTimers;
 	}
@@ -34,7 +35,7 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 
 	final package Duration getNextTimeout(long stdtime)
 	@safe nothrow {
-		if (m_timerQueue.length == 0) return Duration.max;
+		if (m_timerQueue.empty) return Duration.max;
 		return (m_timerQueue.front.timeout - stdtime).hnsecs;
 	}
 
@@ -45,33 +46,26 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 
 		TimerSlot ts = void;
 		ts.timeout = stdtime+1;
-		auto fired = m_timerQueue[].assumeSorted!((a, b) => a.timeout < b.timeout).lowerBound(&ts);
-		foreach (tm; fired) {
+		foreach (tm; m_timerQueue[]) {
+			if (tm.timeout > stdtime) break;
 			if (tm.repeatDuration > 0) {
 				do tm.timeout += tm.repeatDuration;
 				while (tm.timeout <= stdtime);
-				auto tail = m_timerQueue[fired.length .. $].assumeSorted!((a, b) => a.timeout < b.timeout).upperBound(tm);
-				try m_timerQueue.insertBefore(tail.release, tm);
-				catch (Exception e) { assert(false, e.msg); }
+				enqueueTimer(tm);
 			} else tm.pending = false;
 			m_firedTimers ~= tm;
 		}
 
 		// NOTE: this isn't yet verified to work under all circumstances
-		auto elems = m_timerQueue[0 .. fired.length];
-
-		{
-			scope (failure) assert(false);
-			m_timerQueue.linearRemove(elems);
-		}
+		foreach (tm; m_firedTimers)
+			m_timerQueue.remove(tm);
 
 		foreach (tm; m_firedTimers) {
 			auto cb = tm.callback;
 			tm.callback = null;
-			
 			if (cb) cb(tm.id);
 		}
-		
+
 		bool any_fired = m_firedTimers.length > 0;
 
 		m_firedTimers.length = 0;
@@ -103,10 +97,7 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		tm.timeout = Clock.currStdTime + timeout.total!"hnsecs";
 		tm.repeatDuration = repeat.total!"hnsecs";
 		tm.pending = true;
-
-		auto largerRange = m_timerQueue[].assumeSorted!((a, b) => a.timeout < b.timeout).upperBound(tm);
-		try m_timerQueue.insertBefore(largerRange.release, tm);
-		catch (Exception e) { assert(false, e.msg); }
+		enqueueTimer(tm);
 	}
 
 	final override void stop(TimerID timer)
@@ -114,20 +105,7 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		auto tm = m_timers[timer];
 		if (!tm.pending) return;
 		tm.pending = false;
-
-		TimerSlot cmp = void;
-		cmp.timeout = tm.timeout-1;
-		auto upper = m_timerQueue[].assumeSorted!((a, b) => a.timeout < b.timeout).upperBound(&cmp);
-		assert(!upper.empty);
-		while (!upper.empty) {
-			assert(upper.front.timeout == tm.timeout);
-			if (upper.front is tm) {
-				scope (failure) assert(false);
-				m_timerQueue.linearRemove(upper.release.take(1));
-				break;
-			}
-			upper.popFront();
-		}
+		m_timerQueue.remove(tm);
 	}
 
 	final override bool isPending(TimerID descriptor)
@@ -177,7 +155,7 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 				ms_allocator.dispose(tm);
 				GC.removeRange(tm);
 			} ();
-			
+
 			return false;
 		}
 
@@ -189,9 +167,23 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		if (descriptor == TimerID.init) return false;
 		return m_timers[descriptor].refCount == 1;
 	}
+
+	private void enqueueTimer(TimerSlot* tm)
+	nothrow {
+		TimerSlot* ns;
+		foreach_reverse (t; m_timerQueue[])
+			if (t.timeout <= tm.timeout) {
+				ns = t;
+				break;
+			}
+
+		if (ns) m_timerQueue.insertAfter(tm, ns);
+		else m_timerQueue.insertFront(tm);
+	}
 }
 
 struct TimerSlot {
+	TimerSlot* prev, next;
 	TimerID id;
 	uint refCount;
 	bool pending;
