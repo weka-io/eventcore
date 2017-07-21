@@ -9,16 +9,15 @@ d:
   # this way the overall test time gets cut down (GDC/LDC are a lot
   # slower tham DMD, so they should be started early), while still
   # catching most DMD version related build failures early
-  - dmd-2.074.1
-  - dmd-2.070.2
-  - ldc-1.3.0-beta2
+  - dmd-2.075.0
+  - dmd-2.071.2
+  - ldc-1.3.0
   - ldc-1.2.0
   - ldc-1.1.0
-  - ldc-1.0.0
   - dmd-beta
+  - dmd-2.074.1
   - dmd-2.073.2
   - dmd-2.072.2
-  - dmd-2.071.2
 
 env:
     - CONFIG=select
@@ -29,7 +28,6 @@ env:
 matrix:
   allow_failures:
     - d: dmd-beta
-    - d: ldc-1.3.0-beta2
   exclude:
     - env: CONFIG=libasync
     - os: osx
@@ -37,23 +35,21 @@ matrix:
     - os: linux
       env: CONFIG=kqueue
     - os: osx
+      d: dmd-2.074.1
+    - os: osx
       d: dmd-2.073.2
     - os: osx
       d: dmd-2.072.2
     - os: osx
       d: dmd-2.071.2
     - os: osx
-      d: dmd-2.070.2
-    - os: osx
       d: dmd-beta
     - os: osx
-      d: ldc-1.3.0-beta2
+      d: ldc-1.3.0
     - os: osx
       d: ldc-1.2.0
     - os: osx
       d: ldc-1.1.0
-    - os: osx
-      d: ldc-1.0.0
 
 script: ./travis-ci.sh
 
