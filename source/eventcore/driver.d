@@ -135,7 +135,7 @@ interface EventDriverSockets {
 		operations.
 
 		Params:
-			socket: Socket file descriptor to adopt
+			socket = Socket file descriptor to adopt
 
 		Returns:
 			Returns a socket handle corresponding to the passed socket
@@ -157,10 +157,32 @@ interface EventDriverSockets {
 	/// Determines the current connection state.
 	ConnectionState getConnectionState(StreamSocketFD sock);
 
-	/// Retrieves the bind address of a socket.
+	/** Retrieves the bind address of a socket.
+
+		Example:
+		The following code can be used to retrieve an IPv4/IPv6 address
+		allocated on the stack. Note that Unix domain sockets require a larger
+		buffer (e.g. `sockaddr_storage`).
+		---
+		scope storage = new UnknownAddress;
+		scope sockaddr = new RefAddress(storage.name, storage.nameLen);
+		eventDriver.sockets.getLocalAddress(sock, sockaddr);
+		---
+	*/
 	bool getLocalAddress(SocketFD sock, scope RefAddress dst);
 
-	/// Retrieves the address of the connected peer.
+	/** Retrieves the address of the connected peer.
+
+		Example:
+		The following code can be used to retrieve an IPv4/IPv6 address
+		allocated on the stack. Note that Unix domain sockets require a larger
+		buffer (e.g. `sockaddr_storage`).
+		---
+		scope storage = new UnknownAddress;
+		scope sockaddr = new RefAddress(storage.name, storage.nameLen);
+		eventDriver.sockets.getLocalAddress(sock, sockaddr);
+		---
+	*/
 	bool getRemoteAddress(SocketFD sock, scope RefAddress dst);
 
 	/// Sets the `TCP_NODELAY` option on a socket
@@ -168,7 +190,7 @@ interface EventDriverSockets {
 
 	/// Sets to `SO_KEEPALIVE` socket option on a socket.
 	void setKeepAlive(StreamSocketFD socket, bool enable);
-	
+
 	/** Reads data from a stream socket.
 
 		Note that only a single read operation is allowed at once. The caller
@@ -223,9 +245,9 @@ interface EventDriverSockets {
 	/** Creates a connection-less datagram socket.
 
 		Params:
-			bind_address: The local bind address to use for the socket. It
+			bind_address = The local bind address to use for the socket. It
 				will be able to receive any messages sent to this address.
-			target_address: Optional default target address. If this is
+			target_address = Optional default target address. If this is
 				specified and the target address parameter of `send` is
 				left to `null`, it will be used instead.
 
@@ -240,7 +262,7 @@ interface EventDriverSockets {
 		The socket must be properly bound before this function is called.
 
 		Params:
-			socket: Socket file descriptor to adopt
+			socket = Socket file descriptor to adopt
 
 		Returns:
 			Returns a socket handle corresponding to the passed socket
@@ -268,7 +290,7 @@ interface EventDriverSockets {
 	/** Increments the reference count of the given socket.
 	*/
 	void addRef(SocketFD descriptor);
-	
+
 	/** Decrements the reference count of the given socket.
 
 		Once the reference count reaches zero, all associated resources will be
@@ -326,7 +348,7 @@ interface EventDriverFiles {
 	/** Increments the reference count of the given file.
 	*/
 	void addRef(FileFD descriptor);
-	
+
 	/** Decrements the reference count of the given file.
 
 		Once the reference count reaches zero, all associated resources will be
@@ -354,7 +376,7 @@ interface EventDriverEvents {
 
 	/// Triggers an event owned by the current thread.
 	void trigger(EventID event, bool notify_all);
-	
+
 	/// Triggers an event possibly owned by a different thread.
 	void trigger(EventID event, bool notify_all) shared;
 
@@ -370,7 +392,7 @@ interface EventDriverEvents {
 	/** Increments the reference count of the given event.
 	*/
 	void addRef(EventID descriptor);
-	
+
 	/** Decrements the reference count of the given event.
 
 		Once the reference count reaches zero, all associated resources will be
@@ -393,9 +415,9 @@ interface EventDriverSignals {
 		disabled by using this function.
 
 		Params:
-			sig: The number of the signal to listen for
-			on_signal: Callback that gets called whenever a matching signal gets
-				received 
+			sig = The number of the signal to listen for
+			on_signal = Callback that gets called whenever a matching signal
+				gets received
 
 		Returns:
 			Returns an identifier that identifies the resource associated with
@@ -410,7 +432,7 @@ interface EventDriverSignals {
 	/** Increments the reference count of the given resource.
 	*/
 	void addRef(SignalListenID descriptor);
-	
+
 	/** Decrements the reference count of the given resource.
 
 		Once the reference count reaches zero, all associated resources will be
@@ -435,7 +457,7 @@ interface EventDriverTimers {
 	/** Increments the reference count of the given resource.
 	*/
 	void addRef(TimerID descriptor);
-	
+
 	/** Decrements the reference count of the given resource.
 
 		Once the reference count reaches zero, all associated resources will be
@@ -458,7 +480,7 @@ interface EventDriverWatchers {
 	/** Increments the reference count of the given resource.
 	*/
 	void addRef(WatcherID descriptor);
-	
+
 	/** Decrements the reference count of the given resource.
 
 		Once the reference count reaches zero, all associated resources will be
