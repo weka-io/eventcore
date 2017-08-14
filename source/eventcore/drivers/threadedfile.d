@@ -221,7 +221,7 @@ log("start task");
 	{
 		auto f = &m_files[file].read;
 		if (!safeCAS(f.status, ThreadedFileStatus.idle, ThreadedFileStatus.initiated))
-			assert(false, "Concurrent file writes are not allowed.");
+			assert(false, "Concurrent file reads are not allowed.");
 		assert(f.callback is null, "Concurrent file reads are not allowed.");
 		f.callback = on_read_finish;
 		m_activeReads.insert(file);
