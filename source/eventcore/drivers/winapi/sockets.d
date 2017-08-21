@@ -72,6 +72,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 				connectCallback = on_connect;
 				state = ConnectionState.connecting;
 			}
+			addRef(sock);
 			return sock;
 		} else {
 			clearSocketSlot(sock);
@@ -111,7 +112,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			setupOverlapped(streamSocket.read.overlapped);
 		}
 
-		() @trusted { WSAAsyncSelect(socket, m_hwnd, WM_USER_SOCKET, FD_READ|FD_WRITE|FD_CONNECT|FD_CLOSE); } ();
+		() @trusted { WSAAsyncSelect(socket, m_hwnd, WM_USER_SOCKET, FD_CONNECT|FD_CLOSE); } ();
 
 		return fd;
 	}
@@ -223,6 +224,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			}
 		}
 		slot.read.callback = on_read_finish;
+		addRef(socket);
 		m_core.addWaiter();
 	}
 
@@ -239,7 +241,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			slot.common.core.removeWaiter();
 			auto cb = slot.streamSocket.read.callback;
 			slot.streamSocket.read.callback = null;
-			cb(cast(StreamSocketFD)slot.common.fd, status, nsent);
+			if (slot.common.driver.releaseRef(cast(StreamSocketFD)slot.common.fd))
+				cb(cast(StreamSocketFD)slot.common.fd, status, nsent);
 		}
 
 		slot.streamSocket.read.bytesTransferred += cbTransferred;
@@ -295,6 +298,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			}
 		}
 		m_sockets[socket].streamSocket.write.callback = on_write_finish;
+		addRef(socket);
 		m_core.addWaiter();
 	}
 
@@ -310,7 +314,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			slot.common.core.removeWaiter();
 			auto cb = slot.streamSocket.write.callback;
 			slot.streamSocket.write.callback = null;
-			cb(cast(StreamSocketFD)slot.common.fd, status, nsent);
+			if (slot.common.driver.releaseRef(cast(StreamSocketFD)slot.common.fd))
+				cb(cast(StreamSocketFD)slot.common.fd, status, nsent);
 		}
 
 		slot.streamSocket.write.bytesTransferred += cbTransferred;
@@ -463,6 +468,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			() @trusted { CancelIoEx(cast(HANDLE)cast(SOCKET)socket, cast(LPOVERLAPPED)&slot.read.overlapped); } ();
 
 		slot.read.callback = on_read_finish;
+		addRef(socket);
 		m_core.addWaiter();
 	}
 
@@ -487,7 +493,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			auto cb = slot.datagramSocket.read.callback;
 			slot.datagramSocket.read.callback = null;
 			scope addr = new RefAddress(cast(sockaddr*)&slot.datagramSocket.sourceAddr, slot.datagramSocket.sourceAddrLen);
-			cb(cast(DatagramSocketFD)slot.common.fd, status, nsent, status == IOStatus.ok ? addr : null);
+			if (slot.common.driver.releaseRef(cast(DatagramSocketFD)slot.common.fd))
+				cb(cast(DatagramSocketFD)slot.common.fd, status, nsent, status == IOStatus.ok ? addr : null);
 		}
 
 		slot.datagramSocket.read.bytesTransferred += cbTransferred;
@@ -551,6 +558,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			() @trusted { CancelIoEx(cast(HANDLE)cast(SOCKET)socket, cast(LPOVERLAPPED)&slot.write.overlapped); } ();
 
 		slot.write.callback = on_write_finish;
+		addRef(socket);
 		m_core.addWaiter();
 	}
 
@@ -577,11 +585,13 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			slot.datagramSocket.write.callback = null;
 			slot.datagramSocket.targetAddr = null;
 
-			if (addr) {
-				scope raddr = new RefAddress(addr.name, addr.nameLen);
-				cb(cast(DatagramSocketFD)slot.common.fd, status, nsent, raddr);
-			} else {
-				cb(cast(DatagramSocketFD)slot.common.fd, status, nsent, null);
+			if (slot.common.driver.releaseRef(cast(DatagramSocketFD)slot.common.fd)) {
+				if (addr) {
+					scope raddr = new RefAddress(addr.name, addr.nameLen);
+					cb(cast(DatagramSocketFD)slot.common.fd, status, nsent, raddr);
+				} else {
+					cb(cast(DatagramSocketFD)slot.common.fd, status, nsent, null);
+				}
 			}
 		}
 
@@ -683,7 +693,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	{
 		m_sockets[fd.value].common.refCount = 1;
 		m_sockets[fd.value].common.fd = fd;
-		m_sockets[fd.value].common.core = m_core;
+		m_sockets[fd.value].common.driver = this;
 	}
 
 	package void clearSocketSlot(FD fd)
@@ -718,7 +728,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 									cb(cast(StreamSocketFD)sock, ConnectStatus.refused);
 								} else {
 									slot.streamSocket.state = ConnectionState.connected;
-									cb(cast(StreamSocketFD)sock, ConnectStatus.connected);
+									if (slot.common.driver.releaseRef(cast(StreamSocketFD)sock))
+										cb(cast(StreamSocketFD)sock, ConnectStatus.connected);
 								}
 								break;
 							case FD_READ:
@@ -771,7 +782,7 @@ void setupWindowClass() nothrow
 	static __gshared registered = false;
 
 	if (registered) return;
-	
+
 	WNDCLASSA wc;
 	wc.lpfnWndProc = &WinAPIEventDriverSockets.onMessage;
 	wc.lpszClassName = "VibeWin32MessageWindow";
@@ -781,7 +792,8 @@ void setupWindowClass() nothrow
 
 static struct SocketSlot {
 	SocketFD fd; // redundant, but needed by the current IO Completion Routines based approach
-	WinAPIEventDriverCore core; // redundant, but needed by the current IO Completion Routines based approach
+	WinAPIEventDriverSockets driver; // redundant, but needed by the current IO Completion Routines based approach
+	@property inout(WinAPIEventDriverCore) core() @safe nothrow inout { return driver.m_core; }
 	int refCount;
 	DataInitializer userDataDestructor;
 	ubyte[16*size_t.sizeof] userData;
