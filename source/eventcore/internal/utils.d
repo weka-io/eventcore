@@ -38,9 +38,7 @@ struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
 
 	@safe: nothrow:
 	import core.stdc.stdlib : calloc, free, malloc, realloc;
-	import std.traits : hasElaborateDestructor;
-
-	static assert(!hasElaborateDestructor!T, "Cannot store element with elaborate destructor in ChoppedVector.");
+	import std.traits : hasIndirections;
 
 	alias chunkSize = CHUNK_SIZE;
 
@@ -65,7 +63,9 @@ struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
 	@nogc {
 		() @trusted {
 			foreach (i; 0 .. m_chunkCount) {
-				GC.removeRange(m_chunks[i]);
+				destroy(m_chunks[i]);
+				static if (hasIndirections!T)
+					GC.removeRange(m_chunks[i]);
 				free(m_chunks[i]);
 			}
 			free(m_chunks.ptr);
@@ -127,7 +127,9 @@ struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
 			() @trusted { 
 				auto ptr = cast(ChunkPtr)calloc(chunkSize, T.sizeof);
 				assert(ptr !is null, "Failed to allocate chunk!");
-				GC.addRange(ptr, chunkSize * T.sizeof);
+				// FIXME: initialize with T.init instead of 0
+				static if (hasIndirections!T)
+					GC.addRange(ptr, chunkSize * T.sizeof);
 				m_chunks[m_chunkCount++] = ptr;
 			} ();
 		}
