@@ -86,12 +86,13 @@ final class KqueueEventLoop : PosixEventLoop {
 		close(m_queue);
 	}
 
-	override void registerFD(FD fd, EventMask mask)
+	override void registerFD(FD fd, EventMask mask, bool edge_triggered = true)
 	{
 		//print("register %s %s", fd, mask);
 		kevent_t ev;
 		ev.ident = fd;
-		ev.flags = EV_ADD|EV_CLEAR|EV_ENABLE;
+		ev.flags = EV_ADD|EV_ENABLE;
+		if (edge_triggered) ev.flags |= EV_CLEAR;
 		if (mask & EventMask.read) {
 			ev.filter = EVFILT_READ;
 			m_changes ~= ev;
@@ -111,21 +112,23 @@ final class KqueueEventLoop : PosixEventLoop {
 		m_changes ~= ev;
 	}
 
-	override void updateFD(FD fd, EventMask old_mask, EventMask new_mask)
+	override void updateFD(FD fd, EventMask old_mask, EventMask new_mask, bool edge_triggered = true)
 	{
 		//print("update %s %s", fd, mask);
 		kevent_t ev;
 		auto changes = old_mask ^ new_mask;
-		
+
 		if (changes & EventMask.read) {
 			ev.filter = EVFILT_READ;
-			ev.flags = EV_CLEAR | (new_mask & EventMask.read ? EV_ADD : EV_DELETE);
+			ev.flags = new_mask & EventMask.read ? EV_ADD : EV_DELETE;
+			if (edge_triggered) ev.flags |= EV_CLEAR;
 			m_changes ~= ev;
 		}
-		
+
 		if (changes & EventMask.write) {
 			ev.filter = EVFILT_WRITE;
-			ev.flags = EV_CLEAR | (new_mask & EventMask.write ? EV_ADD : EV_DELETE);
+			ev.flags = new_mask & EventMask.write ? EV_ADD : EV_DELETE;
+			if (edge_triggered) ev.flags |= EV_CLEAR;
 			m_changes ~= ev;
 		}
 

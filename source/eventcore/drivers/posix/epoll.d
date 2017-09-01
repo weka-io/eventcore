@@ -62,11 +62,11 @@ final class EpollEventLoop : PosixEventLoop {
 		close(m_epoll);
 	}
 
-	override void registerFD(FD fd, EventMask mask)
+	override void registerFD(FD fd, EventMask mask, bool edge_triggered = true)
 	{
 		debug (EventCoreEpollDebug) print("Epoll register FD %s: %s", fd, mask);
 		epoll_event ev;
-		ev.events |= EPOLLET;
+		if (edge_triggered) ev.events |= EPOLLET;
 		if (mask & EventMask.read) ev.events |= EPOLLIN;
 		if (mask & EventMask.write) ev.events |= EPOLLOUT;
 		if (mask & EventMask.status) ev.events |= EPOLLERR|EPOLLHUP|EPOLLRDHUP;
@@ -80,11 +80,11 @@ final class EpollEventLoop : PosixEventLoop {
 		() @trusted { epoll_ctl(m_epoll, EPOLL_CTL_DEL, cast(int)fd, null); } ();
 	}
 
-	override void updateFD(FD fd, EventMask old_mask, EventMask mask)
+	override void updateFD(FD fd, EventMask old_mask, EventMask mask, bool edge_triggered = true)
 	{
 		debug (EventCoreEpollDebug) print("Epoll update FD %s: %s", fd, mask);
 		epoll_event ev;
-		ev.events |= EPOLLET;
+		if (edge_triggered) ev.events |= EPOLLET;
 		//ev.events = EPOLLONESHOT;
 		if (mask & EventMask.read) ev.events |= EPOLLIN;
 		if (mask & EventMask.write) ev.events |= EPOLLOUT;

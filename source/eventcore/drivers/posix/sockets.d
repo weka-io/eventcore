@@ -172,7 +172,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override void waitForConnections(StreamListenSocketFD sock, AcceptCallback on_accept)
 	{
-		m_loop.registerFD(sock, EventMask.read);
+		m_loop.registerFD(sock, EventMask.read, false);
 		m_loop.m_fds[sock].streamListen.acceptCallback = on_accept;
 		m_loop.setNotifyCallback!(EventType.read)(sock, &onAccept);
 		onAccept(sock);

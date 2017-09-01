@@ -72,7 +72,7 @@ final class SelectEventLoop : PosixEventLoop {
 	{
 	}
 
-	override void registerFD(FD fd, EventMask mask)
+	override void registerFD(FD fd, EventMask mask, bool edge_triggered = true)
 	{
 	}
 
@@ -80,7 +80,7 @@ final class SelectEventLoop : PosixEventLoop {
 	{
 	}
 
-	override void updateFD(FD fd, EventMask old_mask, EventMask mask)
+	override void updateFD(FD fd, EventMask old_mask, EventMask mask, bool edge_triggered = true)
 	{
 	}
 }

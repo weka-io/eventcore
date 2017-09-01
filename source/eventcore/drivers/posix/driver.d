@@ -91,7 +91,7 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 	{
 		m_files.dispose();
 		m_dns.dispose();
-		m_loop.dispose();		
+		m_loop.dispose();
 	}
 }
 
@@ -215,11 +215,11 @@ package class PosixEventLoop {
 	protected abstract bool doProcessEvents(Duration dur);
 
 	/// Registers the FD for general notification reception.
-	protected abstract void registerFD(FD fd, EventMask mask);
+	protected abstract void registerFD(FD fd, EventMask mask, bool edge_triggered = true);
 	/// Unregisters the FD for general notification reception.
 	protected abstract void unregisterFD(FD fd, EventMask mask);
 	/// Updates the event mask to use for listening for notifications.
-	protected abstract void updateFD(FD fd, EventMask old_mask, EventMask new_mask);
+	protected abstract void updateFD(FD fd, EventMask old_mask, EventMask new_mask, bool edge_triggered = true);
 
 	final protected void notify(EventType evt)(FD fd)
 	{
