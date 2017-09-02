@@ -27,7 +27,8 @@ Supported compilers
 
 The following compilers are tested and supported:
 
-- DMD 2.075.0
+- DMD 2.076.0
+- DMD 2.075.1
 - DMD 2.074.1
 - DMD 2.073.2
 - DMD 2.072.2
