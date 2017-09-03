@@ -278,6 +278,9 @@ interface EventDriverSockets {
 	/// Sets the `SO_BROADCAST` socket option.
 	bool setBroadcast(DatagramSocketFD socket, bool enable);
 
+	/// Joins the multicast group associated with the given IP address.
+	bool joinMulticastGroup(DatagramSocketFD socket, scope Address multicast_address);
+
 	/// Receives a single datagram.
 	void receive(DatagramSocketFD socket, ubyte[] buffer, IOMode mode, DatagramIOCallback on_receive_finish);
 	/// Cancels an ongoing wait for an incoming datagram.
@@ -300,6 +303,12 @@ interface EventDriverSockets {
 			Returns `false` $(I iff) the last reference was removed by this call.
 	*/
 	bool releaseRef(SocketFD descriptor);
+
+	/** Enables or disables a socket option.
+	*/
+	bool setOption(DatagramSocketFD socket, DatagramSocketOption option, bool enable);
+	/// ditto
+	bool setOption(StreamSocketFD socket, StreamSocketOption option, bool enable);
 
 	/// Low-level user data access. Use `getUserData` instead.
 	protected void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
@@ -559,6 +568,16 @@ enum ConnectionState {
 enum StreamListenOptions {
 	defaults = 0,
 	reusePort = 1<<0,
+}
+
+enum StreamSocketOption {
+	noDelay,
+	keepAlive
+}
+
+enum DatagramSocketOption {
+	broadcast,
+	multicastLoopback
 }
 
 /**
