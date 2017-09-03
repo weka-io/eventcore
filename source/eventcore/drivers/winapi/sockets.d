@@ -444,6 +444,35 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		return () @trusted { return setsockopt(cast(SOCKET)socket, SOL_SOCKET, SO_BROADCAST, &tmp_broad, tmp_broad.sizeof); } () == 0;
 	}
 
+	final override bool joinMulticastGroup(DatagramSocketFD socket, scope Address multicast_address)
+	{
+		import std.socket : AddressFamily;
+
+		switch (multicast_address.addressFamily) {
+			default: assert(false, "Multicast only supported for IPv4/IPv6 sockets.");
+			case AddressFamily.INET:
+				struct ip_mreq {
+					in_addr imr_multiaddr;   /* IP multicast address of group */
+					in_addr imr_interface;   /* local IP address of interface */
+				}
+				auto addr = () @trusted { return cast(sockaddr_in*)multicast_address.name; } ();
+				ip_mreq mreq;
+				mreq.imr_multiaddr = addr.sin_addr;
+				mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+				return () @trusted { return setsockopt(cast(SOCKET)socket, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, ip_mreq.sizeof); } () == 0;
+			case AddressFamily.INET6:
+				struct ipv6_mreq {
+					in6_addr ipv6mr_multiaddr;
+					uint ipv6mr_interface;
+				}
+				auto addr = () @trusted { return cast(sockaddr_in6*)multicast_address.name; } ();
+				ipv6_mreq mreq;
+				mreq.ipv6mr_multiaddr = addr.sin6_addr;
+				mreq.ipv6mr_interface = 0;
+				return () @trusted { return setsockopt(cast(SOCKET)socket, IPPROTO_IP, IPV6_JOIN_GROUP, &mreq, ipv6_mreq.sizeof); } () == 0;
+		}
+	}
+
 	override void receive(DatagramSocketFD socket, ubyte[] buffer, IOMode mode, DatagramIOCallback on_read_finish)
 	{
 		auto slot = () @trusted { return &m_sockets[socket].datagramSocket(); } ();
@@ -663,6 +692,28 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			return false;
 		}
 		return true;
+	}
+
+	final override bool setOption(DatagramSocketFD socket, DatagramSocketOption option, bool enable)
+	{
+		int proto, opt;
+		final switch (option) {
+			case DatagramSocketOption.broadcast: proto = SOL_SOCKET; opt = SO_BROADCAST; break;
+			case DatagramSocketOption.multicastLoopback: proto = IPPROTO_IP; opt = IP_MULTICAST_LOOP; break;
+		}
+		int tmp = enable;
+		return () @trusted { return setsockopt(cast(SOCKET)socket, proto, opt, &tmp, tmp.sizeof); } () == 0;
+	}
+
+	final override bool setOption(StreamSocketFD socket, StreamSocketOption option, bool enable)
+	{
+		int proto, opt;
+		final switch (option) {
+			case StreamSocketOption.noDelay: proto = IPPROTO_TCP; opt = TCP_NODELAY; break;
+			case StreamSocketOption.keepAlive: proto = SOL_SOCKET; opt = SO_KEEPALIVE; break;
+		}
+		int tmp = enable;
+		return () @trusted { return setsockopt(cast(SOCKET)socket, proto, opt, &tmp, tmp.sizeof); } () == 0;
 	}
 
 	final protected override void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
