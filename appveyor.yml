@@ -48,7 +48,6 @@ environment:
 
 matrix:
   allow_failures:
-    - CONFIG: winapi
     - CONFIG: libasync
 
 skip_tags: false
