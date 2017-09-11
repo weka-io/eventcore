@@ -444,7 +444,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		return () @trusted { return setsockopt(cast(SOCKET)socket, SOL_SOCKET, SO_BROADCAST, &tmp_broad, tmp_broad.sizeof); } () == 0;
 	}
 
-	final override bool joinMulticastGroup(DatagramSocketFD socket, scope Address multicast_address)
+	final override bool joinMulticastGroup(DatagramSocketFD socket, scope Address multicast_address, uint interface_index)
 	{
 		import std.socket : AddressFamily;
 
@@ -458,7 +458,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 				auto addr = () @trusted { return cast(sockaddr_in*)multicast_address.name; } ();
 				ip_mreq mreq;
 				mreq.imr_multiaddr = addr.sin_addr;
-				mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+				mreq.imr_interface.s_addr = htonl(interface_index);
 				return () @trusted { return setsockopt(cast(SOCKET)socket, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, ip_mreq.sizeof); } () == 0;
 			case AddressFamily.INET6:
 				struct ipv6_mreq {
@@ -468,7 +468,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 				auto addr = () @trusted { return cast(sockaddr_in6*)multicast_address.name; } ();
 				ipv6_mreq mreq;
 				mreq.ipv6mr_multiaddr = addr.sin6_addr;
-				mreq.ipv6mr_interface = 0;
+				mreq.ipv6mr_interface = htonl(interface_index);
 				return () @trusted { return setsockopt(cast(SOCKET)socket, IPPROTO_IP, IPV6_JOIN_GROUP, &mreq, ipv6_mreq.sizeof); } () == 0;
 		}
 	}

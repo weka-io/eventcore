@@ -577,7 +577,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		return () @trusted { return setsockopt(cast(sock_t)socket, SOL_SOCKET, SO_BROADCAST, &tmp_broad, tmp_broad.sizeof); } () == 0;
 	}
 
-	final override bool joinMulticastGroup(DatagramSocketFD socket, scope Address multicast_address)
+	final override bool joinMulticastGroup(DatagramSocketFD socket, scope Address multicast_address, uint interface_index = 0)
 	{
 		switch (multicast_address.addressFamily) {
 			default: assert(false, "Multicast only supported for IPv4/IPv6 sockets.");
@@ -589,7 +589,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 				auto addr = () @trusted { return cast(sockaddr_in*)multicast_address.name; } ();
 				ip_mreq mreq;
 				mreq.imr_multiaddr = addr.sin_addr;
-				mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+				mreq.imr_interface.s_addr = htonl(interface_index);
 				return () @trusted { return setsockopt(cast(sock_t)socket, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, ip_mreq.sizeof); } () == 0;
 			case AddressFamily.INET6:
 				version (Windows) {
@@ -601,7 +601,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 				auto addr = () @trusted { return cast(sockaddr_in6*)multicast_address.name; } ();
 				ipv6_mreq mreq;
 				mreq.ipv6mr_multiaddr = addr.sin6_addr;
-				mreq.ipv6mr_interface = 0;
+				mreq.ipv6mr_interface = htonl(interface_index);
 				return () @trusted { return setsockopt(cast(sock_t)socket, IPPROTO_IP, IPV6_JOIN_GROUP, &mreq, ipv6_mreq.sizeof); } () == 0;
 		}
 	}

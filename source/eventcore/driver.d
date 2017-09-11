@@ -279,7 +279,7 @@ interface EventDriverSockets {
 	bool setBroadcast(DatagramSocketFD socket, bool enable);
 
 	/// Joins the multicast group associated with the given IP address.
-	bool joinMulticastGroup(DatagramSocketFD socket, scope Address multicast_address);
+	bool joinMulticastGroup(DatagramSocketFD socket, scope Address multicast_address, uint interface_index = 0);
 
 	/// Receives a single datagram.
 	void receive(DatagramSocketFD socket, ubyte[] buffer, IOMode mode, DatagramIOCallback on_receive_finish);
