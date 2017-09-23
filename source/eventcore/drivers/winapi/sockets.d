@@ -444,7 +444,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		return () @trusted { return setsockopt(cast(SOCKET)socket, SOL_SOCKET, SO_BROADCAST, &tmp_broad, tmp_broad.sizeof); } () == 0;
 	}
 
-	final override bool joinMulticastGroup(DatagramSocketFD socket, scope Address multicast_address, uint interface_index)
+	final override bool joinMulticastGroup(DatagramSocketFD socket, scope Address multicast_address, uint interface_index = 0)
 	{
 		import std.socket : AddressFamily;
 
