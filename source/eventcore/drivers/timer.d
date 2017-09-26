@@ -51,14 +51,15 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 			if (tm.repeatDuration > 0) {
 				do tm.timeout += tm.repeatDuration;
 				while (tm.timeout <= stdtime);
-				enqueueTimer(tm);
 			} else tm.pending = false;
 			m_firedTimers ~= tm;
 		}
 
-		// NOTE: this isn't yet verified to work under all circumstances
-		foreach (tm; m_firedTimers)
+		foreach (tm; m_firedTimers) {
 			m_timerQueue.remove(tm);
+			if (tm.repeatDuration > 0)
+				enqueueTimer(tm);
+		}
 
 		foreach (tm; m_firedTimers) {
 			auto cb = tm.callback;
