@@ -46,6 +46,10 @@ version(FreeBSD) {
 		enum IP_MULTICAST_LOOP  = 11;
 	} else import core.sys.freebsd.netinet.in_ : IP_ADD_MEMBERSHIP, IP_MULTICAST_LOOP;
 }
+version (Solaris) {
+	enum IP_ADD_MEMBERSHIP = 0x13;
+	enum IP_MULTICAST_LOOP = 0x12;
+}
 version (Windows) {
 	import core.sys.windows.windows;
 	import core.sys.windows.winsock2;
