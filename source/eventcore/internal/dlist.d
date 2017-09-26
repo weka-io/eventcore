@@ -59,6 +59,7 @@ struct StackDList(T) {
 
 	void insertAfter(T* item, T* after)
 	{
+		assert(!item.prev && !item.next);
 		if (!after) insertBack(item);
 		else {
 			item.prev = after;
