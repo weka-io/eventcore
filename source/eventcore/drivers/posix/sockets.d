@@ -95,7 +95,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		m_loop.registerFD(sock, EventMask.read|EventMask.write|EventMask.status);
 		m_loop.m_fds[sock].specific = StreamSocketSlot.init;
 		m_loop.setNotifyCallback!(EventType.status)(sock, &onConnectError);
-		releaseRef(sock); // setNotifyCallback adds a reference, but waiting for status/disconnect should not affect the ref count
+		releaseRef(sock);	// onConnectError callback is weak reference
 
 		auto ret = () @trusted { return connect(cast(sock_t)sock, address.name, address.nameLen); } ();
 		if (ret == 0) {
@@ -113,12 +113,27 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 				m_loop.clearFD(sock);
 				m_loop.unregisterFD(sock, EventMask.read|EventMask.write|EventMask.status);
 				invalidateSocket();
-				on_connect(sock, ConnectStatus.unknownError);
-				return sock;
+				on_connect(StreamSocketFD.invalid, ConnectStatus.unknownError);
+				return StreamSocketFD.invalid;
 			}
 		}
 
 		return sock;
+	}
+
+	final override void cancelConnectStream(StreamSocketFD sock)
+	{
+		assert(sock != StreamSocketFD.invalid, "Invalid socket descriptor");
+		with (m_loop.m_fds[sock].streamSocket)
+		{
+			assert(state == ConnectionState.connecting,
+				"Unable to cancel connect on the socket that is not in connecting state");
+			state = ConnectionState.closed;
+			connectCallback = null;
+			m_loop.clearFD(sock);
+			m_loop.unregisterFD(sock, EventMask.read|EventMask.write|EventMask.status);
+			closeSocket(cast(sock_t)sock.value);
+		}
 	}
 
 	final override StreamSocketFD adoptStream(int socket)
@@ -226,7 +241,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		m_loop.m_fds[fd].streamSocket.state = ConnectionState.connected;
 		m_loop.registerFD(fd, EventMask.read|EventMask.write|EventMask.status);
 		m_loop.setNotifyCallback!(EventType.status)(fd, &onConnectError);
-		releaseRef(fd); // setNotifyCallback adds a reference, but waiting for status/disconnect should not affect the ref count
+		releaseRef(fd);		// onConnectError callback is weak reference
 		//print("accept %d", sockfd);
 		scope RefAddress addrc = new RefAddress(() @trusted { return cast(sockaddr*)&addr; } (), addr_len);
 		m_loop.m_fds[listenfd].streamListen.acceptCallback(cast(StreamListenSocketFD)listenfd, fd, addrc);
@@ -889,4 +904,3 @@ private int getSocketError()
 	version (Windows) return WSAGetLastError();
 	else return errno;
 }
-

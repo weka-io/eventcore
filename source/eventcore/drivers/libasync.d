@@ -89,6 +89,11 @@ final class LibasyncEventDriverSockets : EventDriverSockets {
 		assert(false, "TODO!");
 	}
 
+	override void cancelConnectStream(StreamSocketFD sock)
+	{
+		assert(false, "TODO!");
+	}
+
 	override StreamSocketFD adoptStream(int socket)
 	{
 		assert(false, "TODO!");

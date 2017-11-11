@@ -127,6 +127,10 @@ interface EventDriverSockets {
 	*/
 	StreamSocketFD connectStream(scope Address peer_address, scope Address bind_address, ConnectCallback on_connect);
 
+	/** Aborts asynchronous connect by closing the socket.
+	*/
+	void cancelConnectStream(StreamSocketFD sock);
+
 	/** Adopts an existing stream socket.
 
 		The given socket must be in a connected state. It will be automatically
