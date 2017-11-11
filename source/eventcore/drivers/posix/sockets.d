@@ -129,13 +129,10 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			assert(state == ConnectionState.connecting,
 				"Unable to cancel connect on the socket that is not in connecting state");
 			state = ConnectionState.closed;
-			auto cb = connectCallback;
 			connectCallback = null;
 			m_loop.clearFD(sock);
 			m_loop.unregisterFD(sock, EventMask.read|EventMask.write|EventMask.status);
 			closeSocket(cast(sock_t)sock.value);
-			if (cb)
-				cb(StreamSocketFD.invalid, ConnectStatus.cancelled);
 		}
 	}
 

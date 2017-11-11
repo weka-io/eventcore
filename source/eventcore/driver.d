@@ -557,8 +557,7 @@ enum ConnectStatus {
 	refused,
 	timeout,
 	bindFailure,
-	unknownError,
-	cancelled
+	unknownError
 }
 
 enum ConnectionState {
