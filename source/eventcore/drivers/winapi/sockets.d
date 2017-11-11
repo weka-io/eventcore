@@ -82,6 +82,11 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		}
 	}
 
+	final override void cancelConnectStream(StreamSocketFD sock)
+	{
+		assert(false, "Not implemented");
+	}
+
 	override StreamSocketFD adoptStream(int socket)
 	{
 		return adoptStreamInternal(socket);
