@@ -128,6 +128,19 @@ interface EventDriverSockets {
 	StreamSocketFD connectStream(scope Address peer_address, scope Address bind_address, ConnectCallback on_connect);
 
 	/** Aborts asynchronous connect by closing the socket.
+
+		This function may only invoked if the connection state is
+		`ConnectionState.connecting`. It will cancel the connection attempt and
+		guarantees that the connection callback will not be invoked in the
+		future.
+
+		Note that upon completion, the socket handle will be invalid, regardless
+		of the number of calls to `addRef`, and must not be used for further
+		operations.
+
+		Params:
+			sock = Handle of the socket that is currently establishing a
+				connection
 	*/
 	void cancelConnectStream(StreamSocketFD sock);
 

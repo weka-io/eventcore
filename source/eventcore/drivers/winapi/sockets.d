@@ -84,7 +84,15 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	final override void cancelConnectStream(StreamSocketFD sock)
 	{
-		assert(false, "Not implemented");
+		assert(sock != StreamSocketFD.invalid, "Invalid socket descriptor");
+
+		with (m_sockets[sock].streamSocket) {
+			assert(state == ConnectionState.connecting,
+				"Must be in 'connecting' state when calling cancelConnection.");
+
+			clearSocketSlot(sock);
+			() @trusted { closesocket(sock); } ();
+		}
 	}
 
 	override StreamSocketFD adoptStream(int socket)
