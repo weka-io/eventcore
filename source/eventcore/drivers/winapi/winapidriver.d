@@ -5,7 +5,7 @@
 	efficiently. The driver's event loop processes UI messages, so that
 	it integrates with GUI applications transparently.
 */
-module eventcore.drivers.winapi.driver;
+module eventcore.drivers.winapi.winapidriver;
 
 version (Windows):
 

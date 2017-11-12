@@ -2,7 +2,7 @@ module eventcore.drivers.posix.sockets;
 @safe:
 
 import eventcore.driver;
-import eventcore.drivers.posix.driver;
+import eventcore.drivers.posix.posixdriver;
 import eventcore.internal.utils;
 
 import std.algorithm.comparison : among, min, max;

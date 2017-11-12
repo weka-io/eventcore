@@ -2,7 +2,7 @@ module eventcore.drivers.posix.dns;
 @safe:
 
 import eventcore.driver;
-import eventcore.drivers.posix.driver;
+import eventcore.drivers.posix.posixdriver;
 import eventcore.internal.utils : ChoppedVector, print;
 
 import std.socket : Address, AddressFamily, InternetAddress, Internet6Address, UnknownAddress;

@@ -13,7 +13,7 @@ else enum have_kqueue = false;
 
 static if (have_kqueue):
 
-public import eventcore.drivers.posix.driver;
+public import eventcore.drivers.posix.posixdriver;
 import eventcore.internal.utils;
 
 import core.time : Duration;

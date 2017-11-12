@@ -2,7 +2,7 @@ module eventcore.drivers.posix.signals;
 @safe:
 
 import eventcore.driver;
-import eventcore.drivers.posix.driver;
+import eventcore.drivers.posix.posixdriver;
 
 import std.algorithm.comparison : among;
 
@@ -52,7 +52,7 @@ final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSigna
 		assert(m_loop.m_fds[descriptor].common.refCount > 0, "Adding reference to unreferenced event FD.");
 		m_loop.m_fds[descriptor].common.refCount++;
 	}
-	
+
 	override bool releaseRef(SignalListenID descriptor)
 	{
 		FD fd = cast(FD)descriptor;
@@ -71,7 +71,7 @@ final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSigna
 		SignalListenID lid = cast(SignalListenID)fd;
 		signalfd_siginfo nfo;
 		do {
-			auto ret = () @trusted { return read(cast(int)fd, &nfo, nfo.sizeof); } ();	
+			auto ret = () @trusted { return read(cast(int)fd, &nfo, nfo.sizeof); } ();
 			if (ret == -1 && errno.among!(EAGAIN, EINPROGRESS))
 				break;
 			auto cb = m_loop.m_fds[fd].signal.callback;
@@ -107,7 +107,7 @@ final class DummyEventDriverSignals(Loop : PosixEventLoop) : EventDriverSignals 
 	{
 		assert(false);
 	}
-	
+
 	override bool releaseRef(SignalListenID descriptor)
 	{
 		assert(false);

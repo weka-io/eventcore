@@ -4,7 +4,7 @@ version (Windows):
 
 import eventcore.driver;
 import eventcore.drivers.winapi.core;
-import eventcore.drivers.winapi.driver : WinAPIEventDriver; // FIXME: this is an ugly dependency
+import eventcore.drivers.winapi.winapidriver : WinAPIEventDriver; // FIXME: this is an ugly dependency
 import eventcore.internal.win32;
 import std.experimental.allocator : dispose, makeArray, theAllocator;
 
@@ -31,7 +31,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 				FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED,
 				null);
 			} ();
-		
+
 		if (handle == INVALID_HANDLE_VALUE)
 			return WatcherID.invalid;
 

@@ -9,7 +9,7 @@ module eventcore.drivers.posix.epoll;
 
 version (linux):
 
-public import eventcore.drivers.posix.driver;
+public import eventcore.drivers.posix.posixdriver;
 import eventcore.internal.utils;
 
 import core.time : Duration;

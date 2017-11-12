@@ -2,7 +2,7 @@ module eventcore.drivers.posix.events;
 @safe:
 
 import eventcore.driver;
-import eventcore.drivers.posix.driver;
+import eventcore.drivers.posix.posixdriver;
 import eventcore.internal.consumablequeue : ConsumableQueue;
 
 import std.socket : InternetAddress;

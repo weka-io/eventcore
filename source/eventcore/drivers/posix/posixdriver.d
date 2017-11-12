@@ -3,7 +3,7 @@
 
 	See_also: `eventcore.drivers.select`, `eventcore.drivers.epoll`, `eventcore.drivers.kqueue`
 */
-module eventcore.drivers.posix.driver;
+module eventcore.drivers.posix.posixdriver;
 @safe: /*@nogc:*/ nothrow:
 
 public import eventcore.driver;

@@ -2,7 +2,7 @@ module eventcore.drivers.posix.watchers;
 @safe:
 
 import eventcore.driver;
-import eventcore.drivers.posix.driver;
+import eventcore.drivers.posix.posixdriver;
 
 
 final class InotifyEventDriverWatchers(Loop : PosixEventLoop) : EventDriverWatchers
