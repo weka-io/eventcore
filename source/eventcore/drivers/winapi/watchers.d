@@ -77,15 +77,23 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 	{
 		import std.conv : to;
 
-		auto handle = overlapped.hEvent; // *file* handle
-		auto id = WatcherID(cast(int)handle);
-		auto slot = () @trusted { return &WinAPIEventDriver.threadInstance.core.m_handles[handle].watcher(); } ();
-
 		if (dwError != 0) {
 			// FIXME: this must be propagated to the caller
 			//logWarn("Failed to read directory changes: %s", dwError);
 			return;
 		}
+
+		auto handle = overlapped.hEvent; // *file* handle
+		auto id = WatcherID(cast(int)handle);
+
+		/* HACK: this avoids a range voilation in case an already destroyed
+			watcher still fires a completed event. It does not avoid problems
+			that may arise from reused file handles.
+		*/
+		if (handle !in WinAPIEventDriver.threadInstance.core.m_handles)
+			return;
+
+		auto slot = () @trusted { return &WinAPIEventDriver.threadInstance.core.m_handles[handle].watcher(); } ();
 
 		ubyte[] result = slot.buffer[0 .. cbTransferred];
 		do {
