@@ -31,7 +31,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 				FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED,
 				null);
 			} ();
-		
+
 		if (handle == INVALID_HANDLE_VALUE)
 			return WatcherID.invalid;
 
@@ -45,11 +45,12 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 			try return theAllocator.makeArray!ubyte(16384);
 			catch (Exception e) assert(false, "Failed to allocate directory watcher buffer.");
 		} ();
-
 		if (!triggerRead(handle, *slot)) {
 			releaseRef(id);
 			return WatcherID.invalid;
 		}
+
+		m_core.addWaiter();
 
 		return id;
 	}
@@ -63,6 +64,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 	{
 		auto handle = idToHandle(descriptor);
 		return m_core.m_handles[handle].releaseRef(()nothrow{
+			m_core.removeWaiter();
 			CloseHandle(handle);
 			() @trusted {
 				try theAllocator.dispose(m_core.m_handles[handle].watcher.buffer);
@@ -93,11 +95,15 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 		if (handle !in WinAPIEventDriver.threadInstance.core.m_handles)
 			return;
 
+		// NOTE: can be 0 if the buffer overflowed
+		if (!cbTransferred)
+			return;
+
 		auto slot = () @trusted { return &WinAPIEventDriver.threadInstance.core.m_handles[handle].watcher(); } ();
 
 		ubyte[] result = slot.buffer[0 .. cbTransferred];
 		do {
-			assert(result.length >= FILE_NOTIFY_INFORMATION.sizeof);
+			assert(result.length >= FILE_NOTIFY_INFORMATION._FileName.offsetof);
 			auto fni = () @trusted { return cast(FILE_NOTIFY_INFORMATION*)result.ptr; } ();
 			FileChange ch;
 			switch (fni.Action) {
