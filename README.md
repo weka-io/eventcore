@@ -52,7 +52,7 @@ Events           | yes               | yes              | yes               | ye
 Unix Signals     | yes²              | yes              | &mdash;           | &mdash;          
 Files            | yes               | yes              | yes               | yes              
 UI Integration   | yes¹              | yes¹             | yes               | yes¹             
-File watcher     | yes²              | yes              | yes               | &mdash;          
+File watcher     | yes²              | yes              | yes               | yes²          
 
 Feature          | LibasyncEventDriver 
 -----------------|---------------------
@@ -69,7 +69,7 @@ File watcher     | &mdash;
 
 ¹ Manually, by adopting the X11 display connection socket
 
-² Currently only supported on Linux
+² Systems other than Linux use a polling implementation
 
 
 ### Open questions
