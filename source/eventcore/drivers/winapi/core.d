@@ -48,6 +48,8 @@ final class WinAPIEventDriverCore : EventDriverCore {
 			return ExitReason.exited;
 		}
 
+		if (!waiterCount) return ExitReason.outOfWaiters;
+
 		bool got_event;
 
 		if (timeout <= 0.seconds) {
@@ -109,7 +111,7 @@ final class WinAPIEventDriverCore : EventDriverCore {
 			DWORD timeout_msecs = max_wait == Duration.max ? INFINITE : cast(DWORD)min(max_wait.total!"msecs", DWORD.max);
 			auto ret = () @trusted { return MsgWaitForMultipleObjectsEx(cast(DWORD)m_registeredEvents.length, m_registeredEvents.ptr,
 				timeout_msecs, QS_ALLEVENTS, MWMO_ALERTABLE|MWMO_INPUTAVAILABLE); } ();
-			
+
 			if (ret == WAIT_IO_COMPLETION) got_event = true;
 			else if (ret >= WAIT_OBJECT_0 && ret < WAIT_OBJECT_0 + m_registeredEvents.length) {
 				if (auto pc = m_registeredEvents[ret - WAIT_OBJECT_0] in m_eventCallbacks) {
