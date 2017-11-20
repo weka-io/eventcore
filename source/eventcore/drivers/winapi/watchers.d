@@ -78,6 +78,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 	void onIOCompleted(DWORD dwError, DWORD cbTransferred, OVERLAPPED* overlapped)
 	{
 		import std.conv : to;
+		import std.path : dirName, baseName;
 
 		if (dwError != 0) {
 			// FIXME: this must be propagated to the caller
@@ -114,9 +115,10 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 				case 0x4: ch.kind = FileChangeKind.removed; break;
 				case 0x5: ch.kind = FileChangeKind.added; break;
 			}
-			ch.directory = slot.directory;
-			ch.isDirectory = false; // FIXME: is this right?
-			ch.name = () @trusted { scope (failure) assert(false); return to!string(fni.FileName[0 .. fni.FileNameLength/2]); } ();
+			ch.baseDirectory = slot.directory;
+			auto path = () @trusted { scope (failure) assert(false); return to!string(fni.FileName[0 .. fni.FileNameLength/2]); } ();
+			ch.directory = dirName(path);
+			ch.name = baseName(path);
 			slot.callback(id, ch);
 			if (fni.NextEntryOffset == 0) break;
 			result = result[fni.NextEntryOffset .. $];
