@@ -15,25 +15,42 @@ final class InotifyEventDriverWatchers(Events : EventDriverEvents) : EventDriver
 	private {
 		alias Loop = typeof(Events.init.loop);
 		Loop m_loop;
-		string[int][WatcherID] m_watches; // TODO: use a @nogc (allocator based) map
+
+		struct WatchState {
+			string[int] watcherPaths;
+			string basePath;
+			bool recursive;
+		}
+
+		WatchState[WatcherID] m_watches; // TODO: use a @nogc (allocator based) map
 	}
 
 	this(Events events) { m_loop = events.loop; }
 
 	final override WatcherID watchDirectory(string path, bool recursive, FileChangesCallback callback)
 	{
+		import std.path : buildPath, pathSplitter;
+		import std.range : drop;
+		import std.range.primitives : walkLength;
+
 		enum IN_NONBLOCK = 0x800; // value in core.sys.linux.sys.inotify is incorrect
 		auto handle = () @trusted { return inotify_init1(IN_NONBLOCK); } ();
 		if (handle == -1) return WatcherID.invalid;
 
 		auto ret = WatcherID(handle);
 
-		addWatch(ret, path);
+		m_watches[ret] = WatchState(null, path, recursive);
+
+		addWatch(ret, path, ".");
 		if (recursive) {
 			try {
+				auto base_segements = path.pathSplitter.walkLength;
 				if (path.isDir) () @trusted {
-					foreach (de; path.dirEntries(SpanMode.shallow))
-						if (de.isDir) addWatch(ret, de.name);
+					foreach (de; path.dirEntries(SpanMode.depth))
+						if (de.isDir) {
+							auto subdir = de.name.pathSplitter.drop(base_segements).buildPath;
+							addWatch(ret, path, subdir);
+						}
 				} ();
 			} catch (Exception e) {
 				// TODO: decide if this should be ignored or if the error should be forwarded
@@ -78,6 +95,7 @@ final class InotifyEventDriverWatchers(Events : EventDriverEvents) : EventDriver
 
 	private void processEvents(WatcherID id)
 	{
+		import std.path : buildPath, dirName;
 		import core.stdc.stdio : FILENAME_MAX;
 		import core.stdc.string : strlen;
 
@@ -89,9 +107,16 @@ final class InotifyEventDriverWatchers(Events : EventDriverEvents) : EventDriver
 				break;
 			assert(ret <= buf.length);
 
+			auto w = m_watches[id];
+
 			auto rem = buf[0 .. ret];
 			while (rem.length > 0) {
 				auto ev = () @trusted { return cast(inotify_event*)rem.ptr; } ();
+				rem = rem[inotify_event.sizeof + ev.len .. $];
+
+				// is the watch already deleted?
+				if (ev.mask & IN_IGNORED) continue;
+
 				FileChange ch;
 				if (ev.mask & (IN_CREATE|IN_MOVED_TO))
 					ch.kind = FileChangeKind.added;
@@ -100,28 +125,44 @@ final class InotifyEventDriverWatchers(Events : EventDriverEvents) : EventDriver
 				else if (ev.mask & IN_MODIFY)
 					ch.kind = FileChangeKind.modified;
 
+				if (ev.mask & IN_DELETE_SELF) {
+					() @trusted { inotify_rm_watch(cast(int)id, ev.wd); } ();
+					w.watcherPaths.remove(ev.wd);
+					continue;
+				} else if (ev.mask & IN_MOVE_SELF) {
+					// NOTE: the should have been updated by a previous IN_MOVED_TO
+					continue;
+				}
+
 				auto name = () @trusted { return ev.name.ptr[0 .. strlen(ev.name.ptr)]; } ();
-				ch.directory = m_watches[id][ev.wd];
+				auto subdir = w.watcherPaths[ev.wd];
+
+				if (w.recursive && ev.mask & (IN_CREATE|IN_MOVED_TO) && ev.mask & IN_ISDIR) {
+					addWatch(id, w.basePath, subdir == "." ? name.idup : buildPath(subdir, name));
+				}
+
+				ch.baseDirectory = m_watches[id].basePath;
+				ch.directory = subdir;
 				ch.isDirectory = (ev.mask & IN_ISDIR) != 0;
 				ch.name = name;
 				addRef(id); // assure that the id doesn't get invalidated until after the callback
 				auto cb = m_loop.m_fds[id].watcher.callback;
 				cb(id, ch);
 				if (!releaseRef(id)) return;
-
-				rem = rem[inotify_event.sizeof + ev.len .. $];
 			}
 		}
 	}
 
-	private bool addWatch(WatcherID handle, string path)
+	private bool addWatch(WatcherID handle, string base_path, string path)
 	{
+		import std.path : buildPath;
 		import std.string : toStringz;
+
 		enum EVENTS = IN_CREATE | IN_DELETE | IN_DELETE_SELF | IN_MODIFY |
 			IN_MOVE_SELF | IN_MOVED_FROM | IN_MOVED_TO;
-		immutable wd = () @trusted { return inotify_add_watch(cast(int)handle, path.toStringz, EVENTS); } ();
+		immutable wd = () @trusted { return inotify_add_watch(cast(int)handle, buildPath(base_path, path).toStringz, EVENTS); } ();
 		if (wd == -1) return false;
-		m_watches[handle][wd] = path;
+		m_watches[handle].watcherPaths[wd] = path;
 		return true;
 	}
 }
