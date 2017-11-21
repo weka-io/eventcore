@@ -78,7 +78,8 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 	void onIOCompleted(DWORD dwError, DWORD cbTransferred, OVERLAPPED* overlapped)
 	{
 		import std.conv : to;
-		import std.path : dirName, baseName;
+		import std.file : isDir;
+		import std.path : dirName, baseName, buildPath;
 
 		if (dwError != 0) {
 			// FIXME: this must be propagated to the caller
@@ -106,6 +107,8 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 		do {
 			assert(result.length >= FILE_NOTIFY_INFORMATION._FileName.offsetof);
 			auto fni = () @trusted { return cast(FILE_NOTIFY_INFORMATION*)result.ptr; } ();
+			result = result[fni.NextEntryOffset .. $];
+
 			FileChange ch;
 			switch (fni.Action) {
 				default: ch.kind = FileChangeKind.modified; break;
@@ -115,13 +118,17 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 				case 0x4: ch.kind = FileChangeKind.removed; break;
 				case 0x5: ch.kind = FileChangeKind.added; break;
 			}
+
 			ch.baseDirectory = slot.directory;
 			auto path = () @trusted { scope (failure) assert(false); return to!string(fni.FileName[0 .. fni.FileNameLength/2]); } ();
+			auto fullpath = buildPath(slot.directory, path);
 			ch.directory = dirName(path);
 			ch.name = baseName(path);
-			slot.callback(id, ch);
+			try ch.isDirectory = isDir(fullpath);
+			catch (Exception e) {} // FIXME: can happen if the base path is relative and the CWD has changed
+			if (ch.kind != FileChangeKind.modified || !ch.isDirectory)
+				slot.callback(id, ch);
 			if (fni.NextEntryOffset == 0) break;
-			result = result[fni.NextEntryOffset .. $];
 		} while (result.length > 0);
 
 		triggerRead(handle, *slot);
