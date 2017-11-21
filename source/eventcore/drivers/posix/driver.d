@@ -48,9 +48,9 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 		//version (linux) alias DNSDriver = EventDriverDNS_GAIA!(EventsDriver, SignalsDriver);
 		else alias DNSDriver = EventDriverDNS_GAI!(EventsDriver, SignalsDriver);
 		alias FileDriver = ThreadedFileEventDriver!EventsDriver;
-		version (linux) alias WatcherDriver = InotifyEventDriverWatchers!Loop;
-		else version (OSX) alias WatcherDriver = FSEventsEventDriverWatchers!Loop;
-		else alias WatcherDriver = PosixEventDriverWatchers!Loop;
+		version (linux) alias WatcherDriver = InotifyEventDriverWatchers!EventsDriver;
+		//else version (OSX) alias WatcherDriver = FSEventsEventDriverWatchers!EventsDriver;
+		else alias WatcherDriver = PollEventDriverWatchers!EventsDriver;
 
 		Loop m_loop;
 		CoreDriver m_core;
@@ -73,7 +73,7 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 		m_core = new CoreDriver(m_loop, m_timers, m_events);
 		m_dns = new DNSDriver(m_events, m_signals);
 		m_files = new FileDriver(m_events);
-		m_watchers = new WatcherDriver(m_loop);
+		m_watchers = new WatcherDriver(m_events);
 	}
 
 	// force overriding these in the (final) sub classes to avoid virtual calls

@@ -652,14 +652,21 @@ struct FileChange {
 	/// The type of change
 	FileChangeKind kind;
 
-	/// Directory containing the changed file
-	string directory;
+	/// The root directory of the watcher
+	string baseDirectory;
 
-	/// Determines if the changed entity is a file or a directory.
-	bool isDirectory;
+	/// Subdirectory containing the changed file
+	string directory;
 
 	/// Name of the changed file
 	const(char)[] name;
+
+	/** Determines if the changed entity is a file or a directory.
+
+		Note that depending on the platform this may not be accurate for
+		`FileChangeKind.removed`.
+	*/
+	bool isDirectory;
 }
 
 struct Handle(string NAME, T, T invalid_value = T.init) {
@@ -695,8 +702,8 @@ alias StreamListenSocketFD = Handle!("streamListen", SocketFD);
 alias DatagramSocketFD = Handle!("datagramSocket", SocketFD);
 alias FileFD = Handle!("file", FD);
 alias EventID = Handle!("event", FD);
-alias TimerID = Handle!("timer", size_t);
-alias WatcherID = Handle!("watcher", size_t);
-alias EventWaitID = Handle!("eventWait", size_t);
-alias SignalListenID = Handle!("signal", size_t);
-alias DNSLookupID = Handle!("dns", size_t);
+alias TimerID = Handle!("timer", size_t, size_t.max);
+alias WatcherID = Handle!("watcher", size_t, size_t.max);
+alias EventWaitID = Handle!("eventWait", size_t, size_t.max);
+alias SignalListenID = Handle!("signal", size_t, size_t.max);
+alias DNSLookupID = Handle!("dns", size_t, size_t.max);

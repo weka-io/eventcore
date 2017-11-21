@@ -110,6 +110,10 @@ final class WinAPIEventDriverEvents : EventDriverEvents {
 		auto pe = descriptor in m_events;
 		assert(pe.refCount > 0);
 		if (--pe.refCount == 0) {
+			// make sure to not leak any waiter references for pending waits
+			foreach (i; 0 .. pe.waiters.length)
+				m_core.removeWaiter();
+
 			() @trusted nothrow {
 				scope (failure) assert(false);
 				destroy(pe.waiters);

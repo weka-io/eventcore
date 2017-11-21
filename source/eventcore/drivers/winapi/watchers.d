@@ -31,7 +31,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 				FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED,
 				null);
 			} ();
-		
+
 		if (handle == INVALID_HANDLE_VALUE)
 			return WatcherID.invalid;
 
@@ -45,11 +45,12 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 			try return theAllocator.makeArray!ubyte(16384);
 			catch (Exception e) assert(false, "Failed to allocate directory watcher buffer.");
 		} ();
-
 		if (!triggerRead(handle, *slot)) {
 			releaseRef(id);
 			return WatcherID.invalid;
 		}
+
+		m_core.addWaiter();
 
 		return id;
 	}
@@ -63,6 +64,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 	{
 		auto handle = idToHandle(descriptor);
 		return m_core.m_handles[handle].releaseRef(()nothrow{
+			m_core.removeWaiter();
 			CloseHandle(handle);
 			() @trusted {
 				try theAllocator.dispose(m_core.m_handles[handle].watcher.buffer);
@@ -76,6 +78,8 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 	void onIOCompleted(DWORD dwError, DWORD cbTransferred, OVERLAPPED* overlapped)
 	{
 		import std.conv : to;
+		import std.file : isDir;
+		import std.path : dirName, baseName, buildPath;
 
 		if (dwError != 0) {
 			// FIXME: this must be propagated to the caller
@@ -93,12 +97,18 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 		if (handle !in WinAPIEventDriver.threadInstance.core.m_handles)
 			return;
 
+		// NOTE: can be 0 if the buffer overflowed
+		if (!cbTransferred)
+			return;
+
 		auto slot = () @trusted { return &WinAPIEventDriver.threadInstance.core.m_handles[handle].watcher(); } ();
 
 		ubyte[] result = slot.buffer[0 .. cbTransferred];
 		do {
-			assert(result.length >= FILE_NOTIFY_INFORMATION.sizeof);
+			assert(result.length >= FILE_NOTIFY_INFORMATION._FileName.offsetof);
 			auto fni = () @trusted { return cast(FILE_NOTIFY_INFORMATION*)result.ptr; } ();
+			result = result[fni.NextEntryOffset .. $];
+
 			FileChange ch;
 			switch (fni.Action) {
 				default: ch.kind = FileChangeKind.modified; break;
@@ -108,12 +118,17 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 				case 0x4: ch.kind = FileChangeKind.removed; break;
 				case 0x5: ch.kind = FileChangeKind.added; break;
 			}
-			ch.directory = slot.directory;
-			ch.isDirectory = false; // FIXME: is this right?
-			ch.name = () @trusted { scope (failure) assert(false); return to!string(fni.FileName[0 .. fni.FileNameLength/2]); } ();
-			slot.callback(id, ch);
+
+			ch.baseDirectory = slot.directory;
+			auto path = () @trusted { scope (failure) assert(false); return to!string(fni.FileName[0 .. fni.FileNameLength/2]); } ();
+			auto fullpath = buildPath(slot.directory, path);
+			ch.directory = dirName(path);
+			ch.name = baseName(path);
+			try ch.isDirectory = isDir(fullpath);
+			catch (Exception e) {} // FIXME: can happen if the base path is relative and the CWD has changed
+			if (ch.kind != FileChangeKind.modified || !ch.isDirectory)
+				slot.callback(id, ch);
 			if (fni.NextEntryOffset == 0) break;
-			result = result[fni.NextEntryOffset .. $];
 		} while (result.length > 0);
 
 		triggerRead(handle, *slot);
