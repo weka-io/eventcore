@@ -41,7 +41,7 @@ final class InotifyEventDriverWatchers(Events : EventDriverEvents) : EventDriver
 
 		m_watches[ret] = WatchState(null, path, recursive);
 
-		addWatch(ret, path, ".");
+		addWatch(ret, path, "");
 		if (recursive) {
 			try {
 				auto base_segements = path.pathSplitter.walkLength;
@@ -138,7 +138,7 @@ final class InotifyEventDriverWatchers(Events : EventDriverEvents) : EventDriver
 				auto subdir = w.watcherPaths[ev.wd];
 
 				if (w.recursive && ev.mask & (IN_CREATE|IN_MOVED_TO) && ev.mask & IN_ISDIR) {
-					addWatch(id, w.basePath, subdir == "." ? name.idup : buildPath(subdir, name));
+					addWatch(id, w.basePath, subdir == "" ? name.idup : buildPath(subdir, name));
 				}
 
 				ch.baseDirectory = m_watches[id].basePath;

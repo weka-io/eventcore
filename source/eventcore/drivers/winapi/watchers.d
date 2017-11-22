@@ -123,6 +123,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 			auto path = () @trusted { scope (failure) assert(false); return to!string(fni.FileName[0 .. fni.FileNameLength/2]); } ();
 			auto fullpath = buildPath(slot.directory, path);
 			ch.directory = dirName(path);
+			if (ch.directory == ".") ch.directory = "";
 			ch.name = baseName(path);
 			try ch.isDirectory = isDir(fullpath);
 			catch (Exception e) {} // FIXME: can happen if the base path is relative and the CWD has changed

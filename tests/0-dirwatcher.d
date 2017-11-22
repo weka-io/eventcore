@@ -27,17 +27,20 @@ void main()
 			default: assert(false);
 			case 0:
 				assert(change.kind == FileChangeKind.added);
-				assert(change.directory == ".");
+				assert(change.baseDirectory == ".");
+				assert(change.directory == "");
 				assert(change.name == testFilename);
 				break;
 			case 1:
 				assert(change.kind == FileChangeKind.modified);
-				assert(change.directory == ".");
+				assert(change.baseDirectory == ".");
+				assert(change.directory == "");
 				assert(change.name == testFilename);
 				break;
 			case 2:
 				assert(change.kind == FileChangeKind.removed);
-				assert(change.directory == ".");
+				assert(change.baseDirectory == ".");
+				assert(change.directory == "");
 				assert(change.name == testFilename);
 				eventDriver.watchers.releaseRef(id);
 				s_done = true;
