@@ -376,7 +376,7 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 		private void addChange(FileChangeKind kind, Key key, bool is_dir)
 		{
 			try synchronized (m_changesMutex) {
-				m_changes ~= FileChange(kind, m_basePath, key.parent ? key.parent.path : ".", key.name, is_dir);
+				m_changes ~= FileChange(kind, m_basePath, key.parent ? key.parent.path : "", key.name, is_dir);
 			} catch (Exception e) assert(false, "Mutex lock failed: "~e.msg);
 		}
 
