@@ -160,5 +160,7 @@ print("test %s RENAME %s %s", from, to, expect_change);
 
 FileChange fchange(FileChangeKind kind, string name, bool is_dir)
 {
-	return FileChange(kind, testDir, dirName(name), baseName(name), is_dir);
+	auto dn = dirName(name);
+	if (dn == ".") dn = "";
+	return FileChange(kind, testDir, dn, baseName(name), is_dir);
 }
