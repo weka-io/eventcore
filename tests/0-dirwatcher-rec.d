@@ -26,9 +26,6 @@ FileChange[] pendingChanges;
 
 void main()
 {
-	version (OSX) writefln("Directory watchers are not yet supported on macOS. Skipping test.");
-	else {
-
 	if (exists(testDir))
 		rmdirRecurse(testDir);
 
@@ -73,8 +70,6 @@ void main()
 	// make sure that no watchers are registered anymore
 	auto er = eventDriver.core.processEvents(10.msecs);
 	assert(er == ExitReason.outOfWaiters);
-
-	}
 }
 
 void testCallback(WatcherID w, in ref FileChange ch)
