@@ -35,7 +35,7 @@ void main()
 	// test non-recursive watcher
 	watcher = eventDriver.watchers.watchDirectory(testDir, false, toDelegate(&testCallback));
 	assert(watcher != WatcherID.invalid);
-	Thread.sleep(1000.msecs); // some watcher implementations need time to initialize
+	Thread.sleep(400.msecs); // some watcher implementations need time to initialize
 	testFile(     "file1.dat");
 	testFile(     "file2.dat");
 	testFile(     "dira/file1.dat", false);
@@ -50,7 +50,7 @@ void main()
 	// test recursive watcher
 	watcher = eventDriver.watchers.watchDirectory(testDir, true, toDelegate(&testCallback));
 	assert(watcher != WatcherID.invalid);
-	Thread.sleep(100.msecs); // some watcher implementations need time to initialize
+	Thread.sleep(400.msecs); // some watcher implementations need time to initialize
 	testFile(     "file1.dat");
 	testFile(     "file2.dat");
 	testFile(     "dira/file1.dat");
@@ -100,6 +100,8 @@ void expectChange(FileChange ch, bool expect_change)
 			return;
 		}
 	}
+	assert(expect_change, "Got change although none was expected.");
+
 	auto pch = pendingChanges[0];
 
 	// adjust for Windows behavior
