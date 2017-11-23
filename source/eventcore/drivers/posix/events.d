@@ -50,6 +50,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 			m_loop.registerFD(id, EventMask.read);
 			m_loop.setNotifyCallback!(EventType.read)(id, &onEvent);
 			releaseRef(id); // setNotifyCallback increments the reference count, but we need a value of 1 upon return
+			assert(getRC(id) == 1);
 			return id;
 		} else {
 			auto addr = new InternetAddress(0x7F000001, 0);
@@ -58,7 +59,9 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 			m_sockets.receive(s, m_buf, IOMode.once, &onSocketData);
 			m_events[s] = EventSlot(new ConsumableQueue!EventCallback, false, is_internal); // FIXME: avoid dynamic memory allocation
 			m_sockets.releaseRef(s); // receive() increments the reference count, but we need a value of 1 upon return
-			return cast(EventID)s;
+			auto id = cast(EventID)s;
+			assert(getRC(id) == 1);
+			return id;
 		}
 	}
 
