@@ -49,6 +49,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 			m_loop.m_fds[id].specific = EventSlot(new ConsumableQueue!EventCallback, false, is_internal); // FIXME: avoid dynamic memory allocation
 			m_loop.registerFD(id, EventMask.read);
 			m_loop.setNotifyCallback!(EventType.read)(id, &onEvent);
+			releaseRef(id); // setNotifyCallback increments the reference count, but we need a value of 1 upon return
 			return id;
 		} else {
 			auto addr = new InternetAddress(0x7F000001, 0);
@@ -56,6 +57,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 			if (s == DatagramSocketFD.invalid) return EventID.invalid;
 			m_sockets.receive(s, m_buf, IOMode.once, &onSocketData);
 			m_events[s] = EventSlot(new ConsumableQueue!EventCallback, false, is_internal); // FIXME: avoid dynamic memory allocation
+			m_sockets.releaseRef(s); // receive() increments the reference count, but we need a value of 1 upon return
 			return cast(EventID)s;
 		}
 	}
@@ -140,13 +142,14 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 		assert(getRC(descriptor) > 0, "Releasing reference to unreferenced event FD.");
 		void destroy() {
 			() @trusted nothrow {
-				scope (failure) assert(false);
-				.destroy(getSlot(descriptor).waiters);
-				assert(getSlot(descriptor).waiters is null);
+				try .destroy(getSlot(descriptor).waiters);
+				catch (Exception e) assert(false, e.msg);
 			} ();
 		}
 		version (linux) {
 			if (--getRC(descriptor) == 0) {
+				if (!isInternal(descriptor))
+			 		m_loop.m_waiterCount -= getSlot(descriptor).waiters.length;
 				destroy();
 				m_loop.unregisterFD(descriptor, EventMask.read);
 				m_loop.clearFD(descriptor);
@@ -155,6 +158,8 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 			}
 		} else {
 			if (!m_sockets.releaseRef(cast(DatagramSocketFD)descriptor)) {
+				if (!isInternal(descriptor))
+			 		m_loop.m_waiterCount -= getSlot(descriptor).waiters.length;
 				destroy();
 				m_events.remove(cast(DatagramSocketFD)descriptor);
 				return false;
