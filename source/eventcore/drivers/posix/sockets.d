@@ -148,14 +148,16 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		return fd;
 	}
 
-	private void onConnect(FD sock)
+	private void onConnect(FD fd)
 	{
+		auto sock = cast(StreamSocketFD)fd;
+		auto l = lockHandle(sock);
 		m_loop.setNotifyCallback!(EventType.write)(sock, null);
 		with (m_loop.m_fds[sock].streamSocket) {
 			state = ConnectionState.connected;
 			auto cb = connectCallback;
 			connectCallback = null;
-			if (cb) cb(cast(StreamSocketFD)sock, ConnectStatus.connected);
+			if (cb) cb(sock, ConnectStatus.connected);
 		}
 	}
 
@@ -349,6 +351,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 		void finalize()(IOStatus status)
 		{
+			auto l = lockHandle(socket);
 			m_loop.setNotifyCallback!(EventType.read)(socket, null);
 			//m_fds[fd].readBuffer = null;
 			slot.readCallback(socket, status, slot.bytesRead);
@@ -446,6 +449,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		if (ret < 0) {
 			auto err = getSocketError();
 			if (!err.among!(EAGAIN, EINPROGRESS)) {
+				auto l = lockHandle(socket);
 				m_loop.setNotifyCallback!(EventType.write)(socket, null);
 				slot.writeCallback(socket, IOStatus.error, slot.bytesRead);
 				return;
@@ -456,6 +460,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			slot.bytesWritten += ret;
 			slot.writeBuffer = slot.writeBuffer[ret .. $];
 			if (slot.writeMode != IOMode.all || slot.writeBuffer.length == 0) {
+				auto l = lockHandle(socket);
 				m_loop.setNotifyCallback!(EventType.write)(socket, null);
 				slot.writeCallback(cast(StreamSocketFD)socket, IOStatus.ok, slot.bytesWritten);
 				return;
@@ -506,6 +511,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 		void finalize()(IOStatus status)
 		{
+			auto l = lockHandle(socket);
 			m_loop.setNotifyCallback!(EventType.read)(socket, null);
 			//m_fds[fd].readBuffer = null;
 			slot.readCallback(socket, status, 0);
@@ -683,12 +689,14 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		if (ret < 0) {
 			auto err = getSocketError();
 			if (!err.among!(EAGAIN, EINPROGRESS)) {
+				auto l = lockHandle(socket);
 				m_loop.setNotifyCallback!(EventType.read)(socket, null);
 				slot.readCallback(socket, IOStatus.error, 0, null);
 				return;
 			}
 		}
 
+		auto l = lockHandle(socket);
 		m_loop.setNotifyCallback!(EventType.read)(socket, null);
 		scope src_addrc = new RefAddress(() @trusted { return cast(sockaddr*)&src_addr; } (), src_addr.sizeof);
 		() @trusted { return cast(DatagramIOCallback)slot.readCallback; } ()(socket, IOStatus.ok, ret, src_addrc);
@@ -754,12 +762,14 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		if (ret < 0) {
 			auto err = getSocketError();
 			if (!err.among!(EAGAIN, EINPROGRESS)) {
+				auto l = lockHandle(socket);
 				m_loop.setNotifyCallback!(EventType.write)(socket, null);
 				() @trusted { return cast(DatagramIOCallback)slot.writeCallback; } ()(socket, IOStatus.error, 0, null);
 				return;
 			}
 		}
 
+		auto l = lockHandle(socket);
 		m_loop.setNotifyCallback!(EventType.write)(socket, null);
 		() @trusted { return cast(DatagramIOCallback)slot.writeCallback; } ()(socket, IOStatus.ok, ret, null);
 	}
@@ -843,6 +853,19 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			setSocketNonBlocking(cast(SocketFD)sock);
 		}
 		return sock;
+	}
+
+	// keeps a scoped reference to a handle to avoid it getting destroyed
+	private auto lockHandle(H)(H handle)
+	{
+		addRef(handle);
+		static struct R {
+			PosixEventDriverSockets drv;
+			H handle;
+			@disable this(this);
+			~this() { drv.releaseRef(handle); }
+		}
+		return R(this, handle);
 	}
 }
 
