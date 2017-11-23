@@ -72,7 +72,9 @@ final class WinAPIEventDriver : EventDriver {
 
 	override void dispose()
 	{
+		if (!m_events) return;
 		m_events.dispose();
+		m_events = null;
 		assert(threadInstance !is null);
 		threadInstance = null;
 	}

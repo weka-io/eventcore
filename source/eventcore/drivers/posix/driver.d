@@ -89,9 +89,11 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 
 	final override void dispose()
 	{
+		if (!m_loop) return;
 		m_files.dispose();
 		m_dns.dispose();
 		m_loop.dispose();
+		m_loop = null;
 	}
 }
 
