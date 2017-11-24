@@ -581,11 +581,16 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override DatagramSocketFD adoptDatagramSocket(int socket)
 	{
+		return adoptDatagramSocketInternal(socket, false);
+	}
+
+	package DatagramSocketFD adoptDatagramSocketInternal(int socket, bool is_internal = true)
+	{
 		auto fd = DatagramSocketFD(socket);
 		if (m_loop.m_fds[fd].common.refCount) // FD already in use?
 			return DatagramSocketFD.init;
 		setSocketNonBlocking(fd);
-		m_loop.initFD(fd, FDFlags.none);
+		m_loop.initFD(fd, is_internal ? FDFlags.internal : FDFlags.none);
 		m_loop.registerFD(fd, EventMask.read|EventMask.write|EventMask.status);
 		m_loop.m_fds[fd].specific = DgramSocketSlot.init;
 		return fd;
