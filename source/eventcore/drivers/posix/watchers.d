@@ -272,6 +272,7 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 		assert(pt !is null);
 		if (!m_events.releaseRef(evt)) {
 			pt.dispose();
+			m_pollers.remove(evt);
 			return false;
 		}
 		return true;
