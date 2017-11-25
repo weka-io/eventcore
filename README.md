@@ -41,31 +41,18 @@ The following compilers are tested and supported:
 Driver development status
 -------------------------
 
-Feature          | SelectEventDriver | EpollEventDriver | WinAPIEventDriver | KqueueEventDriver
------------------|-------------------|------------------|-------------------|------------------
-TCP Sockets      | yes               | yes              | yes               | yes              
-UDP Sockets      | yes               | yes              | yes               | yes              
-USDS             | yes               | yes              | &mdash;           | yes              
-DNS              | yes               | yes              | yes               | yes              
-Timers           | yes               | yes              | yes               | yes              
-Events           | yes               | yes              | yes               | yes              
-Unix Signals     | yes²              | yes              | &mdash;           | &mdash;          
-Files            | yes               | yes              | yes               | yes              
-UI Integration   | yes¹              | yes¹             | yes               | yes¹             
-File watcher     | yes²              | yes              | yes               | yes²          
-
-Feature          | LibasyncEventDriver 
------------------|---------------------
-TCP Sockets      | &mdash;             
-UDP Sockets      | &mdash;             
-USDS             | &mdash;             
-DNS              | &mdash;             
-Timers           | &mdash;             
-Events           | &mdash;             
-Unix Signals     | &mdash;             
-Files            | &mdash;             
-UI Integration   | &mdash;             
-File watcher     | &mdash;             
+Feature \ EventDriver | Select | Epoll | WinAPI  | Kqueue  | Libasync
+----------------------|--------|-------|---------|---------|----------
+TCP Sockets           | yes    | yes   | yes     | yes     | &mdash;
+UDP Sockets           | yes    | yes   | yes     | yes     | &mdash;
+USDS                  | yes    | yes   | &mdash; | yes     | &mdash;
+DNS                   | yes    | yes   | yes     | yes     | &mdash;
+Timers                | yes    | yes   | yes     | yes     | &mdash;
+Events                | yes    | yes   | yes     | yes     | &mdash;
+Unix Signals          | yes²   | yes   | &mdash; | &mdash; | &mdash;
+Files                 | yes    | yes   | yes     | yes     | &mdash;
+UI Integration        | yes¹   | yes¹  | yes     | yes¹    | &mdash;
+File watcher          | yes²   | yes   | yes     | yes²    | &mdash;
 
 ¹ Manually, by adopting the X11 display connection socket
 
