@@ -32,12 +32,19 @@ static if (!is(NativeEventDriver == EventDriver)) {
 
 	static ~this()
 	{
-		s_driver.dispose();
+		if (!s_isMainThread)
+			s_driver.dispose();
 	}
 
 	shared static this()
 	{
 		s_driver = new NativeEventDriver;
+		s_isMainThread = true;
+	}
+
+	shared static ~this()
+	{
+		s_driver.dispose();
 	}
 } else {
 	void setupEventDriver(EventDriver driver)
@@ -48,4 +55,7 @@ static if (!is(NativeEventDriver == EventDriver)) {
 	}
 }
 
-private NativeEventDriver s_driver;
+private {
+	NativeEventDriver s_driver;
+	bool s_isMainThread;
+}
