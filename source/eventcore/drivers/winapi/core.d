@@ -36,7 +36,11 @@ final class WinAPIEventDriverCore : EventDriverCore {
 	override size_t waiterCount() { return m_waiterCount + m_timers.pendingCount; }
 
 	package void addWaiter() { m_waiterCount++; }
-	package void removeWaiter() { m_waiterCount--; }
+	package void removeWaiter()
+	{
+		assert(m_waiterCount > 0, "Decrementing waiter count below zero.");
+		m_waiterCount--;
+	}
 
 	override ExitReason processEvents(Duration timeout = Duration.max)
 	{
@@ -216,6 +220,7 @@ private struct HandleSlot {
 package struct FileSlot {
 	static struct Direction(bool RO) {
 		OVERLAPPED overlapped;
+		WinAPIEventDriverCore core;
 		FileIOCallback callback;
 		ulong offset;
 		size_t bytesTransferred;

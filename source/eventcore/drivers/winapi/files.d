@@ -96,7 +96,9 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		slot.offset = offset;
 		slot.buffer = buffer;
 		slot.mode = mode;
+		slot.core = m_core;
 		slot.callback = on_write_finish;
+		m_core.addWaiter();
 		startIO!(WriteFileEx, true)(h, slot);
 	}
 
@@ -113,7 +115,9 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		slot.offset = offset;
 		slot.buffer = buffer;
 		slot.mode = mode;
+		slot.core = m_core;
 		slot.callback = on_read_finish;
+		m_core.addWaiter();
 		startIO!(ReadFileEx, false)(h, slot);
 	}
 
@@ -157,13 +161,15 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 
 		auto nbytes = min(slot.buffer.length, DWORD.max);
 		if (!() @trusted { return fun(h, &slot.buffer[0], nbytes, &slot.overlapped, &onIOFinished!(fun, RO)); } ()) {
+			slot.core.removeWaiter();
 			slot.invokeCallback(IOStatus.error, slot.bytesTransferred);
 		}
 	}
 
-	private static void cancelIO(bool RO)(HANDLE h, ref FileSlot.Direction!RO slot)
+	private void cancelIO(bool RO)(HANDLE h, ref FileSlot.Direction!RO slot)
 	{
 		if (slot.callback) {
+			m_core.removeWaiter();
 			//CancelIoEx(h, &slot.overlapped); // FIXME: currently causes linker errors for DMD due to outdated kernel32.lib files
 			slot.callback = null;
 			slot.buffer = null;
@@ -185,6 +191,7 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		}
 
 		if (error != 0) {
+			slot.core.removeWaiter();
 			slot.invokeCallback(IOStatus.error, slot.bytesTransferred + bytes_transferred);
 			return;
 		}
@@ -193,6 +200,7 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		slot.offset += bytes_transferred;
 
 		if (slot.bytesTransferred >= slot.buffer.length || slot.mode != IOMode.all) {
+			slot.core.removeWaiter();
 			slot.invokeCallback(IOStatus.ok, slot.bytesTransferred);
 		} else {
 			startIO!(fun, RO)(h, slot);
