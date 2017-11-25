@@ -216,7 +216,22 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 		PollingThread[EventID] m_pollers;
 	}
 
-	this(Events events) { m_events = events; }
+	this(Events events)
+	{
+		m_events = events;
+	}
+
+	void dispose()
+	@trusted {
+		foreach (pt; m_pollers.byValue) {
+			pt.dispose();
+			try pt.join();
+			catch (Exception e) {
+				// not bringing down the application here, because not being
+				// able to join the thread here likely isn't a problem
+			}
+		}
+	}
 
 	final override WatcherID watchDirectory(string path, bool recursive, FileChangesCallback on_change)
 	{
@@ -257,6 +272,7 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 		assert(pt !is null);
 		if (!m_events.releaseRef(evt)) {
 			pt.dispose();
+			m_pollers.remove(evt);
 			return false;
 		}
 		return true;
@@ -280,6 +296,7 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 			pt.m_callback(cast(WatcherID)evt, ch);
 	}
 
+
 	private final class PollingThread : Thread {
 		int refCount = 1;
 		EventID changesEvent;
@@ -291,7 +308,6 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 			immutable string m_basePath;
 			immutable bool m_recursive;
 			immutable FileChangesCallback m_callback;
-			shared bool m_shutdown = false;
 			size_t m_entryCount;
 
 			struct Entry {
@@ -337,8 +353,6 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 
 		void dispose()
 		nothrow {
-			import core.atomic : atomicStore;
-
 			try synchronized (m_changesMutex) {
 				changesEvent = EventID.invalid;
 			} catch (Exception e) assert(false, e.msg);
@@ -346,21 +360,25 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 
 		private void run()
 		nothrow @trusted {
-			import core.atomic : atomicLoad;
 			import core.time : msecs;
 			import std.algorithm.comparison : min;
+			import std.datetime : Clock, UTC;
 
 			try while (true) {
-				() @trusted { Thread.sleep(min(m_entryCount, 60000).msecs + 1000.msecs); } ();
-
-				try synchronized (m_changesMutex) {
-					if (changesEvent == EventID.invalid) break;
-				} catch (Exception e) assert(false, "Mutex lock failed: "~e.msg);
+				auto timeout = Clock.currTime(UTC()) + min(m_entryCount, 60000).msecs + 1000.msecs;
+				while (true) {
+					try synchronized (m_changesMutex) {
+						if (changesEvent == EventID.invalid) return;
+					} catch (Exception e) assert(false, "Mutex lock failed: "~e.msg);
+					auto remaining = timeout - Clock.currTime(UTC());
+					if (remaining <= 0.msecs) break;
+					sleep(min(1000.msecs, remaining));
+				}
 
 				scan(true);
 
 				try synchronized (m_changesMutex) {
-					if (changesEvent == EventID.invalid) break;
+					if (changesEvent == EventID.invalid) return;
 					if (m_changes.length)
 						m_eventsDriver.trigger(changesEvent, false);
 				} catch (Exception e) assert(false, "Mutex lock failed: "~e.msg);
@@ -376,7 +394,7 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 		private void addChange(FileChangeKind kind, Key key, bool is_dir)
 		{
 			try synchronized (m_changesMutex) {
-				m_changes ~= FileChange(kind, m_basePath, key.parent ? key.parent.path : ".", key.name, is_dir);
+				m_changes ~= FileChange(kind, m_basePath, key.parent ? key.parent.path : "", key.name, is_dir);
 			} catch (Exception e) assert(false, "Mutex lock failed: "~e.msg);
 		}
 
@@ -385,9 +403,10 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 			import std.algorithm.mutation : swap;
 
 			Entry*[Key] new_entries;
+			Entry*[] added;
 			size_t ec = 0;
 
-			scan(null, generate_changes, new_entries, ec);
+			scan(null, generate_changes, new_entries, added, ec);
 
 			foreach (e; m_entries.byKeyValue) {
 				if (!e.key.parent || Key(e.key.parent.parent, e.key.parent.name) !in m_entries) {
@@ -397,11 +416,14 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 				delete e.value;
 			}
 
+			foreach (e; added)
+				addChange(FileChangeKind.added, Key(e.parent, e.name), e.isDir);
+
 			swap(m_entries, new_entries);
 			m_entryCount = ec;
 		}
 
-		private void scan(Entry* parent, bool generate_changes, ref Entry*[Key] new_entries, ref size_t ec)
+		private void scan(Entry* parent, bool generate_changes, ref Entry*[Key] new_entries, ref Entry*[] added, ref size_t ec)
 		@trusted nothrow {
 			import std.file : SpanMode, dirEntries;
 			import std.path : buildPath, baseName;
@@ -413,7 +435,7 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 				if (auto pe = key in m_entries) {
 					if ((*pe).isDir) {
 						if (m_recursive)
-							scan(*pe, generate_changes, new_entries, ec);
+							scan(*pe, generate_changes, new_entries, added, ec);
 					} else {
 						if ((*pe).size != de.size || (*pe).lastChange != modified_time) {
 							if (generate_changes)
@@ -430,10 +452,9 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 					auto e = new Entry(parent, key.name, de.isDir ? ulong.max : de.size, modified_time);
 					new_entries[key] = e;
 					ec++;
-					if (generate_changes)
-						addChange(FileChangeKind.added, key, e.isDir);
+					if (generate_changes) added ~= e;
 
-					if (de.isDir && m_recursive) scan(e, false, new_entries, ec);
+					if (de.isDir && m_recursive) scan(e, false, new_entries, added, ec);
 				}
 			} catch (Exception e) {} // will result in all children being flagged as removed
 		}

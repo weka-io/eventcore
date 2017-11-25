@@ -26,9 +26,6 @@ FileChange[] pendingChanges;
 
 void main()
 {
-	version (OSX) writefln("Directory watchers are not yet supported on macOS. Skipping test.");
-	else {
-
 	if (exists(testDir))
 		rmdirRecurse(testDir);
 
@@ -38,7 +35,7 @@ void main()
 	// test non-recursive watcher
 	watcher = eventDriver.watchers.watchDirectory(testDir, false, toDelegate(&testCallback));
 	assert(watcher != WatcherID.invalid);
-	Thread.sleep(1000.msecs); // some watcher implementations need time to initialize
+	Thread.sleep(400.msecs); // some watcher implementations need time to initialize
 	testFile(     "file1.dat");
 	testFile(     "file2.dat");
 	testFile(     "dira/file1.dat", false);
@@ -53,7 +50,7 @@ void main()
 	// test recursive watcher
 	watcher = eventDriver.watchers.watchDirectory(testDir, true, toDelegate(&testCallback));
 	assert(watcher != WatcherID.invalid);
-	Thread.sleep(100.msecs); // some watcher implementations need time to initialize
+	Thread.sleep(400.msecs); // some watcher implementations need time to initialize
 	testFile(     "file1.dat");
 	testFile(     "file2.dat");
 	testFile(     "dira/file1.dat");
@@ -73,8 +70,6 @@ void main()
 	// make sure that no watchers are registered anymore
 	auto er = eventDriver.core.processEvents(10.msecs);
 	assert(er == ExitReason.outOfWaiters);
-
-	}
 }
 
 void testCallback(WatcherID w, in ref FileChange ch)
@@ -105,6 +100,8 @@ void expectChange(FileChange ch, bool expect_change)
 			return;
 		}
 	}
+	assert(expect_change, "Got change although none was expected.");
+
 	auto pch = pendingChanges[0];
 
 	// adjust for Windows behavior

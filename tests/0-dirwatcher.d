@@ -6,40 +6,42 @@ module test;
 
 import eventcore.core;
 import std.stdio : File, writefln;
-import std.file : exists, remove;
+import std.file : exists, mkdir, remove, rmdirRecurse;
 import core.time : Duration, msecs;
 
 bool s_done;
 int s_cnt = 0;
 
+enum testDir = "watcher_test";
 enum testFilename = "test.dat";
 
 void main()
 {
-	version (OSX) writefln("Directory watchers are not yet supported on macOS. Skipping test.");
-	else {
+	if (exists(testDir))
+		rmdirRecurse(testDir);
+	mkdir(testDir);
+	scope (exit) rmdirRecurse(testDir);
 
-	if (exists(testFilename))
-		remove(testFilename);
-
-	auto id = eventDriver.watchers.watchDirectory(".", false, (id, ref change) {
+	auto id = eventDriver.watchers.watchDirectory(testDir, false, (id, ref change) {
 		switch (s_cnt++) {
-			default: assert(false);
+			default:
+				import std.conv : to;
+				assert(false, "Unexpected change: "~change.to!string);
 			case 0:
 				assert(change.kind == FileChangeKind.added);
-				assert(change.baseDirectory == ".");
+				assert(change.baseDirectory == testDir);
 				assert(change.directory == "");
 				assert(change.name == testFilename);
 				break;
 			case 1:
 				assert(change.kind == FileChangeKind.modified);
-				assert(change.baseDirectory == ".");
+				assert(change.baseDirectory == testDir);
 				assert(change.directory == "");
 				assert(change.name == testFilename);
 				break;
 			case 2:
 				assert(change.kind == FileChangeKind.removed);
-				assert(change.baseDirectory == ".");
+				assert(change.baseDirectory == testDir);
 				assert(change.directory == "");
 				assert(change.name == testFilename);
 				eventDriver.watchers.releaseRef(id);
@@ -48,18 +50,18 @@ void main()
 		}
 	});
 
-	auto fil = File(testFilename, "wt");
+	auto fil = File(testDir~"/"~testFilename, "wt");
 
 	auto tm = eventDriver.timers.create();
-	eventDriver.timers.set(tm, 100.msecs, 0.msecs);
+	eventDriver.timers.set(tm, 1500.msecs, 0.msecs);
 	eventDriver.timers.wait(tm, (tm) {
 		scope (failure) assert(false);
 		fil.write("test");
 		fil.close();
-		eventDriver.timers.set(tm, 100.msecs, 0.msecs);
+		eventDriver.timers.set(tm, 1500.msecs, 0.msecs);
 		eventDriver.timers.wait(tm, (tm) {
 			scope (failure) assert(false);
-			remove(testFilename);
+			remove(testDir~"/"~testFilename);
 		});
 	});
 
@@ -69,6 +71,4 @@ void main()
 	assert(er == ExitReason.outOfWaiters);
 	assert(s_done);
 	s_done = false;
-
-	}
 }

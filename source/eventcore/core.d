@@ -30,6 +30,11 @@ static if (!is(NativeEventDriver == EventDriver)) {
 		if (!s_driver) s_driver = new NativeEventDriver;
 	}
 
+	static ~this()
+	{
+		s_driver.dispose();
+	}
+
 	shared static this()
 	{
 		s_driver = new NativeEventDriver;
