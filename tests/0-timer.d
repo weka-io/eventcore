@@ -23,7 +23,7 @@ void main()
 
 		auto dur = Clock.currTime(UTC()) - s_startTime;
 		assert(dur > 200.msecs);
-		assert(dur < 220.msecs);	
+		assert(dur < 220.msecs);
 
 		s_startTime = Clock.currTime(UTC());
 		eventDriver.timers.set(tm, 100.msecs, 100.msecs);
@@ -33,7 +33,7 @@ void main()
 				auto dur = Clock.currTime(UTC()) - s_startTime;
 				s_cnt++;
 				assert(dur > 100.msecs * s_cnt);
-				assert(dur < 100.msecs * s_cnt + 20.msecs);
+				assert(dur < 100.msecs * s_cnt + 60.msecs);
 				assert(s_cnt <= 3);
 
 				if (s_cnt == 3) {
