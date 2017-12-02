@@ -42,20 +42,8 @@ final class InotifyEventDriverWatchers(Events : EventDriverEvents) : EventDriver
 		m_watches[ret] = WatchState(null, path, recursive);
 
 		addWatch(ret, path, "");
-		if (recursive) {
-			try {
-				auto base_segements = path.pathSplitter.walkLength;
-				if (path.isDir) () @trusted {
-					foreach (de; path.dirEntries(SpanMode.depth))
-						if (de.isDir) {
-							auto subdir = de.name.pathSplitter.drop(base_segements).buildPath;
-							addWatch(ret, path, subdir);
-						}
-				} ();
-			} catch (Exception e) {
-				// TODO: decide if this should be ignored or if the error should be forwarded
-			}
-		}
+		if (recursive)
+			addSubWatches(ret, path, "");
 
 		m_loop.initFD(FD(handle), FDFlags.none);
 		m_loop.registerFD(FD(handle), EventMask.read);
@@ -135,10 +123,14 @@ final class InotifyEventDriverWatchers(Events : EventDriverEvents) : EventDriver
 				}
 
 				auto name = () @trusted { return ev.name.ptr[0 .. strlen(ev.name.ptr)]; } ();
+
 				auto subdir = w.watcherPaths[ev.wd];
 
 				if (w.recursive && ev.mask & (IN_CREATE|IN_MOVED_TO) && ev.mask & IN_ISDIR) {
-					addWatch(id, w.basePath, subdir == "" ? name.idup : buildPath(subdir, name));
+					auto subpath = subdir == "" ? name.idup : buildPath(subdir, name);
+					addWatch(id, w.basePath, subpath);
+					if (w.recursive)
+						addSubWatches(id, w.basePath, subpath);
 				}
 
 				ch.baseDirectory = m_watches[id].basePath;
@@ -150,6 +142,29 @@ final class InotifyEventDriverWatchers(Events : EventDriverEvents) : EventDriver
 				cb(id, ch);
 				if (!releaseRef(id)) return;
 			}
+		}
+	}
+
+	private bool addSubWatches(WatcherID handle, string base_path, string subpath)
+	{
+		import std.path : buildPath, pathSplitter;
+		import std.range : drop;
+		import std.range.primitives : walkLength;
+
+		try {
+			auto path = buildPath(base_path, subpath);
+			auto base_segements = base_path.pathSplitter.walkLength;
+			if (path.isDir) () @trusted {
+				foreach (de; path.dirEntries(SpanMode.depth))
+					if (de.isDir) {
+						auto subdir = de.name.pathSplitter.drop(base_segements).buildPath;
+						addWatch(handle, base_path, subdir);
+					}
+			} ();
+			return true;
+		} catch (Exception e) {
+			// TODO: decide if this should be ignored or if the error should be forwarded
+			return false;
 		}
 	}
 
