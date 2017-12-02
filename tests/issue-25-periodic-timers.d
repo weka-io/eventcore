@@ -43,7 +43,7 @@ void main()
 			auto dur = Clock.currTime(UTC()) - s_startTime;
 			s_cnt++;
 			assert(dur > 100.msecs * s_cnt);
-			assert(dur < 100.msecs * s_cnt + 20.msecs);
+			assert(dur < 100.msecs * s_cnt + 60.msecs);
 			assert(s_cnt <= 3);
 
 			if (s_cnt == 3) {
