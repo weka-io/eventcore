@@ -18,6 +18,9 @@ import core.sys.linux.epoll;
 
 alias EpollEventDriver = PosixEventDriver!EpollEventLoop;
 
+static if (!is(typeof(SOCK_CLOEXEC)))
+	enum SOCK_CLOEXEC = 0x80000;
+
 final class EpollEventLoop : PosixEventLoop {
 @safe: nothrow:
 
@@ -28,7 +31,7 @@ final class EpollEventLoop : PosixEventLoop {
 
 	this()
 	{
-		m_epoll = () @trusted { return epoll_create1(0); } ();
+		m_epoll = () @trusted { return epoll_create1(SOCK_CLOEXEC); } ();
 		m_events.length = 100;
 	}
 
