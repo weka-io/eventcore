@@ -72,6 +72,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 				connectCallback = on_connect;
 				state = ConnectionState.connecting;
 			}
+
+			m_core.addWaiter();
 			addRef(sock);
 			return sock;
 		} else {
@@ -787,6 +789,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 							case FD_CONNECT:
 								auto cb = slot.streamSocket.connectCallback;
 								slot.streamSocket.connectCallback = null;
+								slot.common.driver.m_core.removeWaiter();
 								if (err) {
 									slot.streamSocket.state = ConnectionState.closed;
 									cb(cast(StreamSocketFD)sock, ConnectStatus.refused);
