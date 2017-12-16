@@ -19,13 +19,18 @@ void main()
 
 	auto tm = eventDriver.timers.create();
 	eventDriver.timers.wait(tm, (tm) nothrow @safe {
-		scope (failure) assert(false);
+		Duration dur;
 
-		auto dur = Clock.currTime(UTC()) - s_startTime;
+		{
+			scope (failure) assert(false);
+			dur = Clock.currTime(UTC()) - s_startTime;
+		}
+
 		assert(dur > 200.msecs);
-		assert(dur < 220.msecs);
+		assert(dur < 260.msecs);
 
-		s_startTime = Clock.currTime(UTC());
+		s_startTime += dur;
+
 		eventDriver.timers.set(tm, 100.msecs, 100.msecs);
 
 		void secondTier(TimerID timer) nothrow @safe {

@@ -22,12 +22,15 @@ void main()
 	// first timer: one-shot 200ms
 	auto tm = eventDriver.timers.create();
 	eventDriver.timers.wait(tm, (tm) nothrow @safe {
-		scope (failure) assert(false);
-		writefln("First timer");
+		Duration dur;
+		{
+			scope (failure) assert(false);
+			writefln("First timer");
+			dur = Clock.currTime(UTC()) - s_startTime;
+		}
 
-		auto dur = Clock.currTime(UTC()) - s_startTime;
-		assert(dur > 200.msecs);
-		assert(dur < 220.msecs);
+		assert(dur >= 200.msecs);
+		assert(dur < 250.msecs);
 
 		timer1fired = true;
 	});
