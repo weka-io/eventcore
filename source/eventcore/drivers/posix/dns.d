@@ -83,6 +83,8 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 		version (linx) hints.ai_flags |= AI_V4MAPPED;
 		hints.ai_family = af;
 		() @trusted { lookup.retcode = getaddrinfo(lookup.name.toStringz(), null, af == AddressFamily.UNSPEC ? null : &hints, &lookup.result); } ();
+		if (lookup.retcode == -1)
+			version (CRuntime_Glibc) version (linux) __res_init();
 		events.trigger(event, true);
 		debug (EventCoreLogDNS) print("lookup %s finished", lookup.name);
 	}
@@ -177,7 +179,10 @@ final class EventDriverDNS_GAIA(Events : EventDriverEvents, Signals : EventDrive
 		auto ret = () @trusted { return getaddrinfo_a(GAI_NOWAIT, &res, 1, &evt); } ();
 
 		if (ret != 0)
+		{
+			version (CRuntime_Glibc) version (linux) __res_init();
 			return DNSLookupID.invalid;
+		}
 
 		m_lookups[handle].callback = on_lookup_finished;
 		m_events.loop.m_waiterCount++;
@@ -240,6 +245,8 @@ version (linux) extern(C) {
 	int getaddrinfo_a(int mode, gaicb** list, int nitems, sigevent *sevp);
 	int gai_error(gaicb *req);
 	int gai_cancel(gaicb *req);
+
+	int __res_init();
 }
 
 
@@ -337,5 +344,3 @@ private void passToDNSCallback()(DNSLookupID id, scope DNSLookupCallback cb, DNS
 		freeaddrinfo(ai_orig);
 	} catch (Exception e) assert(false, e.msg);
 }
-
-
