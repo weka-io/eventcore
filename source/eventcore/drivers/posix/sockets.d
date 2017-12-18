@@ -246,8 +246,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		} else {
 			() @trusted { sockfd = accept(cast(sock_t)listenfd, () @trusted { return cast(sockaddr*)&addr; } (), &addr_len); } ();
 			if (sockfd == -1) return;
-			setSocketNonBlocking(cast(SocketFD)sockfd);
-			setSocketCloseOnExec(cast(SocketFD)sockfd);
+			setSocketNonBlocking(cast(SocketFD)sockfd, true);
 		}
 		auto fd = cast(StreamSocketFD)sockfd;
 		m_loop.initFD(fd, FDFlags.none);
@@ -862,12 +861,12 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	{
 		sock_t sock;
 		version (linux) {
-			() @trusted { sock = socket(family, type | SOCK_NONBLOCK, 0); } ();
+			() @trusted { sock = socket(family, type | SOCK_NONBLOCK | SOCK_CLOEXEC, 0); } ();
 			if (sock == -1) return -1;
 		} else {
 			() @trusted { sock = socket(family, type, 0); } ();
 			if (sock == -1) return -1;
-			setSocketNonBlocking(cast(SocketFD)sock);
+			setSocketNonBlocking(cast(SocketFD)sock, true);
 		}
 		return sock;
 	}
@@ -929,20 +928,15 @@ private void closeSocket(sock_t sockfd)
 	else close(sockfd);
 }
 
-private void setSocketNonBlocking(SocketFD sockfd)
+private void setSocketNonBlocking(SocketFD sockfd, bool close_on_exec = false)
 @nogc nothrow {
 	version (Windows) {
 		uint enable = 1;
 		() @trusted { ioctlsocket(sockfd, FIONBIO, &enable); } ();
 	} else {
-		() @trusted { fcntl(cast(int)sockfd, F_SETFL, O_NONBLOCK, 1); } ();
-	}
-}
-
-private void setSocketCloseOnExec(SocketFD sockfd)
-@nogc nothrow {
-	version (Windows) {} else {
-		() @trusted { fcntl(cast(int)sockfd, F_SETFL, O_CLOEXEC, 1); } ();
+		int f = O_NONBLOCK;
+		if (close_on_exec) f |= O_CLOEXEC;
+		() @trusted { fcntl(cast(int)sockfd, F_SETFL, f); } ();
 	}
 }
 
