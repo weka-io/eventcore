@@ -26,30 +26,30 @@ void main()
 			writefln("First timer");
 			auto dur = Clock.currTime(UTC()) - s_startTime;
 
-			assert(dur >= 200.msecs, (dur - 200.msecs).toString());
-			assert(dur < 250.msecs, (dur - 200.msecs).toString());
+			assert(dur >= 1200.msecs, (dur - 1200.msecs).toString());
+			assert(dur < 1300.msecs, (dur - 1200.msecs).toString());
 
 			timer1fired = true;
 		} catch (Exception e) {
 			assert(false, e.msg);
 		}
 	});
-	eventDriver.timers.set(tm, 200.msecs, 0.msecs);
+	eventDriver.timers.set(tm, 1200.msecs, 0.msecs);
 
-	// second timer repeating 100ms, 3 times
+	// second timer repeating 300ms, 5 times
 	auto tm2 = eventDriver.timers.create();
-	eventDriver.timers.set(tm2, 100.msecs, 100.msecs);
+	eventDriver.timers.set(tm2, 300.msecs, 300.msecs);
 	void periodicCallback(TimerID timer) nothrow @safe {
 		try {
 			writefln("Second timer");
 
 			auto dur = Clock.currTime(UTC()) - s_startTime;
 			s_cnt++;
-			assert(dur > 100.msecs * s_cnt, (dur - 100.msecs * s_cnt).toString());
-			assert(dur < 100.msecs * s_cnt + 60.msecs, (dur - 100.msecs * s_cnt).toString());
-			assert(s_cnt <= 3);
+			assert(dur > 300.msecs * s_cnt, (dur - 300.msecs * s_cnt).toString());
+			assert(dur < 300.msecs * s_cnt + 100.msecs, (dur - 300.msecs * s_cnt).toString());
+			assert(s_cnt <= 5);
 
-			if (s_cnt == 3) {
+			if (s_cnt == 5) {
 				s_done = true;
 				eventDriver.timers.stop(timer);
 				assert(timer1fired, "Timer 1 didn't fire within 300ms");

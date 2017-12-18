@@ -27,20 +27,20 @@ void main()
 		}
 
 		try {
-			assert(dur > 200.msecs, (dur - 200.msecs).toString());
-			assert(dur < 260.msecs, (dur - 200.msecs).toString());
+			assert(dur > 1200.msecs, (dur - 1200.msecs).toString());
+			assert(dur < 1300.msecs, (dur - 1200.msecs).toString());
 		} catch (Exception e) assert(false, e.msg);
 
 		s_startTime += dur;
 
-		eventDriver.timers.set(tm, 100.msecs, 100.msecs);
+		eventDriver.timers.set(tm, 300.msecs, 300.msecs);
 
 		void secondTier(TimerID timer) nothrow @safe {
 			try {
 				auto dur = Clock.currTime(UTC()) - s_startTime;
 				s_cnt++;
-				assert(dur > 100.msecs * s_cnt, (dur - 100.msecs * s_cnt).toString());
-				assert(dur < 100.msecs * s_cnt + 60.msecs, (dur - 100.msecs * s_cnt).toString());
+				assert(dur > 300.msecs * s_cnt, (dur - 300.msecs * s_cnt).toString());
+				assert(dur < 300.msecs * s_cnt + 100.msecs, (dur - 300.msecs * s_cnt).toString());
 				assert(s_cnt <= 3);
 
 				if (s_cnt == 3) {
@@ -55,7 +55,7 @@ void main()
 		eventDriver.timers.wait(tm, &secondTier);
 	});
 
-	eventDriver.timers.set(tm, 200.msecs, 0.msecs);
+	eventDriver.timers.set(tm, 1200.msecs, 0.msecs);
 
 	ExitReason er;
 	do er = eventDriver.core.processEvents(Duration.max);

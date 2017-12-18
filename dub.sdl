@@ -21,7 +21,7 @@ configuration "kqueue" {
 }
 
 configuration "winapi" {
-	platforms "windows-x86_64" "windows-x86_mscoff"
+	platforms "windows-x86_64" "windows-x86_mscoff" "windows-ldc" "windows-gdc"
 	versions "EventcoreWinAPIDriver"
 }
 
