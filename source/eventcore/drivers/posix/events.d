@@ -8,6 +8,7 @@ import eventcore.internal.consumablequeue : ConsumableQueue;
 version (linux) {
 	nothrow @nogc extern (C) int eventfd(uint initval, int flags);
 	enum EFD_NONBLOCK = 0x800;
+	enum EFD_CLOEXEC = 0x80000;
 }
 version (Posix) {
 	import core.sys.posix.unistd : close, read, write;
@@ -50,7 +51,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 	package(eventcore) EventID createInternal(bool is_internal = true)
 	{
 		version (linux) {
-			auto eid = eventfd(0, EFD_NONBLOCK);
+			auto eid = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
 			if (eid == -1) return EventID.invalid;
 			auto id = cast(EventID)eid;
 			m_loop.initFD(id, FDFlags.internal);
