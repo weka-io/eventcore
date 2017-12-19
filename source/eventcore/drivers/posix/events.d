@@ -64,6 +64,9 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 		} else {
 			sock_t[2] fd;
 			version (Posix) {
+				import core.sys.posix.fcntl : fcntl, F_SETFL;
+				import eventcore.drivers.posix.sockets : O_CLOEXEC;
+
 				// create a pair of sockets to communicate between threads
 				import core.sys.posix.sys.socket : SOCK_DGRAM, AF_UNIX, socketpair;
 				if (() @trusted { return socketpair(AF_UNIX, SOCK_DGRAM, 0, fd); } () != 0)
@@ -72,7 +75,9 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 				assert(fd[0] != fd[1]);
 
 				// use the first socket as the async receiver
-				auto s = m_sockets.adoptDatagramSocketInternal(fd[0]);
+				auto s = m_sockets.adoptDatagramSocketInternal(fd[0], true, true);
+
+				() @trusted { fcntl(fd[1], F_SETFL, O_CLOEXEC); } ();
 			} else {
 				// fake missing socketpair support on Windows
 				import std.socket : InternetAddress;
