@@ -34,7 +34,7 @@ final class InotifyEventDriverWatchers(Events : EventDriverEvents) : EventDriver
 		import std.range.primitives : walkLength;
 
 		enum IN_NONBLOCK = 0x800; // value in core.sys.linux.sys.inotify is incorrect
-		auto handle = () @trusted { return inotify_init1(IN_NONBLOCK); } ();
+		auto handle = () @trusted { return inotify_init1(IN_NONBLOCK | IN_CLOEXEC); } ();
 		if (handle == -1) return WatcherID.invalid;
 
 		auto ret = WatcherID(handle);
