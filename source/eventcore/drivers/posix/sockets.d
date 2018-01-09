@@ -25,6 +25,7 @@ version (Posix) {
 	{
 		version (linux) enum O_CLOEXEC = 0x80000;
 		else version (FreeBSD) enum O_CLOEXEC = 0x100000;
+		else version (DragonFlyBSD) enum O_CLOEXEC = 0x0020000;
 		else version (NetBSD) enum O_CLOEXEC = 0x400000;
 		else version (OpenBSD) enum O_CLOEXEC = 0x10000;
 		else version (OSX) enum O_CLOEXEC = 0x1000000;
@@ -56,6 +57,12 @@ version(FreeBSD) {
 		enum IP_ADD_MEMBERSHIP  = 12;
 		enum IP_MULTICAST_LOOP  = 11;
 	} else import core.sys.freebsd.netinet.in_ : IP_ADD_MEMBERSHIP, IP_MULTICAST_LOOP;
+}
+version(DragonFlyBSD) {
+	static if (__VERSION__ < 2077) {
+		enum IP_ADD_MEMBERSHIP  = 12;
+		enum IP_MULTICAST_LOOP  = 11;
+	} else import core.sys.dragonflybsd.netinet.in_ : IP_ADD_MEMBERSHIP, IP_MULTICAST_LOOP;
 }
 version (Solaris) {
 	enum IP_ADD_MEMBERSHIP = 0x13;
