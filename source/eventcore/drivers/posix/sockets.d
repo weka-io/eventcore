@@ -59,10 +59,7 @@ version(FreeBSD) {
 	} else import core.sys.freebsd.netinet.in_ : IP_ADD_MEMBERSHIP, IP_MULTICAST_LOOP;
 }
 version(DragonFlyBSD) {
-	static if (__VERSION__ < 2077) {
-		enum IP_ADD_MEMBERSHIP  = 12;
-		enum IP_MULTICAST_LOOP  = 11;
-	} else import core.sys.dragonflybsd.netinet.in_ : IP_ADD_MEMBERSHIP, IP_MULTICAST_LOOP;
+	import core.sys.dragonflybsd.netinet.in_ : IP_ADD_MEMBERSHIP, IP_MULTICAST_LOOP;
 }
 version (Solaris) {
 	enum IP_ADD_MEMBERSHIP = 0x13;
