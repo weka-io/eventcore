@@ -50,6 +50,9 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 			return WatcherID.invalid;
 		}
 
+		// keep alive as long as the overlapped I/O operation is pending
+		addRef(id);
+
 		m_core.addWaiter();
 
 		return id;
@@ -62,16 +65,36 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 
 	override bool releaseRef(WatcherID descriptor)
 	{
-		auto handle = idToHandle(descriptor);
-		return m_core.m_handles[handle].releaseRef(()nothrow{
-			m_core.removeWaiter();
-			CloseHandle(handle);
-			() @trusted {
-				try theAllocator.dispose(m_core.m_handles[handle].watcher.buffer);
-				catch (Exception e) assert(false, "Freeing directory watcher buffer failed.");
-			} ();
-			m_core.freeSlot(handle);
-		});
+		return doReleaseRef(idToHandle(descriptor));
+	}
+
+	private static bool doReleaseRef(HANDLE handle)
+	{
+		auto core = WinAPIEventDriver.threadInstance.core;
+		auto slot = () @trusted { return &core.m_handles[handle]; } ();
+
+		if (!slot.releaseRef(() nothrow {
+				CloseHandle(handle);
+
+				() @trusted {
+					try theAllocator.dispose(slot.watcher.buffer);
+					catch (Exception e) assert(false, "Freeing directory watcher buffer failed.");
+				} ();
+				core.freeSlot(handle);
+			}))
+		{
+			return false;
+		}
+
+		// If only one reference left, then this is the reference created for
+		// the current wait operation. Simply cancel the I/O to let the
+		// completion callback
+		if (slot.refCount == 1) {
+			() @trusted { CancelIoEx(handle, &slot.watcher.overlapped); } ();
+			core.removeWaiter();
+		}
+
+		return true;
 	}
 
 	private static nothrow extern(System)
@@ -81,30 +104,23 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 		import std.file : isDir;
 		import std.path : dirName, baseName, buildPath;
 
-		if (dwError != 0) {
-			// FIXME: this must be propagated to the caller
-			//logWarn("Failed to read directory changes: %s", dwError);
-			return;
-		}
-
 		auto handle = overlapped.hEvent; // *file* handle
 		auto id = WatcherID(cast(int)handle);
 
-		/* HACK: this avoids a range voilation in case an already destroyed
-			watcher still fires a completed event. It does not avoid problems
-			that may arise from reused file handles.
-		*/
-		if (handle !in WinAPIEventDriver.threadInstance.core.m_handles)
+		auto gslot = () @trusted { return &WinAPIEventDriver.threadInstance.core.m_handles[handle]; } ();
+		auto slot = () @trusted { return &gslot.watcher(); } ();
+
+		if (dwError != 0 || gslot.refCount == 1) {
+			// FIXME: error must be propagated to the caller (except for ABORTED
+			// errors)
+			//logWarn("Failed to read directory changes: %s", dwError);
+			doReleaseRef(handle);
 			return;
+		}
 
-		// NOTE: can be 0 if the buffer overflowed
-		if (!cbTransferred)
-			return;
-
-		auto slot = () @trusted { return &WinAPIEventDriver.threadInstance.core.m_handles[handle].watcher(); } ();
-
+		// NOTE: cbTransferred can be 0 if the buffer overflowed
 		ubyte[] result = slot.buffer[0 .. cbTransferred];
-		do {
+		while (result.length) {
 			assert(result.length >= FILE_NOTIFY_INFORMATION._FileName.offsetof);
 			auto fni = () @trusted { return cast(FILE_NOTIFY_INFORMATION*)result.ptr; } ();
 			result = result[fni.NextEntryOffset .. $];
@@ -130,7 +146,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 			if (ch.kind != FileChangeKind.modified || !ch.isDirectory)
 				slot.callback(id, ch);
 			if (fni.NextEntryOffset == 0) break;
-		} while (result.length > 0);
+		}
 
 		triggerRead(handle, *slot);
 	}
@@ -157,6 +173,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 			//logError("Failed to read directory changes in '%s'", m_path);
 			return false;
 		}
+
 		return true;
 	}
 
