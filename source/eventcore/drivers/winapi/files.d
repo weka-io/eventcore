@@ -8,7 +8,6 @@ import eventcore.internal.win32;
 
 private extern(Windows) @trusted nothrow @nogc {
 	BOOL SetEndOfFile(HANDLE hFile);
-	BOOL CancelIoEx(HANDLE hFile, OVERLAPPED* lpOverlapped);
 }
 
 final class WinAPIEventDriverFiles : EventDriverFiles {
@@ -170,7 +169,7 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 	{
 		if (slot.callback) {
 			m_core.removeWaiter();
-			//CancelIoEx(h, &slot.overlapped); // FIXME: currently causes linker errors for DMD due to outdated kernel32.lib files
+			() @trusted { CancelIoEx(h, &slot.overlapped); } ();
 			slot.callback = null;
 			slot.buffer = null;
 		}
