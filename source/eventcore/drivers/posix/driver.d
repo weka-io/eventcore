@@ -265,13 +265,14 @@ package class PosixEventLoop {
 
 	package void clearFD(FD fd)
 	{
-		if (m_fds[fd.value].common.userDataDestructor)
-			() @trusted { m_fds[fd.value].common.userDataDestructor(m_fds[fd.value].common.userData.ptr); } ();
-		if (!(m_fds[fd.value].common.flags & FDFlags.internal))
-			foreach (cb; m_fds[fd.value].common.callback)
+		auto slot = () @trusted { return &m_fds[fd.value]; } ();
+		if (slot.common.userDataDestructor)
+			() @trusted { slot.common.userDataDestructor(slot.common.userData.ptr); } ();
+		if (!(slot.common.flags & FDFlags.internal))
+			foreach (cb; slot.common.callback)
 				if (cb !is null)
 					m_waiterCount--;
-		m_fds[fd.value] = m_fds.FullField.init;
+		*slot = m_fds.FullField.init;
 	}
 }
 
