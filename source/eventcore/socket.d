@@ -113,6 +113,8 @@ struct DatagramSocket {
 
 	this(this) { if (m_fd != DatagramSocketFD.invalid) eventDriver.sockets.addRef(m_fd); }
 	~this() { if (m_fd != DatagramSocketFD.invalid) eventDriver.sockets.releaseRef(m_fd); }
+
+	@property void broadcast(bool enable) { eventDriver.sockets.setBroadcast(m_fd, enable); }
 }
 
 void receive(alias callback)(ref DatagramSocket socket, ubyte[] buffer, IOMode mode) {
