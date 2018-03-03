@@ -43,33 +43,41 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 			BOOL ret = SetEndOfFile(handle);
 			if (!ret) {
 				CloseHandle(handle);
-				return FileFD.init;
+				return FileFD.invalid;
 			}
 		}
 
-		return adopt(cast(int)handle);
+		return adoptInternal(handle);
 	}
 
 	override FileFD adopt(int system_handle)
 	{
-		auto handle = () @trusted { return cast(HANDLE)system_handle; } ();
+		return adoptInternal(() @trusted { return cast(HANDLE)system_handle; } ());
+	}
+
+	private FileFD adoptInternal(HANDLE handle)
+	{
 		DWORD f;
 		if (!() @trusted { return GetHandleInformation(handle, &f); } ())
-			return FileFD.init;
+			return FileFD.invalid;
 
 		auto s = m_core.setupSlot!FileSlot(handle);
-		s.read.handle = s.write.handle = handle;
 
-		return FileFD(system_handle);
+		s.read.overlapped.driver = m_core;
+		s.read.overlapped.handle = FileFD(cast(size_t)handle);
+		s.write.overlapped.driver = m_core;
+		s.write.overlapped.handle = FileFD(cast(size_t)handle);
+
+		return FileFD(cast(size_t)handle);
 	}
 
 	override void close(FileFD file)
 	{
 		auto h = idToHandle(file);
 		auto slot = () @trusted { return &m_core.m_handles[h].file(); } ();
-		if (slot.read.handle != INVALID_HANDLE_VALUE) {
+		if (slot.read.overlapped.handle != FileFD.invalid) {
 			CloseHandle(h);
-			slot.read.handle = slot.write.handle = INVALID_HANDLE_VALUE;
+			slot.read.overlapped.handle = slot.write.overlapped.handle = FileFD.invalid;
 		}
 	}
 
@@ -95,7 +103,6 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		slot.offset = offset;
 		slot.buffer = buffer;
 		slot.mode = mode;
-		slot.core = m_core;
 		slot.callback = on_write_finish;
 		m_core.addWaiter();
 		startIO!(WriteFileEx, true)(h, slot);
@@ -114,7 +121,6 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		slot.offset = offset;
 		slot.buffer = buffer;
 		slot.mode = mode;
-		slot.core = m_core;
 		slot.callback = on_read_finish;
 		m_core.addWaiter();
 		startIO!(ReadFileEx, false)(h, slot);
@@ -150,7 +156,7 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 	{
 		import std.algorithm.comparison : min;
 
-		with (slot.overlapped) {
+		with (slot.overlapped.overlapped) {
 			Internal = 0;
 			InternalHigh = 0;
 			Offset = cast(uint)(slot.offset & 0xFFFFFFFF);
@@ -159,8 +165,8 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		}
 
 		auto nbytes = min(slot.buffer.length, DWORD.max);
-		if (!() @trusted { return fun(h, &slot.buffer[0], nbytes, &slot.overlapped, &onIOFinished!(fun, RO)); } ()) {
-			slot.core.removeWaiter();
+		if (!() @trusted { return fun(h, &slot.buffer[0], nbytes, &slot.overlapped.overlapped, &onIOFinished!(fun, RO)); } ()) {
+			slot.overlapped.driver.removeWaiter();
 			slot.invokeCallback(IOStatus.error, slot.bytesTransferred);
 		}
 	}
@@ -169,20 +175,23 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 	{
 		if (slot.callback) {
 			m_core.removeWaiter();
-			() @trusted { CancelIoEx(h, &slot.overlapped); } ();
+			() @trusted { CancelIoEx(h, &slot.overlapped.overlapped); } ();
 			slot.callback = null;
 			slot.buffer = null;
 		}
 	}
 
 	private static extern(Windows)
-	void onIOFinished(alias fun, bool RO)(DWORD error, DWORD bytes_transferred, OVERLAPPED* overlapped)
+	void onIOFinished(alias fun, bool RO)(DWORD error, DWORD bytes_transferred, OVERLAPPED* _overlapped)
 	{
-
-		auto slot = () @trusted { return cast(FileSlot.Direction!RO*)overlapped.hEvent; } ();
+		auto ctx = () @trusted { return cast(OVERLAPPED_FILE*)_overlapped; } ();
+		FileFD id = ctx.handle;
+		auto handle = idToHandle(id);
+		static if (RO)
+			auto slot = () @trusted { return &ctx.driver.m_handles[handle].file.write; } ();
+		else
+			auto slot = () @trusted { return &ctx.driver.m_handles[handle].file.read; } ();
 		assert(slot !is null);
-		HANDLE h = slot.handle;
-		auto id = FileFD(cast(int)h);
 
 		if (!slot.callback) {
 			// request was already cancelled
@@ -190,7 +199,7 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		}
 
 		if (error != 0) {
-			slot.core.removeWaiter();
+			ctx.driver.removeWaiter();
 			slot.invokeCallback(IOStatus.error, slot.bytesTransferred + bytes_transferred);
 			return;
 		}
@@ -199,15 +208,15 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		slot.offset += bytes_transferred;
 
 		if (slot.bytesTransferred >= slot.buffer.length || slot.mode != IOMode.all) {
-			slot.core.removeWaiter();
+			ctx.driver.removeWaiter();
 			slot.invokeCallback(IOStatus.ok, slot.bytesTransferred);
 		} else {
-			startIO!(fun, RO)(h, slot);
+			startIO!(fun, RO)(handle, slot);
 		}
 	}
 
 	private static HANDLE idToHandle(FileFD id)
 	@trusted {
-		return cast(HANDLE)cast(int)id;
+		return cast(HANDLE)cast(size_t)id;
 	}
 }

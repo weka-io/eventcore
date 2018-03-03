@@ -21,7 +21,7 @@ import eventcore.drivers.winapi.watchers;
 import core.sys.windows.windows;
 
 static assert(HANDLE.sizeof <= FD.BaseType.sizeof);
-static assert(FD(cast(int)INVALID_HANDLE_VALUE) == FD.init);
+static assert(FD(cast(size_t)INVALID_HANDLE_VALUE) == FD.init);
 
 
 final class WinAPIEventDriver : EventDriver {

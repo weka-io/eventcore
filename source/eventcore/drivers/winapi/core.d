@@ -219,22 +219,20 @@ private struct HandleSlot {
 
 package struct FileSlot {
 	static struct Direction(bool RO) {
-		OVERLAPPED overlapped;
-		WinAPIEventDriverCore core;
+		OVERLAPPED_FILE overlapped;
 		FileIOCallback callback;
 		ulong offset;
 		size_t bytesTransferred;
 		IOMode mode;
 		static if (RO) const(ubyte)[] buffer;
 		else ubyte[] buffer;
-		HANDLE handle; // set to INVALID_HANDLE_VALUE when closed
 
 		void invokeCallback(IOStatus status, size_t bytes_transferred)
 		@safe nothrow {
 			auto cb = this.callback;
 			this.callback = null;
 			assert(cb !is null);
-			cb(FileFD(cast(int)this.handle), status, bytes_transferred);
+			cb(overlapped.handle, status, bytes_transferred);
 		}
 	}
 	Direction!false read;
@@ -247,4 +245,10 @@ package struct WatcherSlot {
 	string directory;
 	bool recursive;
 	FileChangesCallback callback;
+}
+
+package struct OVERLAPPED_FILE {
+	OVERLAPPED overlapped;
+	WinAPIEventDriverCore driver;
+	FileFD handle;
 }
