@@ -49,6 +49,8 @@ matrix:
       d: dmd-2.072.2
     - os: osx
       d: dmd-beta
+    - os: osx # requires a newer libcurl than available
+      d: ldc-1.4.0
     - os: osx
       d: ldc-1.3.0
     - os: osx
