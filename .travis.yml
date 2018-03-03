@@ -33,6 +33,7 @@ env:
 matrix:
   allow_failures:
     - d: dmd-beta
+    - d: dmd-2.072.2 # too old DUB version on Travis-CI
   exclude:
     - env: CONFIG=libasync
     - os: osx
