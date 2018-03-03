@@ -43,24 +43,28 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 			BOOL ret = SetEndOfFile(handle);
 			if (!ret) {
 				CloseHandle(handle);
-				return FileFD.init;
+				return FileFD.invalid;
 			}
 		}
 
-		return adopt(cast(int)handle);
+		return adoptInternal(handle);
 	}
 
 	override FileFD adopt(int system_handle)
 	{
-		auto handle = () @trusted { return cast(HANDLE)system_handle; } ();
+		return adoptInternal(() @trusted { return cast(HANDLE)system_handle; } ());
+	}
+
+	private FileFD adoptInternal(HANDLE handle)
+	{
 		DWORD f;
 		if (!() @trusted { return GetHandleInformation(handle, &f); } ())
-			return FileFD.init;
+			return FileFD.invalid;
 
 		auto s = m_core.setupSlot!FileSlot(handle);
 		s.read.handle = s.write.handle = handle;
 
-		return FileFD(system_handle);
+		return FileFD(cast(size_t)handle);
 	}
 
 	override void close(FileFD file)
@@ -182,7 +186,7 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		auto slot = () @trusted { return cast(FileSlot.Direction!RO*)overlapped.hEvent; } ();
 		assert(slot !is null);
 		HANDLE h = slot.handle;
-		auto id = FileFD(cast(int)h);
+		auto id = FileFD(cast(size_t)h);
 
 		if (!slot.callback) {
 			// request was already cancelled
@@ -208,6 +212,6 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 
 	private static HANDLE idToHandle(FileFD id)
 	@trusted {
-		return cast(HANDLE)cast(int)id;
+		return cast(HANDLE)cast(size_t)id;
 	}
 }

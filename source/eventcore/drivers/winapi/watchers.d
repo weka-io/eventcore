@@ -35,7 +35,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 		if (handle == INVALID_HANDLE_VALUE)
 			return WatcherID.invalid;
 
-		auto id = WatcherID(cast(int)handle);
+		auto id = WatcherID(cast(size_t)handle);
 
 		auto slot = m_core.setupSlot!WatcherSlot(handle);
 		slot.directory = path;
@@ -80,6 +80,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 					try theAllocator.dispose(slot.watcher.buffer);
 					catch (Exception e) assert(false, "Freeing directory watcher buffer failed.");
 				} ();
+				slot.watcher.buffer = null;
 				core.freeSlot(handle);
 			}))
 		{
@@ -91,6 +92,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 		// completion callback
 		if (slot.refCount == 1) {
 			() @trusted { CancelIoEx(handle, &slot.watcher.overlapped); } ();
+			slot.watcher.callback = null;
 			core.removeWaiter();
 		}
 
@@ -105,7 +107,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 		import std.path : dirName, baseName, buildPath;
 
 		auto handle = overlapped.hEvent; // *file* handle
-		auto id = WatcherID(cast(int)handle);
+		auto id = WatcherID(cast(size_t)handle);
 
 		auto gslot = () @trusted { return &WinAPIEventDriver.threadInstance.core.m_handles[handle]; } ();
 		auto slot = () @trusted { return &gslot.watcher(); } ();
@@ -117,6 +119,8 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 			doReleaseRef(handle);
 			return;
 		}
+
+		if (!slot.callback) return;
 
 		// NOTE: cbTransferred can be 0 if the buffer overflowed
 		ubyte[] result = slot.buffer[0 .. cbTransferred];
@@ -177,5 +181,5 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 		return true;
 	}
 
-	static private HANDLE idToHandle(WatcherID id) @trusted { return cast(HANDLE)cast(int)id; }
+	static private HANDLE idToHandle(WatcherID id) @trusted { return cast(HANDLE)cast(size_t)id; }
 }

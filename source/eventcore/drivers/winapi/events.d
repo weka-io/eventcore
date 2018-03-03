@@ -142,6 +142,6 @@ final class WinAPIEventDriverEvents : EventDriverEvents {
 
 	private static HANDLE idToHandle(EventID event)
 	@trusted {
-		return cast(HANDLE)cast(int)event;
+		return cast(HANDLE)cast(size_t)event;
 	}
 }
