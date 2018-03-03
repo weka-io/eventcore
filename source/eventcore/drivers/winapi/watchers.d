@@ -127,6 +127,14 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 		while (result.length) {
 			assert(result.length >= FILE_NOTIFY_INFORMATION._FileName.offsetof);
 			auto fni = () @trusted { return cast(FILE_NOTIFY_INFORMATION*)result.ptr; } ();
+			if (fni.NextEntryOffset > result.length) {
+				import std.stdio : stderr;
+				() @trusted {
+					try stderr.writeln("ERROR: Invalid directory watcher event received.");
+					catch (Exception e) {}
+				} ();
+				break;
+			}
 			result = result[fni.NextEntryOffset .. $];
 
 			FileChange ch;
