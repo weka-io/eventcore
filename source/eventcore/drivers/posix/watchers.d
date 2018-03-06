@@ -428,7 +428,11 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 					if (generate_changes)
 						addChange(FileChangeKind.removed, e.key, e.value.isDir);
 				}
-				delete e.value;
+
+				static if (__VERSION__ >= 2079) {
+					import core.memory : __delete;
+					__delete(e.value);
+				} else mixin("delete e.value;");
 			}
 
 			foreach (e; added)
