@@ -182,11 +182,13 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	override ConnectionState getConnectionState(StreamSocketFD sock)
 	{
+		assert(sock != StreamSocketFD.invalid, "Invalid socket handle");
 		return m_sockets[sock].streamSocket.state;
 	}
 
 	override bool getLocalAddress(SocketFD sock, scope RefAddress dst)
 	{
+		assert(sock != StreamSocketFD.invalid, "Invalid socket handle");
 		socklen_t addr_len = dst.nameLen;
 		if (() @trusted { return getsockname(sock, dst.name, &addr_len); } () != 0)
 			return false;
@@ -196,6 +198,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	override bool getRemoteAddress(SocketFD sock, scope RefAddress dst)
 	{
+		assert(sock != StreamSocketFD.invalid, "Invalid socket handle");
 		socklen_t addr_len = dst.nameLen;
 		if (() @trusted { return getpeername(sock, dst.name, &addr_len); } () != 0)
 			return false;
@@ -206,13 +209,13 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	override void setTCPNoDelay(StreamSocketFD socket, bool enable)
 	@trusted {
 		BOOL eni = enable;
-		setsockopt(INVALID_SOCKET, IPPROTO_TCP, TCP_NODELAY, &eni, eni.sizeof);
+		setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &eni, eni.sizeof);
 	}
 
 	override void setKeepAlive(StreamSocketFD socket, bool enable)
 	@trusted {
 		BOOL eni = enable;
-		setsockopt(INVALID_SOCKET, SOL_SOCKET, SO_KEEPALIVE, &eni, eni.sizeof);
+		setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, &eni, eni.sizeof);
 	}
 
 	override void read(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish)
