@@ -30,6 +30,7 @@ void main()
 
 	server.waitForConnections!((incoming_, addr) {
 		incoming = incoming_; // work around ref counting issue
+		assert(incoming.state == ConnectionState.connected);
 		print("Got incoming, reading data");
 		incoming.read!((status, bts) {
 			print("Got data");
@@ -67,6 +68,7 @@ void main()
 	connectStream!((sock, status) {
 		client = sock;
 		assert(status == ConnectStatus.connected);
+		assert(sock.state == ConnectionState.connected);
 		print("Initial write");
 		client.write!((wstatus, bytes) {
 			print("Initial write done");
