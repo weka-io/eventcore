@@ -55,7 +55,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			return StreamSocketFD.invalid;
 		}
 
-		auto sock = adoptStreamInternal(fd);
+		auto sock = adoptStreamInternal(fd, ConnectionState.connecting);
 
 		auto ret = .connect(fd, peer_address.name, peer_address.nameLen);
 		//auto ret = WSAConnect(m_socket, peer_address.name, peer_address.nameLen, null, null, null, null);
@@ -70,7 +70,6 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		if (err == WSAEWOULDBLOCK) {
 			with (m_sockets[sock].streamSocket) {
 				connectCallback = on_connect;
-				state = ConnectionState.connecting;
 			}
 
 			m_core.addWaiter();
@@ -99,10 +98,10 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	override StreamSocketFD adoptStream(int socket)
 	{
-		return adoptStreamInternal(socket);
+		return adoptStreamInternal(socket, ConnectionState.connected);
 	}
 
-	private StreamSocketFD adoptStreamInternal(SOCKET socket)
+	private StreamSocketFD adoptStreamInternal(SOCKET socket, ConnectionState state)
 	{
 		auto fd = StreamSocketFD(socket);
 		if (m_sockets[fd].common.refCount) // FD already in use?
@@ -123,6 +122,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		initSocketSlot(fd);
 		with (m_sockets[socket]) {
 			specific = StreamSocketSlot.init;
+			streamSocket.state = state;
 			setupOverlapped(streamSocket.write.overlapped);
 			setupOverlapped(streamSocket.read.overlapped);
 		}
@@ -833,7 +833,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 							socklen_t addr_len = addr.sizeof;
 							auto clientsockfd = () @trusted { return WSAAccept(sock, cast(sockaddr*)&addr, &addr_len, null, 0); } ();
 							if (clientsockfd == INVALID_SOCKET) return 0;
-							auto clientsock = driver.adoptStreamInternal(clientsockfd);
+							auto clientsock = driver.adoptStreamInternal(clientsockfd, ConnectionState.connected);
 							scope RefAddress addrc = new RefAddress(() @trusted { return cast(sockaddr*)&addr; } (), addr_len);
 							slot.streamListen.acceptCallback(cast(StreamListenSocketFD)sock, clientsock, addrc);
 						}
