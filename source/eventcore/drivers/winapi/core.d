@@ -225,7 +225,7 @@ private struct HandleSlot {
 
 package struct FileSlot {
 	static struct Direction(bool RO) {
-		OVERLAPPED_FILE overlapped;
+		OVERLAPPED_CORE overlapped;
 		FileIOCallback callback;
 		ulong offset;
 		size_t bytesTransferred;
@@ -238,7 +238,7 @@ package struct FileSlot {
 			auto cb = this.callback;
 			this.callback = null;
 			assert(cb !is null);
-			cb(overlapped.handle, status, bytes_transferred);
+			cb(cast(FileFD)cast(size_t)overlapped.hEvent, status, bytes_transferred);
 		}
 	}
 	Direction!false read;
@@ -257,12 +257,6 @@ package struct OVERLAPPED_CORE {
 	OVERLAPPED overlapped;
 	alias overlapped this;
 	WinAPIEventDriverCore driver;
-}
-
-package struct OVERLAPPED_FILE {
-	OVERLAPPED_CORE core;
-	alias core this;
-	FileFD handle;
 }
 
 package struct IOEvent {
