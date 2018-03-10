@@ -4,6 +4,7 @@ version (Windows):
 
 import eventcore.driver;
 import eventcore.drivers.timer;
+import eventcore.internal.consumablequeue;
 import eventcore.internal.win32;
 import core.time : Duration;
 import taggedalgebraic;
@@ -19,6 +20,7 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		HANDLE[] m_registeredEvents;
 		void delegate() @safe nothrow[HANDLE] m_eventCallbacks;
 		HANDLE m_fileCompletionEvent;
+		ConsumableQueue!IOEvent m_ioEvents;
 	}
 
 	package {
@@ -31,6 +33,7 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		m_tid = () @trusted { return GetCurrentThreadId(); } ();
 		m_fileCompletionEvent = () @trusted { return CreateEventW(null, false, false, null); } ();
 		registerEvent(m_fileCompletionEvent);
+		m_ioEvents = new ConsumableQueue!IOEvent;
 	}
 
 	override size_t waiterCount() { return m_waiterCount + m_timers.pendingCount; }
@@ -115,6 +118,9 @@ final class WinAPIEventDriverCore : EventDriverCore {
 			DWORD timeout_msecs = max_wait == Duration.max ? INFINITE : cast(DWORD)min(max_wait.total!"msecs", DWORD.max);
 			auto ret = () @trusted { return MsgWaitForMultipleObjectsEx(cast(DWORD)m_registeredEvents.length, m_registeredEvents.ptr,
 				timeout_msecs, QS_ALLEVENTS, MWMO_ALERTABLE|MWMO_INPUTAVAILABLE); } ();
+
+			foreach (evt; m_ioEvents.consume)
+				evt.process(evt.error, evt.bytesTransferred, evt.overlapped);
 
 			if (ret == WAIT_IO_COMPLETION) got_event = true;
 			else if (ret >= WAIT_OBJECT_0 && ret < WAIT_OBJECT_0 + m_registeredEvents.length) {
@@ -241,14 +247,34 @@ package struct FileSlot {
 
 package struct WatcherSlot {
 	ubyte[] buffer;
-	OVERLAPPED overlapped;
+	OVERLAPPED_CORE overlapped;
 	string directory;
 	bool recursive;
 	FileChangesCallback callback;
 }
 
-package struct OVERLAPPED_FILE {
+package struct OVERLAPPED_CORE {
 	OVERLAPPED overlapped;
+	alias overlapped this;
 	WinAPIEventDriverCore driver;
+}
+
+package struct OVERLAPPED_FILE {
+	OVERLAPPED_CORE core;
+	alias core this;
 	FileFD handle;
+}
+
+package struct IOEvent {
+	void function(DWORD err, DWORD bts, OVERLAPPED_CORE*) @safe nothrow process;
+	DWORD error;
+	DWORD bytesTransferred;
+	OVERLAPPED_CORE* overlapped;
+}
+
+package extern(System) @system nothrow
+void overlappedIOHandler(alias process, EXTRA...)(DWORD error, DWORD bytes_transferred, OVERLAPPED* _overlapped, EXTRA extra)
+{
+	auto overlapped = cast(OVERLAPPED_CORE*)_overlapped;
+	overlapped.driver.m_ioEvents.put(IOEvent(&process, error, bytes_transferred, overlapped));
 }

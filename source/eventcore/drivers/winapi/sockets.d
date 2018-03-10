@@ -111,12 +111,13 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		//uint enable = 1;
 		//() @trusted { ioctlsocket(socket, FIONBIO, &enable); } ();
 
-		void setupOverlapped(ref WSAOVERLAPPEDX overlapped) @trusted @nogc nothrow {
+		void setupOverlapped(ref OVERLAPPED_CORE overlapped) @trusted @nogc nothrow {
 			overlapped.Internal = 0;
 			overlapped.InternalHigh = 0;
 			overlapped.Offset = 0;
 			overlapped.OffsetHigh = 0;
 			overlapped.hEvent = cast(HANDLE)cast(void*)&m_sockets[socket];
+			overlapped.driver = m_core;
 		}
 
 		initSocketSlot(fd);
@@ -226,9 +227,10 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		slot.read.wsabuf[0].len = buffer.length;
 		slot.read.wsabuf[0].buf = () @trusted { return buffer.ptr; } ();
 
-		auto ovl = mode == IOMode.immediate ? null : &slot.read.overlapped;
+		auto ovl = mode == IOMode.immediate ? null : &slot.read.overlapped.overlapped;
 		DWORD flags = 0;
-		auto ret = () @trusted { return WSARecv(socket, &slot.read.wsabuf[0], slot.read.wsabuf.length, null, &flags, ovl, &onIOReadCompleted); } ();
+		auto handler = &overlappedIOHandler!(onIOReadCompleted, DWORD);
+		auto ret = () @trusted { return WSARecv(socket, &slot.read.wsabuf[0], slot.read.wsabuf.length, null, &flags, ovl, handler); } ();
 		if (ret == SOCKET_ERROR) {
 			auto err = WSAGetLastError();
 			if (err == WSA_IO_PENDING) {
@@ -247,8 +249,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	}
 
 
-	private static extern(System) nothrow
-	void onIOReadCompleted(DWORD dwError, DWORD cbTransferred, WSAOVERLAPPEDX* lpOverlapped, DWORD dwFlags)
+	private static nothrow
+	void onIOReadCompleted(DWORD dwError, DWORD cbTransferred, OVERLAPPED_CORE* lpOverlapped)
 	{
 		auto slot = () @trusted { return cast(SocketVector.FullField*)lpOverlapped.hEvent; } ();
 
@@ -278,9 +280,10 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 		slot.streamSocket.read.wsabuf[0].len = slot.streamSocket.read.buffer.length;
 		slot.streamSocket.read.wsabuf[0].buf = () @trusted { return cast(ubyte*)slot.streamSocket.read.buffer.ptr; } ();
-		auto ovl = slot.streamSocket.read.mode == IOMode.immediate ? null : &slot.streamSocket.read.overlapped;
+		auto ovl = slot.streamSocket.read.mode == IOMode.immediate ? null : &slot.streamSocket.read.overlapped.overlapped;
 		DWORD flags = 0;
-		auto ret = () @trusted { return WSARecv(slot.common.fd, &slot.streamSocket.read.wsabuf[0], slot.streamSocket.read.wsabuf.length, null, &flags, ovl, &onIOReadCompleted); } ();
+		auto handler = &overlappedIOHandler!(onIOReadCompleted, DWORD);
+		auto ret = () @trusted { return WSARecv(slot.common.fd, &slot.streamSocket.read.wsabuf[0], slot.streamSocket.read.wsabuf.length, null, &flags, ovl, handler); } ();
 		if (ret == SOCKET_ERROR) {
 			auto err = WSAGetLastError();
 			if (err == WSA_IO_PENDING) {
@@ -301,8 +304,9 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		slot.write.wsabuf[0].len = buffer.length;
 		slot.write.wsabuf[0].buf = () @trusted { return cast(ubyte*)buffer.ptr; } ();
 
-		auto ovl = mode == IOMode.immediate ? null : &m_sockets[socket].streamSocket.write.overlapped;
-		auto ret = () @trusted { return WSASend(socket, &slot.write.wsabuf[0], slot.write.wsabuf.length, null, 0, ovl, &onIOWriteCompleted); } ();
+		auto ovl = mode == IOMode.immediate ? null : &m_sockets[socket].streamSocket.write.overlapped.overlapped;
+		auto handler = &overlappedIOHandler!(onIOWriteCompleted, DWORD);
+		auto ret = () @trusted { return WSASend(socket, &slot.write.wsabuf[0], slot.write.wsabuf.length, null, 0, ovl, handler); } ();
 		if (ret == SOCKET_ERROR) {
 			auto err = WSAGetLastError();
 			if (err == WSA_IO_PENDING) {
@@ -320,8 +324,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		m_core.addWaiter();
 	}
 
-	private static extern(System) nothrow
-	void onIOWriteCompleted(DWORD dwError, DWORD cbTransferred, WSAOVERLAPPEDX* lpOverlapped, DWORD dwFlags)
+	private static nothrow
+	void onIOWriteCompleted(DWORD dwError, DWORD cbTransferred, OVERLAPPED_CORE* lpOverlapped)
 	{
 		auto slot = () @trusted { return cast(SocketVector.FullField*)lpOverlapped.hEvent; } ();
 
@@ -351,8 +355,9 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 		slot.streamSocket.write.wsabuf[0].len = slot.streamSocket.write.buffer.length;
 		slot.streamSocket.write.wsabuf[0].buf = () @trusted { return cast(ubyte*)slot.streamSocket.write.buffer.ptr; } ();
-		auto ovl = slot.streamSocket.write.mode == IOMode.immediate ? null : &slot.streamSocket.write.overlapped;
-		auto ret = () @trusted { return WSASend(slot.common.fd, &slot.streamSocket.write.wsabuf[0], slot.streamSocket.write.wsabuf.length, null, 0, ovl, &onIOWriteCompleted); } ();
+		auto ovl = slot.streamSocket.write.mode == IOMode.immediate ? null : &slot.streamSocket.write.overlapped.overlapped;
+		auto handler = &overlappedIOHandler!(onIOWriteCompleted, DWORD);
+		auto ret = () @trusted { return WSASend(slot.common.fd, &slot.streamSocket.write.wsabuf[0], slot.streamSocket.write.wsabuf.length, null, 0, ovl, handler); } ();
 		if (ret == SOCKET_ERROR) {
 			auto err = WSAGetLastError();
 			if (err == WSA_IO_PENDING) {
@@ -431,12 +436,13 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		if (m_sockets[fd].common.refCount) // FD already in use?
 			return DatagramSocketFD.invalid;
 
-		void setupOverlapped(ref WSAOVERLAPPEDX overlapped) @trusted @nogc nothrow {
+		void setupOverlapped(ref OVERLAPPED_CORE overlapped) @trusted @nogc nothrow {
 			overlapped.Internal = 0;
 			overlapped.InternalHigh = 0;
 			overlapped.Offset = 0;
 			overlapped.OffsetHigh = 0;
 			overlapped.hEvent = cast(HANDLE)cast(void*)&m_sockets[socket];
+			overlapped.driver = m_core;
 		}
 
 		initSocketSlot(fd);
@@ -500,9 +506,10 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		slot.read.mode = mode;
 		slot.sourceAddrLen = DatagramSocketSlot.sourceAddr.sizeof;
 
-		auto ovl = &slot.read.overlapped;
+		auto ovl = &slot.read.overlapped.overlapped;
 		DWORD flags = 0;
-		auto ret = () @trusted { return WSARecvFrom(socket, &slot.read.wsabuf[0], slot.read.wsabuf.length, null, &flags, cast(SOCKADDR*)&slot.sourceAddr, &slot.sourceAddrLen, ovl, &onIOReceiveCompleted); } ();
+		auto handler = &overlappedIOHandler!(onIOReceiveCompleted, DWORD);
+		auto ret = () @trusted { return WSARecvFrom(socket, &slot.read.wsabuf[0], slot.read.wsabuf.length, null, &flags, cast(SOCKADDR*)&slot.sourceAddr, &slot.sourceAddrLen, ovl, handler); } ();
 		if (ret == SOCKET_ERROR) {
 			auto err = WSAGetLastError();
 			if (err != WSA_IO_PENDING) {
@@ -527,8 +534,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		m_core.removeWaiter();
 	}
 
-	private static extern(System) nothrow
-	void onIOReceiveCompleted(DWORD dwError, DWORD cbTransferred, WSAOVERLAPPEDX* lpOverlapped, DWORD dwFlags)
+	private static nothrow
+	void onIOReceiveCompleted(DWORD dwError, DWORD cbTransferred, OVERLAPPED_CORE* lpOverlapped)
 	{
 		auto slot = () @trusted { return cast(SocketVector.FullField*)lpOverlapped.hEvent; } ();
 
@@ -564,9 +571,10 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 		slot.datagramSocket.read.wsabuf[0].len = slot.datagramSocket.read.buffer.length;
 		slot.datagramSocket.read.wsabuf[0].buf = () @trusted { return cast(ubyte*)slot.datagramSocket.read.buffer.ptr; } ();
-		auto ovl = slot.datagramSocket.read.mode == IOMode.immediate ? null : &slot.datagramSocket.read.overlapped;
+		auto ovl = slot.datagramSocket.read.mode == IOMode.immediate ? null : &slot.datagramSocket.read.overlapped.overlapped;
 		DWORD flags = 0;
-		auto ret = () @trusted { return WSARecvFrom(slot.common.fd, &slot.datagramSocket.read.wsabuf[0], slot.datagramSocket.read.wsabuf.length, null, &flags, cast(SOCKADDR*)&slot.datagramSocket.sourceAddr, &slot.datagramSocket.sourceAddrLen, ovl, &onIOReceiveCompleted); } ();
+		auto handler = &overlappedIOHandler!(onIOReceiveCompleted, DWORD);
+		auto ret = () @trusted { return WSARecvFrom(slot.common.fd, &slot.datagramSocket.read.wsabuf[0], slot.datagramSocket.read.wsabuf.length, null, &flags, cast(SOCKADDR*)&slot.datagramSocket.sourceAddr, &slot.datagramSocket.sourceAddrLen, ovl, handler); } ();
 		if (ret == SOCKET_ERROR) {
 			auto err = WSAGetLastError();
 			if (err == WSA_IO_PENDING) {
@@ -588,10 +596,11 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		slot.write.mode = mode;
 		slot.targetAddr = target_address;
 
-		auto ovl = &slot.write.overlapped;
+		auto ovl = &slot.write.overlapped.overlapped;
 		auto tan = target_address ? target_address.name : null;
 		auto tal = target_address ? target_address.nameLen : 0;
-		auto ret = () @trusted { return WSASendTo(socket, &slot.write.wsabuf[0], slot.write.wsabuf.length, null, 0, tan, tal, ovl, &onIOSendCompleted); } ();
+		auto handler = &overlappedIOHandler!(onIOSendCompleted, DWORD);
+		auto ret = () @trusted { return WSASendTo(socket, &slot.write.wsabuf[0], slot.write.wsabuf.length, null, 0, tan, tal, ovl, handler); } ();
 
 		if (ret != 0) {
 			auto err = WSAGetLastError();
@@ -617,8 +626,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		m_core.removeWaiter();
 	}
 
-	private static extern(System) nothrow
-	void onIOSendCompleted(DWORD dwError, DWORD cbTransferred, WSAOVERLAPPEDX* lpOverlapped, DWORD dwFlags)
+	private static nothrow
+	void onIOSendCompleted(DWORD dwError, DWORD cbTransferred, OVERLAPPED_CORE* lpOverlapped)
 	{
 		auto slot = () @trusted { return cast(SocketVector.FullField*)lpOverlapped.hEvent; } ();
 
@@ -664,8 +673,9 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		slot.datagramSocket.write.wsabuf[0].buf = () @trusted { return cast(ubyte*)slot.datagramSocket.write.buffer.ptr; } ();
 		auto tan = slot.datagramSocket.targetAddr ? slot.datagramSocket.targetAddr.name : null;
 		auto tal = slot.datagramSocket.targetAddr ? slot.datagramSocket.targetAddr.nameLen : 0;
-		auto ovl = slot.datagramSocket.write.mode == IOMode.immediate ? null : &slot.datagramSocket.write.overlapped;
-		auto ret = () @trusted { return WSASendTo(slot.common.fd, &slot.datagramSocket.write.wsabuf[0], slot.datagramSocket.write.wsabuf.length, null, 0, tan, tal, ovl, &onIOSendCompleted); } ();
+		auto ovl = slot.datagramSocket.write.mode == IOMode.immediate ? null : &slot.datagramSocket.write.overlapped.overlapped;
+		auto handler = &overlappedIOHandler!(onIOSendCompleted, DWORD);
+		auto ret = () @trusted { return WSASendTo(slot.common.fd, &slot.datagramSocket.write.wsabuf[0], slot.datagramSocket.write.wsabuf.length, null, 0, tan, tal, ovl, handler); } ();
 		if (ret == SOCKET_ERROR) {
 			auto err = WSAGetLastError();
 			if (err == WSA_IO_PENDING) {
@@ -878,7 +888,7 @@ private struct StreamSocketSlot {
 }
 
 static struct StreamDirection(bool RO) {
-	WSAOVERLAPPEDX overlapped;
+	OVERLAPPED_CORE overlapped;
 	static if (RO) const(ubyte)[] buffer;
 	else ubyte[] buffer;
 	WSABUF[1] wsabuf;
@@ -902,7 +912,7 @@ private struct DatagramSocketSlot {
 }
 
 static struct DgramDirection(bool RO) {
-	WSAOVERLAPPEDX overlapped;
+	OVERLAPPED_CORE overlapped;
 	static if (RO) const(ubyte)[] buffer;
 	else ubyte[] buffer;
 	WSABUF[1] wsabuf;

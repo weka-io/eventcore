@@ -165,7 +165,8 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		}
 
 		auto nbytes = min(slot.buffer.length, DWORD.max);
-		if (!() @trusted { return fun(h, &slot.buffer[0], nbytes, &slot.overlapped.overlapped, &onIOFinished!(fun, RO)); } ()) {
+		auto handler = &overlappedIOHandler!(onIOFinished!(fun, RO));
+		if (!() @trusted { return fun(h, &slot.buffer[0], nbytes, &slot.overlapped.overlapped, handler); } ()) {
 			slot.overlapped.driver.removeWaiter();
 			slot.invokeCallback(IOStatus.error, slot.bytesTransferred);
 		}
@@ -181,8 +182,8 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		}
 	}
 
-	private static extern(Windows)
-	void onIOFinished(alias fun, bool RO)(DWORD error, DWORD bytes_transferred, OVERLAPPED* _overlapped)
+	private static nothrow
+	void onIOFinished(alias fun, bool RO)(DWORD error, DWORD bytes_transferred, OVERLAPPED_CORE* _overlapped)
 	{
 		auto ctx = () @trusted { return cast(OVERLAPPED_FILE*)_overlapped; } ();
 		FileFD id = ctx.handle;

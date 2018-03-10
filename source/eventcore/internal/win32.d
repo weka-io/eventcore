@@ -30,6 +30,8 @@ enum {
 	MAX_PROTOCOL_CHAIN = 7,
 }
 
+enum WSAEDISCON = 10101;
+
 enum WSA_OPERATION_ABORTED = 995;
 enum WSA_IO_PENDING = 997;
 
@@ -153,7 +155,7 @@ void freeaddrinfo(ADDRINFOA* ai);
 BOOL TransmitFile(SOCKET hSocket, HANDLE hFile, DWORD nNumberOfBytesToWrite, DWORD nNumberOfBytesPerSend, OVERLAPPED* lpOverlapped, LPTRANSMIT_FILE_BUFFERS lpTransmitBuffers, DWORD dwFlags);
 BOOL CancelIoEx(HANDLE hFile, LPOVERLAPPED lpOverlapped);
 
-struct WSAOVERLAPPEDX {
+/*struct WSAOVERLAPPEDX {
 	ULONG_PTR Internal;
 	ULONG_PTR InternalHigh;
 	union {
@@ -164,4 +166,6 @@ struct WSAOVERLAPPEDX {
 		PVOID  Pointer;
 	}
 	HANDLE hEvent;
-}
+}*/
+
+alias WSAOVERLAPPEDX = OVERLAPPED;
