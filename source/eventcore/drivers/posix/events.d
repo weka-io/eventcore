@@ -4,6 +4,7 @@ module eventcore.drivers.posix.events;
 import eventcore.driver;
 import eventcore.drivers.posix.driver;
 import eventcore.internal.consumablequeue : ConsumableQueue;
+import eventcore.internal.utils : nogc_assert;
 
 version (linux) {
 	nothrow @nogc extern (C) int eventfd(uint initval, int flags);
@@ -199,13 +200,13 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 
 	final override bool releaseRef(EventID descriptor)
 	{
-		assert(getRC(descriptor) > 0, "Releasing reference to unreferenced event FD.");
+		nogc_assert(getRC(descriptor) > 0, "Releasing reference to unreferenced event FD.");
 		if (--getRC(descriptor) == 0) {
 			if (!isInternal(descriptor))
 		 		m_loop.m_waiterCount -= getSlot(descriptor).waiters.length;
 			() @trusted nothrow {
 				try .destroy(getSlot(descriptor).waiters);
-				catch (Exception e) assert(false, e.msg);
+				catch (Exception e) nogc_assert(false, e.msg);
 			} ();
 			version (linux) {
 				m_loop.unregisterFD(descriptor, EventMask.read);
@@ -216,7 +217,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 				try {
 					synchronized (m_eventsMutex)
 						m_events.remove(rs);
-				} catch (Exception e) assert(false, e.msg);
+				} catch (Exception e) nogc_assert(false, e.msg);
 			}
 			m_loop.clearFD(descriptor);
 			version (Posix) close(cast(int)descriptor);
@@ -228,7 +229,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 
 	private EventSlot* getSlot(EventID id)
 	{
-		assert(id < m_loop.m_fds.length, "Invalid event ID.");
+		nogc_assert(id < m_loop.m_fds.length, "Invalid event ID.");
 		return () @trusted { return &m_loop.m_fds[id].event(); } ();
 	}
 

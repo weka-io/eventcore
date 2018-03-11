@@ -804,7 +804,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	{
 		import taggedalgebraic : hasType;
 		auto slot = () @trusted { return &m_loop.m_fds[fd]; } ();
-		assert(slot.common.refCount > 0, "Releasing reference to unreferenced socket FD.");
+		nogc_assert(slot.common.refCount > 0, "Releasing reference to unreferenced socket FD.");
 		// listening sockets have an incremented the reference count because of setNotifyCallback
 		int base_refcount = slot.specific.hasType!StreamListenSocketSlot ? 1 : 0;
 		if (--slot.common.refCount == base_refcount) {

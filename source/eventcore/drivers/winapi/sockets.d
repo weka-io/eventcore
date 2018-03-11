@@ -5,7 +5,7 @@ version (Windows):
 import eventcore.driver;
 import eventcore.drivers.winapi.core;
 import eventcore.internal.win32;
-import eventcore.internal.utils : AlgebraicChoppedVector, print;
+import eventcore.internal.utils : AlgebraicChoppedVector, print, nogc_assert;
 import std.socket : Address;
 
 private enum WM_USER_SOCKET = WM_USER + 1;
@@ -697,7 +697,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	override bool releaseRef(SocketFD fd)
 	{
 		import taggedalgebraic : hasType;
-		assert(m_sockets[fd].common.refCount > 0, "Releasing reference to unreferenced socket FD.");
+		nogc_assert(m_sockets[fd].common.refCount > 0, "Releasing reference to unreferenced socket FD.");
 		if (--m_sockets[fd].common.refCount == 0) {
 			final switch (m_sockets[fd].specific.kind) with (SocketVector.FieldType) {
 				case Kind.none: break;

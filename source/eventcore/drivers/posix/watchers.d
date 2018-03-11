@@ -3,6 +3,7 @@ module eventcore.drivers.posix.watchers;
 
 import eventcore.driver;
 import eventcore.drivers.posix.driver;
+import eventcore.internal.utils : nogc_assert;
 
 
 final class InotifyEventDriverWatchers(Events : EventDriverEvents) : EventDriverWatchers
@@ -64,7 +65,7 @@ final class InotifyEventDriverWatchers(Events : EventDriverEvents) : EventDriver
 	final override bool releaseRef(WatcherID descriptor)
 	{
 		FD fd = cast(FD)descriptor;
-		assert(m_loop.m_fds[fd].common.refCount > 0, "Releasing reference to unreferenced event FD.");
+		nogc_assert(m_loop.m_fds[fd].common.refCount > 0, "Releasing reference to unreferenced event FD.");
 		if (--m_loop.m_fds[fd].common.refCount == 1) { // NOTE: 1 because setNotifyCallback increments the reference count
 			m_loop.unregisterFD(fd, EventMask.read);
 			m_loop.clearFD(fd);
@@ -281,10 +282,10 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 
 	final override bool releaseRef(WatcherID descriptor)
 	{
-		assert(descriptor != WatcherID.invalid);
+		nogc_assert(descriptor != WatcherID.invalid, "Invalid directory watcher ID released");
 		auto evt = cast(EventID)descriptor;
 		auto pt = evt in m_pollers;
-		assert(pt !is null);
+		nogc_assert(pt !is null, "Directory watcher polling thread does not exist");
 		if (!m_events.releaseRef(evt)) {
 			pt.dispose();
 			m_pollers.remove(evt);

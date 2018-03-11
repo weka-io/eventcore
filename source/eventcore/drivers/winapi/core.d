@@ -5,6 +5,7 @@ version (Windows):
 import eventcore.driver;
 import eventcore.drivers.timer;
 import eventcore.internal.consumablequeue;
+import eventcore.internal.utils : nogc_assert;
 import eventcore.internal.win32;
 import core.time : Duration;
 import taggedalgebraic;
@@ -180,7 +181,7 @@ final class WinAPIEventDriverCore : EventDriverCore {
 
 	package void freeSlot(HANDLE h)
 	{
-		assert(h in m_handles, "Handle not in use - cannot free.");
+		nogc_assert((h in m_handles) !is null, "Handle not in use - cannot free.");
 		m_handles.remove(h);
 	}
 }
@@ -214,7 +215,7 @@ private struct HandleSlot {
 
 	bool releaseRef(scope void delegate() @safe nothrow on_free)
 	{
-		assert(refCount > 0);
+		nogc_assert(refCount > 0, "Releasing unreferenced slot.");
 		if (--refCount == 0) {
 			on_free();
 			return false;
