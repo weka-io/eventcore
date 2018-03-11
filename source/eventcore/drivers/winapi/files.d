@@ -161,7 +161,7 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 			InternalHigh = 0;
 			Offset = cast(uint)(slot.offset & 0xFFFFFFFF);
 			OffsetHigh = cast(uint)(slot.offset >> 32);
-			hEvent = () @trusted { return cast(HANDLE)slot; } ();
+			hEvent = h;
 		}
 
 		auto nbytes = min(slot.buffer.length, DWORD.max);
