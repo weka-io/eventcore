@@ -15,6 +15,28 @@ void print(ARGS...)(string str, ARGS args)
 	r.put('\n');
 }
 
+private extern(C) Throwable.TraceInfo _d_traceContext(void* ptr = null);
+
+void nogc_assert(bool cond, string message, string file = __FILE__, int line = __LINE__)
+@trusted nothrow {
+    import core.stdc.stdlib : abort;
+    import std.stdio : stderr;
+
+    if (!cond) {
+		scope (exit) {
+			abort();
+			assert(false);
+		}
+
+        stderr.writefln("Assertion failure @%s(%s): %s", file, line, message);
+        stderr.writeln("------------------------");
+        if (auto info = _d_traceContext(null)) {
+            foreach (s; info)
+                stderr.writeln(s);
+        } else stderr.writeln("no stack trace available");
+    }
+}
+
 struct StdoutRange {
 	@safe: @nogc: nothrow:
 	import core.stdc.stdio;
@@ -124,7 +146,7 @@ struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
 		}
 
 		while (m_chunkCount <= chunkidx) {
-			() @trusted { 
+			() @trusted {
 				auto ptr = cast(ChunkPtr)calloc(chunkSize, T.sizeof);
 				assert(ptr !is null, "Failed to allocate chunk!");
 				// FIXME: initialize with T.init instead of 0

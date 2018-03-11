@@ -5,6 +5,7 @@ module eventcore.drivers.timer;
 
 import eventcore.driver;
 import eventcore.internal.dlist;
+import eventcore.internal.utils : nogc_assert;
 
 
 final class LoopTimeoutTimerDriver : EventDriverTimers {
@@ -143,8 +144,8 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 
 	final override bool releaseRef(TimerID descriptor)
 	{
-		assert(descriptor != TimerID.init, "Invalid timer ID.");
-		assert(descriptor in m_timers, "Unknown timer ID.");
+		nogc_assert(descriptor != TimerID.init, "Invalid timer ID.");
+		nogc_assert((descriptor in m_timers) !is null, "Unknown timer ID.");
 		if (descriptor !in m_timers) return true;
 
 		auto tm = m_timers[descriptor];

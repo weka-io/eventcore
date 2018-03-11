@@ -3,6 +3,7 @@ module eventcore.drivers.posix.signals;
 
 import eventcore.driver;
 import eventcore.drivers.posix.driver;
+import eventcore.internal.utils : nogc_assert;
 
 import std.algorithm.comparison : among;
 
@@ -56,7 +57,7 @@ final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSigna
 	override bool releaseRef(SignalListenID descriptor)
 	{
 		FD fd = cast(FD)descriptor;
-		assert(m_loop.m_fds[fd].common.refCount > 0, "Releasing reference to unreferenced event FD.");
+		nogc_assert(m_loop.m_fds[fd].common.refCount > 0, "Releasing reference to unreferenced event FD.");
 		if (--m_loop.m_fds[fd].common.refCount == 1) { // NOTE: 1 because setNotifyCallback adds a second reference
 			m_loop.unregisterFD(fd, EventMask.read);
 			m_loop.clearFD(fd);

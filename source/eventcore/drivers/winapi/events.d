@@ -6,6 +6,7 @@ import eventcore.driver;
 import eventcore.drivers.winapi.core;
 import eventcore.internal.win32;
 import eventcore.internal.consumablequeue;
+import eventcore.internal.utils : nogc_assert;
 
 
 final class WinAPIEventDriverEvents : EventDriverEvents {
@@ -108,7 +109,7 @@ final class WinAPIEventDriverEvents : EventDriverEvents {
 	override bool releaseRef(EventID descriptor)
 	{
 		auto pe = descriptor in m_events;
-		assert(pe.refCount > 0);
+		nogc_assert(pe.refCount > 0, "Releasing unreference event.");
 		if (--pe.refCount == 0) {
 			// make sure to not leak any waiter references for pending waits
 			foreach (i; 0 .. pe.waiters.length)
