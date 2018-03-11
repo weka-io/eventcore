@@ -82,6 +82,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 					catch (Exception e) assert(false, "Freeing directory watcher buffer failed.");
 				} ();
 				slot.watcher.buffer = null;
+				core.discardEvents(&slot.watcher.overlapped, &slot.file.write.overlapped);
 				core.freeSlot(handle);
 			}))
 		{

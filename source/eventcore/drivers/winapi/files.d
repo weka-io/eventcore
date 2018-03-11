@@ -146,8 +146,10 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 	override bool releaseRef(FileFD descriptor)
 	{
 		auto h = idToHandle(descriptor);
-		return m_core.m_handles[h].releaseRef({
+		auto slot = &m_core.m_handles[h];
+		return slot.releaseRef({
 			close(descriptor);
+			m_core.discardEvents(&slot.file.read.overlapped, &slot.file.write.overlapped);
 			m_core.freeSlot(h);
 		});
 	}
@@ -161,7 +163,7 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 			InternalHigh = 0;
 			Offset = cast(uint)(slot.offset & 0xFFFFFFFF);
 			OffsetHigh = cast(uint)(slot.offset >> 32);
-			hEvent = () @trusted { return cast(HANDLE)slot; } ();
+			hEvent = h;
 		}
 
 		auto nbytes = min(slot.buffer.length, DWORD.max);

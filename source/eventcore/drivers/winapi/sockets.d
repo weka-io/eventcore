@@ -697,13 +697,15 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	override bool releaseRef(SocketFD fd)
 	{
 		import taggedalgebraic : hasType;
-		nogc_assert(m_sockets[fd].common.refCount > 0, "Releasing reference to unreferenced socket FD.");
-		if (--m_sockets[fd].common.refCount == 0) {
-			final switch (m_sockets[fd].specific.kind) with (SocketVector.FieldType) {
+		auto slot = () @trusted { return &m_sockets[fd]; } ();
+		nogc_assert(slot.common.refCount > 0, "Releasing reference to unreferenced socket FD.");
+		if (--slot.common.refCount == 0) {
+			final switch (slot.specific.kind) with (SocketVector.FieldType) {
 				case Kind.none: break;
 				case Kind.streamSocket:
 					cancelRead(cast(StreamSocketFD)fd);
 					cancelWrite(cast(StreamSocketFD)fd);
+					m_core.discardEvents(&slot.streamSocket.read.overlapped, &slot.streamSocket.write.overlapped);
 					break;
 				case Kind.streamListen:
 					if (m_sockets[fd].streamListen.acceptCallback)
@@ -712,6 +714,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 				case Kind.datagramSocket:
 					cancelReceive(cast(DatagramSocketFD)fd);
 					cancelSend(cast(DatagramSocketFD)fd);
+					m_core.discardEvents(&slot.datagramSocket.read.overlapped, &slot.datagramSocket.write.overlapped);
 					break;
 			}
 
