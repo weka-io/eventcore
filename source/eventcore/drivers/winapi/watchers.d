@@ -41,6 +41,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 		slot.directory = path;
 		slot.recursive = recursive;
 		slot.callback = callback;
+		slot.overlapped.driver = m_core;
 		slot.buffer = () @trusted {
 			try return theAllocator.makeArray!ubyte(16384);
 			catch (Exception e) assert(false, "Failed to allocate directory watcher buffer.");
@@ -91,7 +92,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 		// the current wait operation. Simply cancel the I/O to let the
 		// completion callback
 		if (slot.refCount == 1) {
-			() @trusted { CancelIoEx(handle, &slot.watcher.overlapped); } ();
+			() @trusted { CancelIoEx(handle, &slot.watcher.overlapped.overlapped); } ();
 			slot.watcher.callback = null;
 			core.removeWaiter();
 		}
@@ -99,8 +100,8 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 		return true;
 	}
 
-	private static nothrow extern(System)
-	void onIOCompleted(DWORD dwError, DWORD cbTransferred, OVERLAPPED* overlapped)
+	private static nothrow
+	void onIOCompleted(DWORD dwError, DWORD cbTransferred, OVERLAPPED_CORE* overlapped)
 	{
 		import std.conv : to;
 		import std.file : isDir;
@@ -176,9 +177,10 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 		slot.overlapped.hEvent = handle;
 
 		BOOL ret;
+		auto handler = &overlappedIOHandler!onIOCompleted;
 		() @trusted {
 			ret = ReadDirectoryChangesW(handle, slot.buffer.ptr, cast(DWORD)slot.buffer.length, slot.recursive,
-				notifications, null, &slot.overlapped, &onIOCompleted);
+				notifications, null, &slot.overlapped.overlapped, handler);
 		} ();
 
 		if (!ret) {
