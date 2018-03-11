@@ -184,6 +184,12 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		nogc_assert((h in m_handles) !is null, "Handle not in use - cannot free.");
 		m_handles.remove(h);
 	}
+
+	package void discardEvents(scope OVERLAPPED_CORE*[] overlapped...)
+	{
+		import std.algorithm.searching : canFind;
+		m_ioEvents.filterPending!(evt => !overlapped.canFind(evt.overlapped));
+	}
 }
 
 private long currStdTime()
