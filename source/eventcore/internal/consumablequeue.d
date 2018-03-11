@@ -235,3 +235,35 @@ unittest {
 		q.put(i);
 	assert(q.consume().equal(iota(4)));
 }
+
+
+void filterPending(alias pred, T)(ConsumableQueue!T q)
+{
+	size_t ir = 0;
+	size_t iw = 0;
+
+	while (ir < q.m_pendingCount) {
+		if (!pred(q.getPendingAt(ir))) {
+		} else {
+			if (ir != iw) q.getPendingAt(iw) = q.getPendingAt(ir);
+			iw++;
+		}
+		ir++;
+	}
+	q.m_pendingCount = iw;
+}
+
+
+unittest {
+	import std.algorithm.comparison : equal;
+	import std.range : only;
+
+	auto q = new ConsumableQueue!int;
+	foreach (i; 0 .. 14) q.put(i);
+	q.filterPending!(i => i % 2 != 0);
+	assert(q.consume().equal(only(1, 3, 5, 7, 9, 11, 13)));
+
+	foreach (i; 0 .. 14) q.put(i);
+	q.filterPending!(i => i % 3 == 1);
+	assert(q.consume().equal(only(1, 4, 7, 10, 13)));
+}
