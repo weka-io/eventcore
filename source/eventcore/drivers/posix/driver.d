@@ -92,6 +92,7 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 		if (!m_loop) return;
 		m_files.dispose();
 		m_dns.dispose();
+		m_core.dispose();
 		m_loop.dispose();
 		m_loop = null;
 	}
@@ -118,6 +119,12 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 		m_timers = timers;
 		m_events = events;
 		m_wakeupEvent = events.createInternal();
+	}
+
+	protected final void dispose()
+	{
+		m_events.releaseRef(m_wakeupEvent);
+		m_wakeupEvent = EventID.invalid;
 	}
 
 	@property size_t waiterCount() const { return m_loop.m_waiterCount + m_timers.pendingCount; }
