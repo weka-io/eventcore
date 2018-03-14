@@ -82,7 +82,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 					catch (Exception e) assert(false, "Freeing directory watcher buffer failed.");
 				} ();
 				slot.watcher.buffer = null;
-				core.discardEvents(&slot.watcher.overlapped, &slot.file.write.overlapped);
+				core.discardEvents(&slot.watcher.overlapped);
 				core.freeSlot(handle);
 			}))
 		{
@@ -159,10 +159,13 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 			catch (Exception e) {} // FIXME: can happen if the base path is relative and the CWD has changed
 			if (ch.kind != FileChangeKind.modified || !ch.isDirectory)
 				slot.callback(id, ch);
-			if (fni.NextEntryOffset == 0) break;
+			if (fni.NextEntryOffset == 0 || !slot.callback) break;
 		}
 
-		triggerRead(handle, *slot);
+		if (slot.callback)
+			triggerRead(handle, *slot);
+		else if (gslot.refCount == 1)
+			doReleaseRef(handle);
 	}
 
 	private static bool triggerRead(HANDLE handle, ref WatcherSlot slot)
