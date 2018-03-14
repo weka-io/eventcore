@@ -90,7 +90,10 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		assert(on_connect !is null);
 
 		auto sockfd = createSocket(address.addressFamily, SOCK_STREAM);
-		if (sockfd == -1) return StreamSocketFD.invalid;
+		if (sockfd == -1) {
+			on_connect(StreamSocketFD.invalid, ConnectStatus.socketCreateFailure);
+			return StreamSocketFD.invalid;
+		}
 
 		auto sock = cast(StreamSocketFD)sockfd;
 

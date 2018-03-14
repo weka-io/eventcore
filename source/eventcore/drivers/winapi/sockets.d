@@ -41,8 +41,10 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		assert(m_tid == GetCurrentThreadId());
 
 		auto fd = WSASocketW(peer_address.addressFamily, SOCK_STREAM, IPPROTO_TCP, null, 0, WSA_FLAG_OVERLAPPED);
-		if (fd == INVALID_SOCKET)
+		if (fd == INVALID_SOCKET) {
+			on_connect(StreamSocketFD.invalid, ConnectStatus.socketCreateFailure);
 			return StreamSocketFD.invalid;
+		}
 
 		void invalidateSocket() @nogc @trusted nothrow { closesocket(fd); fd = INVALID_SOCKET; }
 
