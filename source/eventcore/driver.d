@@ -570,6 +570,7 @@ enum ConnectStatus {
 	refused,
 	timeout,
 	bindFailure,
+	socketCreateFailure,
 	unknownError
 }
 
