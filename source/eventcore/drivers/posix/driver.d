@@ -77,15 +77,16 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 	}
 
 	// force overriding these in the (final) sub classes to avoid virtual calls
-	final override @property CoreDriver core() { return m_core; }
-	final override @property EventsDriver events() { return m_events; }
-	final override @property shared(EventsDriver) events() shared { return m_events; }
-	final override @property SignalsDriver signals() { return m_signals; }
-	final override @property TimerDriver timers() { return m_timers; }
-	final override @property SocketsDriver sockets() { return m_sockets; }
-	final override @property DNSDriver dns() { return m_dns; }
-	final override @property FileDriver files() { return m_files; }
-	final override @property WatcherDriver watchers() { return m_watchers; }
+	final override @property inout(CoreDriver) core() inout { return m_core; }
+	final override @property shared(inout(CoreDriver)) core() shared inout { return m_core; }
+	final override @property inout(EventsDriver) events() inout { return m_events; }
+	final override @property shared(inout(EventsDriver)) events() shared inout { return m_events; }
+	final override @property inout(SignalsDriver) signals() inout { return m_signals; }
+	final override @property inout(TimerDriver) timers() inout { return m_timers; }
+	final override @property inout(SocketsDriver) sockets() inout { return m_sockets; }
+	final override @property inout(DNSDriver) dns() inout { return m_dns; }
+	final override @property inout(FileDriver) files() inout { return m_files; }
+	final override @property inout(WatcherDriver) watchers() inout { return m_watchers; }
 
 	final override void dispose()
 	{
@@ -100,8 +101,12 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 
 
 final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTimers, Events : EventDriverEvents) : EventDriverCore {
-@safe: nothrow:
+@safe nothrow:
+	import core.atomic : atomicLoad, atomicStore;
+	import core.sync.mutex : Mutex;
 	import core.time : Duration;
+	import std.stdint : intptr_t;
+	import std.typecons : Tuple, tuple;
 
 	protected alias ExtraEventsCallback = bool delegate(long);
 
@@ -111,6 +116,9 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 		Events m_events;
 		bool m_exit = false;
 		EventID m_wakeupEvent;
+
+		shared Mutex m_threadCallbackMutex;
+		ConsumableQueue!(Tuple!(ThreadCallback, intptr_t)) m_threadCallbacks;
 	}
 
 	protected this(Loop loop, Timers timers, Events events)
@@ -119,12 +127,23 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 		m_timers = timers;
 		m_events = events;
 		m_wakeupEvent = events.createInternal();
+
+		static if (__VERSION__ >= 2074)
+			m_threadCallbackMutex = new shared Mutex;
+		else {
+			() @trusted { m_threadCallbackMutex = cast(shared)new Mutex; } ();
+		}
+
+		m_threadCallbacks = new ConsumableQueue!(Tuple!(ThreadCallback, intptr_t));
+		m_threadCallbacks.reserve(1000);
 	}
 
 	protected final void dispose()
 	{
+		executeThreadCallbacks();
 		m_events.releaseRef(m_wakeupEvent);
-		m_wakeupEvent = EventID.invalid;
+		atomicStore(m_threadCallbackMutex, null);
+		m_wakeupEvent = EventID.invalid; // FIXME: this needs to be synchronized!
 	}
 
 	@property size_t waiterCount() const { return m_loop.m_waiterCount + m_timers.pendingCount; }
@@ -132,6 +151,8 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 	final override ExitReason processEvents(Duration timeout)
 	{
 		import core.time : hnsecs, seconds;
+
+		executeThreadCallbacks();
 
 		if (m_exit) {
 			m_exit = false;
@@ -160,6 +181,8 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 			} while (timeout > 0.seconds && !m_exit && !got_events);
 		}
 
+		executeThreadCallbacks();
+
 		if (m_exit) {
 			m_exit = false;
 			return ExitReason.exited;
@@ -173,7 +196,7 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 
 	final override void exit()
 	{
-		m_exit = true;
+		m_exit = true; // FIXME: this needs to be synchronized!
 		() @trusted { (cast(shared)m_events).trigger(m_wakeupEvent, true); } ();
 	}
 
@@ -181,6 +204,26 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 	{
 		m_exit = false;
 	}
+
+	final override void runInOwnerThread(ThreadCallback del, intptr_t param)
+	shared {
+		auto m = atomicLoad(m_threadCallbackMutex);
+		auto evt = atomicLoad(m_wakeupEvent);
+		// NOTE: This case must be handled gracefully to avoid hazardous
+		//       race-conditions upon unexpected thread termination. The mutex
+		//       and the map will stay valid even after the driver has been
+		//       disposed, so no further synchronization is required.
+		if (!m) return;
+
+		try {
+			synchronized (m)
+				() @trusted { return (cast()this).m_threadCallbacks; } ()
+					.put(tuple(del, param));
+		} catch (Exception e) assert(false, e.msg);
+
+		m_events.trigger(m_wakeupEvent, false);
+	}
+
 
 	final protected override void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
 	@system {
@@ -195,6 +238,22 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 	protected final void* rawUserDataImpl(FD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
 	@system {
 		return m_loop.rawUserDataImpl(descriptor, size, initialize, destroy);
+	}
+
+	private void executeThreadCallbacks()
+	{
+		import std.stdint : intptr_t;
+
+		while (true) {
+			Tuple!(ThreadCallback, intptr_t) del;
+			try {
+				synchronized (m_threadCallbackMutex) {
+					if (m_threadCallbacks.empty) break;
+					del = m_threadCallbacks.consumeOne;
+				}
+			} catch (Exception e) assert(false, e.msg);
+			del[0](del[1]);
+		}
 	}
 }
 

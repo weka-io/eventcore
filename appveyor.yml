@@ -41,10 +41,6 @@ environment:
     DVersion: 2.072.2
     arch: x64
     config: winapi
-  - DC: dmd
-    DVersion: 2.071.1
-    arch: x86
-    config: winapi-optlink
   - DC: ldc
     DVersion: 1.7.0
     arch: x64
