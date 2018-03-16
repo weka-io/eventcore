@@ -77,6 +77,11 @@ final class InotifyEventDriverWatchers(Events : EventDriverEvents) : EventDriver
 		return true;
 	}
 
+	final protected override void* rawUserData(WatcherID descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+	@system {
+		return m_loop.rawUserDataImpl(descriptor, size, initialize, destroy);
+	}
+
 	private void onChanges(FD fd)
 	{
 		processEvents(cast(WatcherID)fd);
@@ -211,6 +216,12 @@ final class FSEventsEventDriverWatchers(Events : EventDriverEvents) : EventDrive
 		FSEventStreamRelease*/
 		assert(false, "TODO!");
 	}
+
+	final protected override void* rawUserData(WatcherID descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+	@system {
+		return m_loop.rawUserDataImpl(descriptor, size, initialize, destroy);
+	}
+
 }
 
 
@@ -292,6 +303,11 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 			return false;
 		}
 		return true;
+	}
+
+	final protected override void* rawUserData(WatcherID descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+	@system {
+		return m_events.loop.rawUserDataImpl(cast(EventID)descriptor, size, initialize, destroy);
 	}
 
 	private void onEvent(EventID evt)

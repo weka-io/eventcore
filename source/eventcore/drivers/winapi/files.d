@@ -154,6 +154,11 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		});
 	}
 
+	protected override void* rawUserData(FileFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+	@system {
+		return m_core.rawUserDataImpl(idToHandle(descriptor), size, initialize, destroy);
+	}
+
 	private static void startIO(alias fun, bool RO)(HANDLE h, FileSlot.Direction!RO* slot)
 	{
 		import std.algorithm.comparison : min;

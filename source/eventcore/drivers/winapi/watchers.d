@@ -69,6 +69,11 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 		return doReleaseRef(idToHandle(descriptor));
 	}
 
+	protected override void* rawUserData(WatcherID descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+	@system {
+		return m_core.rawUserDataImpl(idToHandle(descriptor), size, initialize, destroy);
+	}
+
 	private static bool doReleaseRef(HANDLE handle)
 	{
 		auto core = WinAPIEventDriver.threadInstance.core;

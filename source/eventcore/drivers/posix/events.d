@@ -227,6 +227,11 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 		return true;
 	}
 
+	final protected override void* rawUserData(EventID descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+	@system {
+		return m_loop.rawUserDataImpl(descriptor, size, initialize, destroy);
+	}
+
 	private EventSlot* getSlot(EventID id)
 	{
 		nogc_assert(id < m_loop.m_fds.length, "Invalid event ID.");

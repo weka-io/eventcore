@@ -101,11 +101,14 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 		static struct FileInfo {
 			IOInfo read;
 			IOInfo write;
+
 			int refCount;
+			DataInitializer userDataDestructor;
+			ubyte[16*size_t.sizeof] userData;
 		}
 
 		TaskPool m_fileThreadPool;
-		ChoppedVector!FileInfo m_files;
+		ChoppedVector!FileInfo m_files; // TODO: use the one from the posix loop
 		SmallIntegerSet!FileFD m_activeReads;
 		SmallIntegerSet!FileFD m_activeWrites;
 		EventID m_readyEvent = EventID.invalid;
@@ -266,6 +269,20 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 			return false;
 		}
 		return true;
+	}
+
+	protected final override void* rawUserData(FileFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+	@system {
+		FileInfo* fds = &m_files[descriptor];
+		assert(fds.userDataDestructor is null || fds.userDataDestructor is destroy,
+			"Requesting user data with differing type (destructor).");
+		assert(size <= FileInfo.userData.length, "Requested user data is too large.");
+		if (size > FileInfo.userData.length) assert(false);
+		if (!fds.userDataDestructor) {
+			initialize(fds.userData.ptr);
+			fds.userDataDestructor = destroy;
+		}
+		return fds.userData.ptr;
 	}
 
 	/// private
