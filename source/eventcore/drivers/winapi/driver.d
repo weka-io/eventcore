@@ -60,15 +60,16 @@ final class WinAPIEventDriver : EventDriver {
 
 @safe: /*@nogc:*/ nothrow:
 
-	override @property WinAPIEventDriverCore core() { return m_core; }
-	override @property WinAPIEventDriverFiles files() { return m_files; }
-	override @property WinAPIEventDriverSockets sockets() { return m_sockets; }
-	override @property WinAPIEventDriverDNS dns() { return m_dns; }
-	override @property LoopTimeoutTimerDriver timers() { return m_timers; }
-	override @property WinAPIEventDriverEvents events() { return m_events; }
-	override @property shared(WinAPIEventDriverEvents) events() shared { return m_events; }
-	override @property WinAPIEventDriverSignals signals() { return m_signals; }
-	override @property WinAPIEventDriverWatchers watchers() { return m_watchers; }
+	override @property inout(WinAPIEventDriverCore) core() inout { return m_core; }
+	override @property shared(inout(WinAPIEventDriverCore)) core() inout shared { return m_core; }
+	override @property inout(WinAPIEventDriverFiles) files() inout { return m_files; }
+	override @property inout(WinAPIEventDriverSockets) sockets() inout { return m_sockets; }
+	override @property inout(WinAPIEventDriverDNS) dns() inout { return m_dns; }
+	override @property inout(LoopTimeoutTimerDriver) timers() inout { return m_timers; }
+	override @property inout(WinAPIEventDriverEvents) events() inout { return m_events; }
+	override @property shared(inout(WinAPIEventDriverEvents)) events() inout shared { return m_events; }
+	override @property inout(WinAPIEventDriverSignals) signals() inout { return m_signals; }
+	override @property inout(WinAPIEventDriverWatchers) watchers() inout { return m_watchers; }
 
 	override void dispose()
 	{

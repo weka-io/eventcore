@@ -20,6 +20,7 @@ module eventcore.driver;
 
 import core.time : Duration;
 import std.socket : Address;
+import std.stdint : intptr_t;
 
 
 /** Encapsulates a full event driver.
@@ -31,23 +32,25 @@ import std.socket : Address;
 interface EventDriver {
 @safe: /*@nogc:*/ nothrow:
 	/// Core event loop functionality
-	@property EventDriverCore core();
+	@property inout(EventDriverCore) core() inout;
+	/// Core event loop functionality
+	@property shared(inout(EventDriverCore)) core() shared inout;
 	/// Single shot and recurring timers
-	@property EventDriverTimers timers();
+	@property inout(EventDriverTimers) timers() inout;
 	/// Cross-thread events (thread local access)
-	@property EventDriverEvents events();
+	@property inout(EventDriverEvents) events() inout;
 	/// Cross-thread events (cross-thread access)
-	@property shared(EventDriverEvents) events() shared;
+	@property shared(inout(EventDriverEvents)) events() shared inout;
 	/// UNIX/POSIX signal reception
-	@property EventDriverSignals signals();
+	@property inout(EventDriverSignals) signals() inout;
 	/// Stream and datagram sockets
-	@property EventDriverSockets sockets();
+	@property inout(EventDriverSockets) sockets() inout;
 	/// DNS queries
-	@property EventDriverDNS dns();
+	@property inout(EventDriverDNS) dns() inout;
 	/// Local file operations
-	@property EventDriverFiles files();
+	@property inout(EventDriverFiles) files() inout;
 	/// Directory change watching
-	@property EventDriverWatchers watchers();
+	@property inout(EventDriverWatchers) watchers() inout;
 
 	/// Releases all resources associated with the driver
 	void dispose();
@@ -97,6 +100,10 @@ interface EventDriverCore {
 		`ExitCode.exited` immediately. This function can be used to avoid this.
 	*/
 	void clearExitFlag();
+
+	/** Executes a callback in the thread owning the driver.
+	*/
+	void runInOwnerThread(ThreadCallback del, intptr_t param) shared;
 
 	/// Low-level user data access. Use `getUserData` instead.
 	protected void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
@@ -750,6 +757,8 @@ struct Handle(string NAME, T, T invalid_value = T.init) {
 
 	alias value this;
 }
+
+alias ThreadCallback = void function(intptr_t param) @safe nothrow;
 
 alias FD = Handle!("fd", size_t, size_t.max);
 alias SocketFD = Handle!("socket", FD);

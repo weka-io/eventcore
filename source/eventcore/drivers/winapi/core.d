@@ -7,8 +7,11 @@ import eventcore.drivers.timer;
 import eventcore.internal.consumablequeue;
 import eventcore.internal.utils : nogc_assert;
 import eventcore.internal.win32;
+import core.sync.mutex : Mutex;
 import core.time : Duration;
 import taggedalgebraic;
+import std.stdint : intptr_t;
+import std.typecons : Tuple, tuple;
 
 
 final class WinAPIEventDriverCore : EventDriverCore {
@@ -22,6 +25,9 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		void delegate() @safe nothrow[HANDLE] m_eventCallbacks;
 		HANDLE m_fileCompletionEvent;
 		ConsumableQueue!IOEvent m_ioEvents;
+
+		shared Mutex m_threadCallbackMutex;
+		ConsumableQueue!(Tuple!(ThreadCallback, intptr_t)) m_threadCallbacks;
 	}
 
 	package {
@@ -35,6 +41,14 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		m_fileCompletionEvent = () @trusted { return CreateEventW(null, false, false, null); } ();
 		registerEvent(m_fileCompletionEvent);
 		m_ioEvents = new ConsumableQueue!IOEvent;
+
+		static if (__VERSION__ >= 2074)
+			m_threadCallbackMutex = new shared Mutex;
+		else {
+			() @trusted { m_threadCallbackMutex = cast(shared)new Mutex; } ();
+		}
+		m_threadCallbacks = new ConsumableQueue!(Tuple!(ThreadCallback, intptr_t));
+		m_threadCallbacks.reserve(1000);
 	}
 
 	override size_t waiterCount() { return m_waiterCount + m_timers.pendingCount; }
@@ -98,6 +112,26 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		m_exit = false;
 	}
 
+	override void runInOwnerThread(ThreadCallback del, intptr_t param)
+	shared {
+		import core.atomic : atomicLoad;
+
+		auto m = atomicLoad(m_threadCallbackMutex);
+		// NOTE: This case must be handled gracefully to avoid hazardous
+		//       race-conditions upon unexpected thread termination. The mutex
+		//       and the map will stay valid even after the driver has been
+		//       disposed, so no further synchronization is required.
+		if (!m) return;
+
+		try {
+			synchronized (m)
+				() @trusted { return (cast()this).m_threadCallbacks; } ()
+					.put(tuple(del, param));
+		} catch (Exception e) assert(false, e.msg);
+
+		() @trusted { PostThreadMessageW(m_tid, WM_APP, 0, 0); } ();
+	}
+
 	package void* rawUserDataImpl(HANDLE handle, size_t size, DataInitializer initialize, DataInitializer destroy)
 	@system {
 		HandleSlot* fds = &m_handles[handle];
@@ -126,6 +160,8 @@ final class WinAPIEventDriverCore : EventDriverCore {
 	{
 		import core.time : seconds;
 		import std.algorithm.comparison : min;
+
+		executeThreadCallbacks();
 
 		bool got_event;
 
@@ -173,6 +209,8 @@ final class WinAPIEventDriverCore : EventDriverCore {
 			//if (++cnt % 10 == 0) processTimers();
 		}
 
+		executeThreadCallbacks();
+
 		return got_event;
 	}
 
@@ -203,6 +241,22 @@ final class WinAPIEventDriverCore : EventDriverCore {
 	{
 		import std.algorithm.searching : canFind;
 		m_ioEvents.filterPending!(evt => !overlapped.canFind(evt.overlapped));
+	}
+
+	private void executeThreadCallbacks()
+	{
+		import std.stdint : intptr_t;
+
+		while (true) {
+			Tuple!(ThreadCallback, intptr_t) del;
+			try {
+				synchronized (m_threadCallbackMutex) {
+					if (m_threadCallbacks.empty) break;
+					del = m_threadCallbacks.consumeOne;
+				}
+			} catch (Exception e) assert(false, e.msg);
+			del[0](del[1]);
+		}
 	}
 }
 
