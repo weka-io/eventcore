@@ -170,6 +170,20 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		return m_timers[descriptor].refCount == 1;
 	}
 
+	protected final override void* rawUserData(TimerID descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+	@system {
+		TimerSlot* fds = m_timers[descriptor];
+		assert(fds.userDataDestructor is null || fds.userDataDestructor is destroy,
+			"Requesting user data with differing type (destructor).");
+		assert(size <= TimerSlot.userData.length, "Requested user data is too large.");
+		if (size > TimerSlot.userData.length) assert(false);
+		if (!fds.userDataDestructor) {
+			initialize(fds.userData.ptr);
+			fds.userDataDestructor = destroy;
+		}
+		return fds.userData.ptr;
+	}
+
 	private void enqueueTimer(TimerSlot* tm)
 	nothrow {
 		TimerSlot* ns;
@@ -192,4 +206,7 @@ struct TimerSlot {
 	long timeout; // stdtime
 	long repeatDuration;
 	TimerCallback callback; // TODO: use a list with small-value optimization
+
+	DataInitializer userDataDestructor;
+	ubyte[16*size_t.sizeof] userData;
 }

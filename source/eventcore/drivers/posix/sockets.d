@@ -799,8 +799,9 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override void addRef(SocketFD fd)
 	{
-		assert(m_loop.m_fds[fd].common.refCount > 0, "Adding reference to unreferenced socket FD.");
-		m_loop.m_fds[fd].common.refCount++;
+		auto slot = () @trusted { return &m_loop.m_fds[fd]; } ();
+		assert(slot.common.refCount > 0, "Adding reference to unreferenced socket FD.");
+		slot.common.refCount++;
 	}
 
 	final override bool releaseRef(SocketFD fd)
@@ -843,26 +844,17 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final protected override void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
 	@system {
-		return rawUserDataImpl(descriptor, size, initialize, destroy);
+		return m_loop.rawUserDataImpl(descriptor, size, initialize, destroy);
+	}
+
+	final protected override void* rawUserData(StreamListenSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+	@system {
+		return m_loop.rawUserDataImpl(descriptor, size, initialize, destroy);
 	}
 
 	final protected override void* rawUserData(DatagramSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
 	@system {
-		return rawUserDataImpl(descriptor, size, initialize, destroy);
-	}
-
-	private void* rawUserDataImpl(FD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
-	@system {
-		auto fds = &m_loop.m_fds[descriptor].common;
-		assert(fds.userDataDestructor is null || fds.userDataDestructor is destroy,
-			"Requesting user data with differing type (destructor).");
-		assert(size <= fds.userData.length, "Requested user data is too large.");
-		if (size > fds.userData.length) assert(false);
-		if (!fds.userDataDestructor) {
-			initialize(fds.userData.ptr);
-			fds.userDataDestructor = destroy;
-		}
-		return m_loop.m_fds[descriptor].common.userData.ptr;
+		return m_loop.rawUserDataImpl(descriptor, size, initialize, destroy);
 	}
 
 	private sock_t createSocket(AddressFamily family, int type)

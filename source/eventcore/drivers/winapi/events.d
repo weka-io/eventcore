@@ -126,6 +126,11 @@ final class WinAPIEventDriverEvents : EventDriverEvents {
 		return true;
 	}
 
+	protected override void* rawUserData(EventID descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+	@system {
+		return m_core.rawUserDataImpl(idToHandle(descriptor), size, initialize, destroy);
+	}
+
 	private void triggerPending()
 	{
 		while (true) {

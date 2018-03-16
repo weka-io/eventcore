@@ -192,18 +192,9 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 		return rawUserDataImpl(descriptor, size, initialize, destroy);
 	}
 
-	private void* rawUserDataImpl(FD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+	protected final void* rawUserDataImpl(FD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
 	@system {
-		FDSlot* fds = &m_loop.m_fds[descriptor].common;
-		assert(fds.userDataDestructor is null || fds.userDataDestructor is destroy,
-			"Requesting user data with differing type (destructor).");
-		assert(size <= FDSlot.userData.length, "Requested user data is too large.");
-		if (size > FDSlot.userData.length) assert(false);
-		if (!fds.userDataDestructor) {
-			initialize(fds.userData.ptr);
-			fds.userDataDestructor = destroy;
-		}
-		return m_loop.m_fds[descriptor].common.userData.ptr;
+		return m_loop.rawUserDataImpl(descriptor, size, initialize, destroy);
 	}
 }
 
@@ -280,6 +271,20 @@ package class PosixEventLoop {
 				if (cb !is null)
 					m_waiterCount--;
 		*slot = m_fds.FullField.init;
+	}
+
+	package final void* rawUserDataImpl(size_t descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+	@system {
+		FDSlot* fds = &m_fds[descriptor].common;
+		assert(fds.userDataDestructor is null || fds.userDataDestructor is destroy,
+			"Requesting user data with differing type (destructor).");
+		assert(size <= FDSlot.userData.length, "Requested user data is too large.");
+		if (size > FDSlot.userData.length) assert(false);
+		if (!fds.userDataDestructor) {
+			initialize(fds.userData.ptr);
+			fds.userDataDestructor = destroy;
+		}
+		return fds.userData.ptr;
 	}
 }
 

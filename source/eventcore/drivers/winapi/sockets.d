@@ -754,6 +754,11 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		return rawUserDataImpl(descriptor, size, initialize, destroy);
 	}
 
+	final protected override void* rawUserData(StreamListenSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+	@system {
+		return rawUserDataImpl(descriptor, size, initialize, destroy);
+	}
+
 	final protected override void* rawUserData(DatagramSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
 	@system {
 		return rawUserDataImpl(descriptor, size, initialize, destroy);
@@ -770,7 +775,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			initialize(fds.userData.ptr);
 			fds.userDataDestructor = destroy;
 		}
-		return m_sockets[descriptor].common.userData.ptr;
+		return fds.userData.ptr;
 	}
 
 	private void initSocketSlot(SocketFD fd)

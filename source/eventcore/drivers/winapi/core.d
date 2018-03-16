@@ -98,6 +98,20 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		m_exit = false;
 	}
 
+	package void* rawUserDataImpl(HANDLE handle, size_t size, DataInitializer initialize, DataInitializer destroy)
+	@system {
+		HandleSlot* fds = &m_handles[handle];
+		assert(fds.userDataDestructor is null || fds.userDataDestructor is destroy,
+			"Requesting user data with differing type (destructor).");
+		assert(size <= HandleSlot.userData.length, "Requested user data is too large.");
+		if (size > HandleSlot.userData.length) assert(false);
+		if (!fds.userDataDestructor) {
+			initialize(fds.userData.ptr);
+			fds.userDataDestructor = destroy;
+		}
+		return fds.userData.ptr;
+	}
+
 	protected override void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system
 	{
 		assert(false, "TODO!");
@@ -207,6 +221,9 @@ private struct HandleSlot {
 	}
 	int refCount;
 	TaggedAlgebraic!SpecificTypes specific;
+
+	DataInitializer userDataDestructor;
+	ubyte[16*size_t.sizeof] userData;
 
 	@safe nothrow:
 

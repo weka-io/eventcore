@@ -327,11 +327,6 @@ interface EventDriverSockets {
 	/// ditto
 	bool setOption(StreamSocketFD socket, StreamSocketOption option, bool enable);
 
-	/// Low-level user data access. Use `getUserData` instead.
-	protected void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
-	/// ditto
-	protected void* rawUserData(DatagramSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
-
 	/** Retrieves a reference to a user-defined value associated with a descriptor.
 	*/
 	@property final ref T userData(T, FD)(FD descriptor)
@@ -341,6 +336,13 @@ interface EventDriverSockets {
 		static void destr(void* ptr) { destroy(*cast(T*)ptr); }
 		return *cast(T*)rawUserData(descriptor, T.sizeof, &init, &destr);
 	}
+
+	/// Low-level user data access. Use `getUserData` instead.
+	protected void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
+	/// ditto
+	protected void* rawUserData(StreamListenSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
+	/// ditto
+	protected void* rawUserData(DatagramSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
 }
 
 
@@ -384,7 +386,21 @@ interface EventDriverFiles {
 			Returns `false` $(I iff) the last reference was removed by this call.
 	*/
 	bool releaseRef(FileFD descriptor);
+
+	/** Retrieves a reference to a user-defined value associated with a descriptor.
+	*/
+	@property final ref T userData(T)(FileFD descriptor)
+	@trusted {
+		import std.conv : emplace;
+		static void init(void* ptr) { emplace(cast(T*)ptr); }
+		static void destr(void* ptr) { destroy(*cast(T*)ptr); }
+		return *cast(T*)rawUserData(descriptor, T.sizeof, &init, &destr);
+	}
+
+	/// Low-level user data access. Use `userData` instead.
+	protected void* rawUserData(FileFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
 }
+
 
 /** Cross-thread notifications
 
@@ -428,6 +444,19 @@ interface EventDriverEvents {
 			Returns `false` $(I iff) the last reference was removed by this call.
 	*/
 	bool releaseRef(EventID descriptor);
+
+	/** Retrieves a reference to a user-defined value associated with a descriptor.
+	*/
+	@property final ref T userData(T)(EventID descriptor)
+	@trusted {
+		import std.conv : emplace;
+		static void init(void* ptr) { emplace(cast(T*)ptr); }
+		static void destr(void* ptr) { destroy(*cast(T*)ptr); }
+		return *cast(T*)rawUserData(descriptor, T.sizeof, &init, &destr);
+	}
+
+	/// Low-level user data access. Use `userData` instead.
+	protected void* rawUserData(EventID descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
 }
 
 
@@ -496,6 +525,19 @@ interface EventDriverTimers {
 
 	/// Determines if the given timer's reference count equals one.
 	bool isUnique(TimerID descriptor) const;
+
+	/** Retrieves a reference to a user-defined value associated with a descriptor.
+	*/
+	@property final ref T userData(T)(TimerID descriptor)
+	@trusted {
+		import std.conv : emplace;
+		static void init(void* ptr) { emplace(cast(T*)ptr); }
+		static void destr(void* ptr) { destroy(*cast(T*)ptr); }
+		return *cast(T*)rawUserData(descriptor, T.sizeof, &init, &destr);
+	}
+
+	/// Low-level user data access. Use `userData` instead.
+	protected void* rawUserData(TimerID descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
 }
 
 interface EventDriverWatchers {
@@ -516,6 +558,19 @@ interface EventDriverWatchers {
 			Returns `false` $(I iff) the last reference was removed by this call.
 	*/
 	bool releaseRef(WatcherID descriptor);
+
+	/** Retrieves a reference to a user-defined value associated with a descriptor.
+	*/
+	@property final ref T userData(T)(WatcherID descriptor)
+	@trusted {
+		import std.conv : emplace;
+		static void init(void* ptr) { emplace(cast(T*)ptr); }
+		static void destr(void* ptr) { destroy(*cast(T*)ptr); }
+		return *cast(T*)rawUserData(descriptor, T.sizeof, &init, &destr);
+	}
+
+	/// Low-level user data access. Use `userData` instead.
+	protected void* rawUserData(WatcherID descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
 }
 
 
