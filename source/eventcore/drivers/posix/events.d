@@ -55,8 +55,9 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 			auto eid = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
 			if (eid == -1) return EventID.invalid;
 			auto id = cast(EventID)eid;
-			m_loop.initFD(id, FDFlags.internal);
-			m_loop.m_fds[id].specific = EventSlot(new ConsumableQueue!EventCallback, false, is_internal); // FIXME: avoid dynamic memory allocation
+			// FIXME: avoid dynamic memory allocation for the queue
+			m_loop.initFD(id, FDFlags.internal,
+				EventSlot(new ConsumableQueue!EventCallback, false, is_internal));
 			m_loop.registerFD(id, EventMask.read);
 			m_loop.setNotifyCallback!(EventType.read)(id, &onEvent);
 			releaseRef(id); // setNotifyCallback increments the reference count, but we need a value of 1 upon return
@@ -114,8 +115,9 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 				synchronized (m_eventsMutex)
 					m_events[s] = id;
 			} catch (Exception e) assert(false, e.msg);
-			m_loop.initFD(id, FDFlags.internal);
-			m_loop.m_fds[id].specific = EventSlot(new ConsumableQueue!EventCallback, false, is_internal, s); // FIXME: avoid dynamic memory allocation
+			// FIXME: avoid dynamic memory allocation for the queue
+			m_loop.initFD(id, FDFlags.internal,
+				EventSlot(new ConsumableQueue!EventCallback, false, is_internal, s));
 			assert(getRC(id) == 1);
 			return id;
 		}
@@ -219,7 +221,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 						m_events.remove(rs);
 				} catch (Exception e) nogc_assert(false, e.msg);
 			}
-			m_loop.clearFD(descriptor);
+			m_loop.clearFD!EventSlot(descriptor);
 			version (Posix) close(cast(int)descriptor);
 			else () @trusted { closesocket(cast(SOCKET)descriptor); } ();
 			return false;

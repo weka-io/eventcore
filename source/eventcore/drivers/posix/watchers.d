@@ -46,10 +46,9 @@ final class InotifyEventDriverWatchers(Events : EventDriverEvents) : EventDriver
 		if (recursive)
 			addSubWatches(ret, path, "");
 
-		m_loop.initFD(FD(handle), FDFlags.none);
+		m_loop.initFD(FD(handle), FDFlags.none, WatcherSlot(callback));
 		m_loop.registerFD(FD(handle), EventMask.read);
 		m_loop.setNotifyCallback!(EventType.read)(FD(handle), &onChanges);
-		m_loop.m_fds[handle].specific = WatcherSlot(callback);
 
 		processEvents(WatcherID(handle));
 
@@ -65,10 +64,12 @@ final class InotifyEventDriverWatchers(Events : EventDriverEvents) : EventDriver
 	final override bool releaseRef(WatcherID descriptor)
 	{
 		FD fd = cast(FD)descriptor;
-		nogc_assert(m_loop.m_fds[fd].common.refCount > 0, "Releasing reference to unreferenced event FD.");
-		if (--m_loop.m_fds[fd].common.refCount == 1) { // NOTE: 1 because setNotifyCallback increments the reference count
+		auto slot = () @trusted { return &m_loop.m_fds[fd]; } ();
+		nogc_assert(slot.common.refCount > 0, "Releasing reference to unreferenced event FD.");
+		if (--slot.common.refCount == 1) { // NOTE: 1 because setNotifyCallback increments the reference count
+			m_loop.setNotifyCallback!(EventType.read)(fd, null);
 			m_loop.unregisterFD(fd, EventMask.read);
-			m_loop.clearFD(fd);
+			m_loop.clearFD!WatcherSlot(fd);
 			m_watches.remove(descriptor);
 			/*errnoEnforce(*/close(cast(int)fd)/* == 0)*/;
 			return false;

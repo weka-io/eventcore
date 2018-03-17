@@ -297,6 +297,8 @@ package class PosixEventLoop {
 
 	package void setNotifyCallback(EventType evt)(FD fd, FDSlotCallback callback)
 	{
+		assert(m_fds[fd.value].common.refCount > 0,
+			"Setting notification callback on unreferenced file descriptor slot.");
 		assert((callback !is null) != (m_fds[fd.value].common.callback[evt] !is null),
 			"Overwriting notification callback.");
 		// ensure that the FD doesn't get closed before the callback gets called.
@@ -312,17 +314,24 @@ package class PosixEventLoop {
 		}
 	}
 
-	package void initFD(FD fd, FDFlags flags)
+	package void initFD(T)(FD fd, FDFlags flags, auto ref T slot_init)
 	{
 		with (m_fds[fd.value]) {
+			assert(common.refCount == 0, "Initializing referenced file descriptor slot.");
+			assert(specific.kind == typeof(specific).Kind.none, "Initializing slot that has not been cleared.");
 			common.refCount = 1;
 			common.flags = flags;
+			specific = slot_init;
 		}
 	}
 
-	package void clearFD(FD fd)
+	package void clearFD(T)(FD fd)
 	{
+		import taggedalgebraic : hasType;
+
 		auto slot = () @trusted { return &m_fds[fd.value]; } ();
+		assert(slot.common.refCount == 0, "Clearing referenced file descriptor slot.");
+		assert(slot.specific.hasType!T, "Clearing file descriptor slot with unmatched type.");
 		if (slot.common.userDataDestructor)
 			() @trusted { slot.common.userDataDestructor(slot.common.userData.ptr); } ();
 		if (!(slot.common.flags & FDFlags.internal))

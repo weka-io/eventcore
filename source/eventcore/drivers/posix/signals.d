@@ -38,8 +38,7 @@ final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSigna
 		} ();
 
 
-		m_loop.initFD(cast(FD)fd, is_internal ? FDFlags.internal : FDFlags.none);
-		m_loop.m_fds[fd].specific = SignalSlot(on_signal);
+		m_loop.initFD(cast(FD)fd, is_internal ? FDFlags.internal : FDFlags.none, SignalSlot(on_signal));
 		m_loop.registerFD(cast(FD)fd, EventMask.read);
 		m_loop.setNotifyCallback!(EventType.read)(cast(FD)fd, &onSignal);
 
@@ -59,8 +58,9 @@ final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSigna
 		FD fd = cast(FD)descriptor;
 		nogc_assert(m_loop.m_fds[fd].common.refCount > 0, "Releasing reference to unreferenced event FD.");
 		if (--m_loop.m_fds[fd].common.refCount == 1) { // NOTE: 1 because setNotifyCallback adds a second reference
+			m_loop.setNotifyCallback!(EventType.read)(fd, null);
 			m_loop.unregisterFD(fd, EventMask.read);
-			m_loop.clearFD(fd);
+			m_loop.clearFD!SignalSlot(fd);
 			close(cast(int)fd);
 			return false;
 		}
