@@ -109,9 +109,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			return sock;
 		}
 
-		m_loop.initFD(sock, FDFlags.none);
+		m_loop.initFD(sock, FDFlags.none, StreamSocketSlot.init);
 		m_loop.registerFD(sock, EventMask.read|EventMask.write|EventMask.status);
-		m_loop.m_fds[sock].specific = StreamSocketSlot.init;
 		m_loop.setNotifyCallback!(EventType.status)(sock, &onConnectError);
 		releaseRef(sock);	// onConnectError callback is weak reference
 
@@ -128,7 +127,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 				}
 				m_loop.setNotifyCallback!(EventType.write)(sock, &onConnect);
 			} else {
-				m_loop.clearFD(sock);
+				m_loop.clearFD!StreamSocketSlot(sock);
 				m_loop.unregisterFD(sock, EventMask.read|EventMask.write|EventMask.status);
 				invalidateSocket();
 				on_connect(StreamSocketFD.invalid, ConnectStatus.unknownError);
@@ -148,7 +147,9 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 				"Unable to cancel connect on the socket that is not in connecting state");
 			state = ConnectionState.closed;
 			connectCallback = null;
-			m_loop.clearFD(sock);
+			m_loop.setNotifyCallback!(EventType.status)(sock, null);
+			m_loop.setNotifyCallback!(EventType.write)(sock, null);
+			m_loop.clearFD!StreamSocketSlot(sock);
 			m_loop.unregisterFD(sock, EventMask.read|EventMask.write|EventMask.status);
 			closeSocket(cast(sock_t)sock.value);
 		}
@@ -160,9 +161,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		if (m_loop.m_fds[fd].common.refCount) // FD already in use?
 			return StreamSocketFD.invalid;
 		setSocketNonBlocking(fd);
-		m_loop.initFD(fd, FDFlags.none);
+		m_loop.initFD(fd, FDFlags.none, StreamSocketSlot.init);
 		m_loop.registerFD(fd, EventMask.read|EventMask.write|EventMask.status);
-		m_loop.m_fds[fd].specific = StreamSocketSlot.init;
 		return fd;
 	}
 
@@ -226,8 +226,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		if (sock == StreamListenSocketFD.invalid)
 			return sock;
 
-		m_loop.initFD(sock, FDFlags.none);
-		m_loop.m_fds[sock].specific = StreamListenSocketSlot.init;
+		m_loop.initFD(sock, FDFlags.none, StreamListenSocketSlot.init);
 
 		if (on_accept) waitForConnections(sock, on_accept);
 
@@ -256,8 +255,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			setSocketNonBlocking(cast(SocketFD)sockfd, true);
 		}
 		auto fd = cast(StreamSocketFD)sockfd;
-		m_loop.initFD(fd, FDFlags.none);
-		m_loop.m_fds[fd].specific = StreamSocketSlot.init;
+		m_loop.initFD(fd, FDFlags.none, StreamSocketSlot.init);
 		m_loop.m_fds[fd].streamSocket.state = ConnectionState.connected;
 		m_loop.registerFD(fd, EventMask.read|EventMask.write|EventMask.status);
 		m_loop.setNotifyCallback!(EventType.status)(fd, &onConnectError);
@@ -371,8 +369,10 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		{
 			auto l = lockHandle(socket);
 			m_loop.setNotifyCallback!(EventType.read)(socket, null);
+			assert(m_loop.m_fds[socket].common.refCount > 0);
 			//m_fds[fd].readBuffer = null;
 			slot.readCallback(socket, status, slot.bytesRead);
+			assert(m_loop.m_fds[socket].common.refCount > 0);
 		}
 
 		sizediff_t ret = 0;
@@ -590,8 +590,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			}
 		}
 
-		m_loop.initFD(sock, is_internal ? FDFlags.internal : FDFlags.none);
-		m_loop.m_fds[sock].specific = DgramSocketSlot.init;
+		m_loop.initFD(sock, is_internal ? FDFlags.internal : FDFlags.none, DgramSocketSlot.init);
 		m_loop.registerFD(sock, EventMask.read|EventMask.write|EventMask.status);
 
 		return sock;
@@ -608,9 +607,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		if (m_loop.m_fds[fd].common.refCount) // FD already in use?
 			return DatagramSocketFD.init;
 		setSocketNonBlocking(fd, close_on_exec);
-		m_loop.initFD(fd, is_internal ? FDFlags.internal : FDFlags.none);
+		m_loop.initFD(fd, is_internal ? FDFlags.internal : FDFlags.none, DgramSocketSlot.init);
 		m_loop.registerFD(fd, EventMask.read|EventMask.write|EventMask.status);
-		m_loop.m_fds[fd].specific = DgramSocketSlot.init;
 		return fd;
 	}
 
@@ -813,7 +811,19 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		int base_refcount = slot.specific.hasType!StreamListenSocketSlot ? 1 : 0;
 		if (--slot.common.refCount == base_refcount) {
 			m_loop.unregisterFD(fd, EventMask.read|EventMask.write|EventMask.status);
-			m_loop.clearFD(fd);
+			switch (slot.specific.kind) with (slot.specific.Kind) {
+				default: assert(false, "File descriptor slot is not a socket.");
+				case streamSocket:
+					m_loop.clearFD!StreamSocketSlot(fd);
+					break;
+				case streamListen:
+					m_loop.setNotifyCallback!(EventType.read)(fd, null);
+					m_loop.clearFD!StreamListenSocketSlot(fd);
+					break;
+				case datagramSocket:
+					m_loop.clearFD!DgramSocketSlot(fd);
+					break;
+			}
 			closeSocket(cast(sock_t)fd);
 			return false;
 		}
