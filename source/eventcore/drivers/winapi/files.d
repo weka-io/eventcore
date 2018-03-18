@@ -27,7 +27,7 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 
 		auto access = mode == FileOpenMode.readWrite || mode == FileOpenMode.createTrunc ? (GENERIC_WRITE | GENERIC_READ) :
 						mode == FileOpenMode.append ? GENERIC_WRITE : GENERIC_READ;
-		auto shareMode = mode == FileOpenMode.read ? FILE_SHARE_READ : 0;
+		auto shareMode = FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE;
 		auto creation = mode == FileOpenMode.createTrunc ? CREATE_ALWAYS : mode == FileOpenMode.append? OPEN_ALWAYS : OPEN_EXISTING;
 
 		auto handle = () @trusted {
@@ -76,7 +76,7 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		auto h = idToHandle(file);
 		auto slot = () @trusted { return &m_core.m_handles[h].file(); } ();
 		if (slot.read.overlapped.hEvent != INVALID_HANDLE_VALUE) {
-			CloseHandle(h);
+
 			slot.read.overlapped.hEvent = slot.write.overlapped.hEvent = INVALID_HANDLE_VALUE;
 		}
 	}
@@ -92,13 +92,19 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 
 	override void write(FileFD file, ulong offset, const(ubyte)[] buffer, IOMode mode, FileIOCallback on_write_finish)
 	{
+		auto h = idToHandle(file);
+		auto slot = &m_core.m_handles[h].file.write;
+
+		if (slot.overlapped.hEvent == INVALID_HANDLE_VALUE) {
+			on_write_finish(file, IOStatus.disconnected, 0);
+			return;
+		}
+
 		if (!buffer.length) {
 			on_write_finish(file, IOStatus.ok, 0);
 			return;
 		}
 
-		auto h = idToHandle(file);
-		auto slot = &m_core.m_handles[h].file.write;
 		slot.bytesTransferred = 0;
 		slot.offset = offset;
 		slot.buffer = buffer;
@@ -110,13 +116,19 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 
 	override void read(FileFD file, ulong offset, ubyte[] buffer, IOMode mode, FileIOCallback on_read_finish)
 	{
+		auto h = idToHandle(file);
+		auto slot = &m_core.m_handles[h].file.read;
+
+		if (slot.overlapped.hEvent == INVALID_HANDLE_VALUE) {
+			on_read_finish(file, IOStatus.disconnected, 0);
+			return;
+		}
+
 		if (!buffer.length) {
 			on_read_finish(file, IOStatus.ok, 0);
 			return;
 		}
 
-		auto h = idToHandle(file);
-		auto slot = &m_core.m_handles[h].file.read;
 		slot.bytesTransferred = 0;
 		slot.offset = offset;
 		slot.buffer = buffer;

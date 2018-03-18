@@ -371,6 +371,14 @@ interface EventDriverFiles {
 @safe: /*@nogc:*/ nothrow:
 	FileFD open(string path, FileOpenMode mode);
 	FileFD adopt(int system_file_handle);
+
+	/** Disallows any reads/writes and removes any exclusive locks.
+
+		Note that this function may not actually close the file handle. The
+		handle is only guaranteed to be closed one the reference count drops
+		to zero. However, the remaining effects of calling this function will
+		be similar to actually closing the file.
+	*/
 	void close(FileFD file);
 
 	ulong getSize(FileFD file);

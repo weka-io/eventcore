@@ -101,6 +101,7 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 		static struct FileInfo {
 			IOInfo read;
 			IOInfo write;
+			bool open = true;
 
 			int refCount;
 			DataInitializer userDataDestructor;
@@ -175,7 +176,11 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 
 	void close(FileFD file)
 	{
-		() @trusted { .close(cast(int)file); } ();
+		// NOTE: The file descriptor itself must stay open until the reference
+		//       count drops to zero, or this would result in dangling handles.
+		//       In case of an exclusive file lock, the lock should be lifted
+		//       here.
+		m_files[file].open = false;
 	}
 
 	ulong getSize(FileFD file)
@@ -193,11 +198,17 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 	final override void write(FileFD file, ulong offset, const(ubyte)[] buffer, IOMode, FileIOCallback on_write_finish)
 	{
 		//assert(this.writable);
-		auto f = &m_files[file].write;
-		if (!safeCAS(f.status, ThreadedFileStatus.idle, ThreadedFileStatus.initiated))
+		auto f = () @trusted { return &m_files[file]; } ();
+
+		if (!f.open) {
+			on_write_finish(file, IOStatus.disconnected, 0);
+			return;
+		}
+
+		if (!safeCAS(f.write.status, ThreadedFileStatus.idle, ThreadedFileStatus.initiated))
 			assert(false, "Concurrent file writes are not allowed.");
-		assert(f.callback is null, "Concurrent file writes are not allowed.");
-		f.callback = on_write_finish;
+		assert(f.write.callback is null, "Concurrent file writes are not allowed.");
+		f.write.callback = on_write_finish;
 		m_activeWrites.insert(file);
 		threadSetup();
 		log("start write task");
@@ -224,11 +235,17 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 
 	final override void read(FileFD file, ulong offset, ubyte[] buffer, IOMode, FileIOCallback on_read_finish)
 	{
-		auto f = &m_files[file].read;
-		if (!safeCAS(f.status, ThreadedFileStatus.idle, ThreadedFileStatus.initiated))
+		auto f = () @trusted { return &m_files[file]; } ();
+
+		if (!f.open) {
+			on_read_finish(file, IOStatus.disconnected, 0);
+			return;
+		}
+
+		if (!safeCAS(f.read.status, ThreadedFileStatus.idle, ThreadedFileStatus.initiated))
 			assert(false, "Concurrent file reads are not allowed.");
-		assert(f.callback is null, "Concurrent file reads are not allowed.");
-		f.callback = on_read_finish;
+		assert(f.read.callback is null, "Concurrent file reads are not allowed.");
+		f.read.callback = on_read_finish;
 		m_activeReads.insert(file);
 		threadSetup();
 		log("start read task");
