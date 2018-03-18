@@ -38,21 +38,23 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 		}
 		ChoppedVector!Lookup m_lookups;
 		Events m_events;
-		EventID m_event;
+		EventID m_event = EventID.invalid;
 		size_t m_maxHandle;
 	}
 
 	this(Events events, Signals signals)
 	{
 		m_events = events;
-		m_event = events.createInternal();
-		m_events.wait(m_event, &onDNSSignal);
+		setupEvent();
 	}
 
 	void dispose()
 	{
-		m_events.cancelWait(m_event, &onDNSSignal);
-		m_events.releaseRef(m_event);
+		if (m_event != EventID.invalid) {
+			m_events.cancelWait(m_event, &onDNSSignal);
+			m_events.releaseRef(m_event);
+			m_event = EventID.invalid;
+		}
 	}
 
 	override DNSLookupID lookupHost(string name, DNSLookupCallback on_lookup_finished)
@@ -60,6 +62,8 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 		debug (EventCoreLogDNS) print("lookup %s", name);
 		auto handle = getFreeHandle();
 		if (handle > m_maxHandle) m_maxHandle = handle;
+
+		setupEvent();
 
 		assert(!m_lookups[handle].result);
 		Lookup* l = () @trusted { return &m_lookups[handle]; } ();
@@ -130,6 +134,14 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 			if (!l.callback)
 				return cast(DNSLookupID)cast(int)i;
 		return cast(DNSLookupID)cast(int)m_lookups.length;
+	}
+
+	private void setupEvent()
+	{
+		if (m_event == EventID.invalid) {
+			m_event = m_events.createInternal();
+			m_events.wait(m_event, &onDNSSignal);
+		}
 	}
 }
 
