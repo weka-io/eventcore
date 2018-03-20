@@ -75,10 +75,8 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 	{
 		auto h = idToHandle(file);
 		auto slot = () @trusted { return &m_core.m_handles[h].file(); } ();
-		if (slot.read.overlapped.hEvent != INVALID_HANDLE_VALUE) {
-
+		if (slot.read.overlapped.hEvent != INVALID_HANDLE_VALUE)
 			slot.read.overlapped.hEvent = slot.write.overlapped.hEvent = INVALID_HANDLE_VALUE;
-		}
 	}
 
 	override ulong getSize(FileFD file)
@@ -160,7 +158,7 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		auto h = idToHandle(descriptor);
 		auto slot = &m_core.m_handles[h];
 		return slot.releaseRef({
-			close(descriptor);
+			CloseHandle(h);
 			m_core.discardEvents(&slot.file.read.overlapped, &slot.file.write.overlapped);
 			m_core.freeSlot(h);
 		});
