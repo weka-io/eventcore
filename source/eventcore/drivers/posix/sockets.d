@@ -217,7 +217,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 				invalidateSocket();
 				return;
 			}
-			if (listen(sockfd, 128) != 0) {
+			if (listen(sockfd, getBacklogSize()) != 0) {
 				invalidateSocket();
 				return;
 			}
@@ -954,4 +954,20 @@ private int getSocketError()
 @nogc nothrow {
 	version (Windows) return WSAGetLastError();
 	else return errno;
+}
+private int getBacklogSize()
+@trusted @nogc nothrow {
+	int backlog = 128;
+	version(linux)
+	{
+		import core.stdc.stdio : fopen, fscanf;
+		auto somaxconn = fopen("/proc/sys/net/core/somaxconn", "re");
+		if(somaxconn)
+		{
+			int tmp;
+			if (fscanf(somaxconn, "%d", &tmp) == 1)
+				backlog = tmp;
+		}
+	}
+	return backlog;
 }
