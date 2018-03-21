@@ -960,13 +960,14 @@ private int getBacklogSize()
 	int backlog = 128;
 	version(linux)
 	{
-		import core.stdc.stdio : fopen, fscanf;
+		import core.stdc.stdio : fclose, fopen, fscanf;
 		auto somaxconn = fopen("/proc/sys/net/core/somaxconn", "re");
 		if(somaxconn)
 		{
 			int tmp;
 			if (fscanf(somaxconn, "%d", &tmp) == 1)
 				backlog = tmp;
+			fclose(somaxconn);
 		}
 	}
 	return backlog;
