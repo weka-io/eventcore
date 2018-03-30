@@ -19,22 +19,22 @@ private extern(C) Throwable.TraceInfo _d_traceContext(void* ptr = null);
 
 void nogc_assert(bool cond, string message, string file = __FILE__, int line = __LINE__)
 @trusted nothrow {
-    import core.stdc.stdlib : abort;
-    import std.stdio : stderr;
+	import core.stdc.stdlib : abort;
+	import std.stdio : stderr;
 
-    if (!cond) {
+	if (!cond) {
 		scope (exit) {
 			abort();
 			assert(false);
 		}
 
-        stderr.writefln("Assertion failure @%s(%s): %s", file, line, message);
-        stderr.writeln("------------------------");
-        if (auto info = _d_traceContext(null)) {
-            foreach (s; info)
-                stderr.writeln(s);
-        } else stderr.writeln("no stack trace available");
-    }
+		stderr.writefln("Assertion failure @%s(%s): %s", file, line, message);
+		stderr.writeln("------------------------");
+		if (auto info = _d_traceContext(null)) {
+			foreach (s; info)
+				stderr.writeln(s);
+		} else stderr.writeln("no stack trace available");
+	}
 }
 
 struct StdoutRange {
