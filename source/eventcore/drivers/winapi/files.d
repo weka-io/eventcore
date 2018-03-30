@@ -204,6 +204,7 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 	{
 		FileFD id = cast(FileFD)cast(size_t)overlapped.hEvent;
 		auto handle = idToHandle(id);
+		if (handle == INVALID_HANDLE_VALUE) return;
 		static if (RO)
 			auto slot = () @trusted { return &overlapped.driver.m_handles[handle].file.write; } ();
 		else

@@ -170,8 +170,10 @@ final class WinAPIEventDriverCore : EventDriverCore {
 			auto ret = () @trusted { return MsgWaitForMultipleObjectsEx(cast(DWORD)m_registeredEvents.length, m_registeredEvents.ptr,
 				timeout_msecs, QS_ALLEVENTS, MWMO_ALERTABLE|MWMO_INPUTAVAILABLE); } ();
 
-			foreach (evt; m_ioEvents.consume)
+			while (!m_ioEvents.empty) {
+				auto evt = m_ioEvents.consumeOne();
 				evt.process(evt.error, evt.bytesTransferred, evt.overlapped);
+			}
 
 			if (ret == WAIT_IO_COMPLETION) got_event = true;
 			else if (ret >= WAIT_OBJECT_0 && ret < WAIT_OBJECT_0 + m_registeredEvents.length) {
