@@ -8,6 +8,8 @@ import eventcore.internal.win32;
 import eventcore.internal.utils : AlgebraicChoppedVector, print, nogc_assert;
 import std.socket : Address;
 
+import core.time: Duration;
+
 private enum WM_USER_SOCKET = WM_USER + 1;
 
 
@@ -225,7 +227,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	{
 		tcp_keepalive opts = tcp_keepalive(1, cast(ulong) idle.total!"msecs"(),
 			cast(ulong) interval.total!"msecs");
-		int result = WSAIoctl(socket, SIO_KEEPALIVE_VALS, &opts, tcp_keepalive.sizeof, null, 0, null, null);
+		int result = WSAIoctl(socket, SIO_KEEPALIVE_VALS, &opts, cast(uint) tcp_keepalive.sizeof,
+			null, 0, null, null, null);
 		if (result != 0)
 		{
 			print("WSAIoctl SIO_KEEPALIVE_VALS returned %d", result);

@@ -112,18 +112,18 @@ struct tcp_keepalive {
 };
 
 // https://gist.github.com/piscisaureus/906386#file-winsock2-h-L1099
-enum : ulong {
+enum : DWORD {
 	IOC_VENDOR = 0x18000000,
 	IOC_OUT = 0x40000000,
 	IOC_IN = 0x80000000
 }
 
-ulong _WSAIOW(ulong x, ulong y) pure @safe
+DWORD _WSAIOW(DWORD x, DWORD y) pure @safe
 {
 	return IOC_IN | x | y;
 }
 
-enum : ulong {
+enum : DWORD {
 	SIO_KEEPALIVE_VALS = _WSAIOW(IOC_VENDOR, 4)
 }
 
