@@ -8,6 +8,8 @@ import eventcore.internal.utils;
 import std.algorithm.comparison : among, min, max;
 import std.socket : Address, AddressFamily, InternetAddress, Internet6Address, UnknownAddress;
 
+import core.time: Duration;
+
 version (Posix) {
 	import std.socket : UnixAddress;
 	import core.sys.posix.netdb : AI_ADDRCONFIG, AI_V4MAPPED, addrinfo, freeaddrinfo, getaddrinfo;
@@ -45,6 +47,13 @@ version (linux) {
 	}
 	else
 		import core.sys.linux.netinet.in_ : IP_ADD_MEMBERSHIP, IP_MULTICAST_LOOP;
+
+	// Linux-specific TCP options
+	// https://github.com/torvalds/linux/blob/master/include/uapi/linux/tcp.h#L95
+	enum SOL_TCP = 6;
+	enum TCP_KEEPIDLE = 4;
+	enum TCP_KEEPINTVL = 5;
+	enum TCP_KEEPCNT = 6;
 }
 version(OSX) {
 	static if (__VERSION__ < 2077) {
@@ -298,6 +307,19 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	{
 		ubyte opt = enable;
 		() @trusted { setsockopt(cast(sock_t)socket, SOL_SOCKET, SO_KEEPALIVE, cast(char*)&opt, opt.sizeof); } ();
+	}
+
+	override void setKeepAliveParams(StreamSocketFD socket, Duration idle, Duration interval, int probeCount) @trusted
+	{
+		version (linux) {
+			ubyte opt = 1;
+			setsockopt(cast(sock_t)socket, SOL_SOCKET, SO_KEEPALIVE, cast(char*)&opt, opt.sizeof);
+			int int_opt = cast(int) idle.total!"seconds"();
+			setsockopt(cast(sock_t)socket, SOL_TCP, TCP_KEEPIDLE, &int_opt, int.sizeof);
+			int_opt = cast(int) interval.total!"seconds"();
+			setsockopt(cast(sock_t)socket, SOL_TCP, TCP_KEEPINTVL, &int_opt, int.sizeof);
+			setsockopt(cast(sock_t)socket, SOL_TCP, TCP_KEEPCNT, &probeCount, int.sizeof);
+		}
 	}
 
 	final override void read(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish)

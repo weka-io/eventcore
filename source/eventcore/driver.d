@@ -215,6 +215,19 @@ interface EventDriverSockets {
 	/// Sets to `SO_KEEPALIVE` socket option on a socket.
 	void setKeepAlive(StreamSocketFD socket, bool enable);
 
+	/** Enables keepalive for the TCP socket and sets additional parameters.
+		Silently ignores unsupported systems.
+
+		Params:
+			socket = Socket file descriptor to set options on.
+			idle = The time the connection needs to remain idle
+				before TCP starts sending keepalive probes.
+			interval = The time between individual keepalive probes.
+			probeCount = The maximum number of keepalive probes TCP should send
+				before dropping the connection. Has no effect on Windows.
+	*/
+	void setKeepAliveParams(StreamSocketFD socket, Duration idle, Duration interval, int probeCount = 5);
+
 	/** Reads data from a stream socket.
 
 		Note that only a single read operation is allowed at once. The caller

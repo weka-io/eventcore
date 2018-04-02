@@ -221,6 +221,18 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, &eni, eni.sizeof);
 	}
 
+	override void setKeepAliveParams(StreamSocketFD socket, Duration idle, Duration interval, int probeCount) @trusted
+	{
+		if (idle < Duration.zero)
+			assert(0, "negative idle duration");
+		if (interval < Duration.zero)
+			assert(0, "negative interval duration");
+		tcp_keepalive opts = tcp_keepalive(1, cast(ulong) idle.total!"msecs"(),
+			cast(ulong) interval.total!"msecs");
+		int result = WSAIoctl(socket, SIO_KEEPALIVE_VALS, &opts, tcp_keepalive.sizeof, null, 0, null, null);
+		assert(result == 0);
+	}
+
 	override void read(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish)
 	{
 		auto slot = () @trusted { return &m_sockets[socket].streamSocket(); } ();
