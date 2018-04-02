@@ -228,6 +228,9 @@ interface EventDriverSockets {
 	*/
 	void setKeepAliveParams(StreamSocketFD socket, Duration idle, Duration interval, int probeCount = 5);
 
+	/// Sets `TCP_USER_TIMEOUT` socket option (linux only). https://tools.ietf.org/html/rfc5482
+	void setUserTimeout(StreamSocketFD socket, Duration timeout);
+
 	/** Reads data from a stream socket.
 
 		Note that only a single read operation is allowed at once. The caller
