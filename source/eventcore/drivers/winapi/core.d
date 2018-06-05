@@ -73,28 +73,21 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		if (!waiterCount) return ExitReason.outOfWaiters;
 
 		bool got_event;
+		long now = currStdTime;
+		do {
+			auto nextto = min(m_timers.getNextTimeout(now), timeout);
+			got_event |= doProcessEvents(nextto);
+			long prev_step = now;
+			now = currStdTime;
+			got_event |= m_timers.process(now);
 
-		if (timeout <= 0.seconds) {
-			got_event = doProcessEvents(0.seconds);
-			got_event |= m_timers.process(currStdTime);
-			return got_event ? ExitReason.idle : ExitReason.timeout;
-		} else {
-			long now = currStdTime;
-			do {
-				auto nextto = min(m_timers.getNextTimeout(now), timeout);
-				got_event |= doProcessEvents(nextto);
-				long prev_step = now;
-				now = currStdTime;
-				got_event |= m_timers.process(now);
-
-				if (m_exit) {
-					m_exit = false;
-					return ExitReason.exited;
-				} else if (got_event) break;
-				if (timeout != Duration.max)
-					timeout -= (now - prev_step).hnsecs;
-			} while (timeout > 0.seconds);
-		}
+			if (m_exit) {
+				m_exit = false;
+				return ExitReason.exited;
+			} else if (got_event) break;
+			if (timeout != Duration.max)
+				timeout -= (now - prev_step).hnsecs;
+		} while (timeout > 0.seconds);
 
 		if (!waiterCount) return ExitReason.outOfWaiters;
 		if (got_event) return ExitReason.idle;
@@ -159,40 +152,38 @@ final class WinAPIEventDriverCore : EventDriverCore {
 	private bool doProcessEvents(Duration max_wait)
 	{
 		import core.time : seconds;
-		import std.algorithm.comparison : min;
+		import std.algorithm.comparison : min, max;
 
 		executeThreadCallbacks();
 
 		bool got_event;
 
-		if (max_wait > 0.seconds) {
-			DWORD timeout_msecs = max_wait == Duration.max ? INFINITE : cast(DWORD)min(max_wait.total!"msecs", DWORD.max);
-			auto ret = () @trusted { return MsgWaitForMultipleObjectsEx(cast(DWORD)m_registeredEvents.length, m_registeredEvents.ptr,
-				timeout_msecs, QS_ALLEVENTS, MWMO_ALERTABLE|MWMO_INPUTAVAILABLE); } ();
+		DWORD timeout_msecs = max_wait == Duration.max ? INFINITE : cast(DWORD)min(max(max_wait.total!"msecs", 0), DWORD.max);
+		auto ret = () @trusted { return MsgWaitForMultipleObjectsEx(cast(DWORD)m_registeredEvents.length, m_registeredEvents.ptr,
+			timeout_msecs, QS_ALLEVENTS, MWMO_ALERTABLE|MWMO_INPUTAVAILABLE); } ();
 
-			while (!m_ioEvents.empty) {
-				auto evt = m_ioEvents.consumeOne();
-				evt.process(evt.error, evt.bytesTransferred, evt.overlapped);
-			}
-
-			if (ret == WAIT_IO_COMPLETION) got_event = true;
-			else if (ret >= WAIT_OBJECT_0 && ret < WAIT_OBJECT_0 + m_registeredEvents.length) {
-				if (auto pc = m_registeredEvents[ret - WAIT_OBJECT_0] in m_eventCallbacks) {
-					(*pc)();
-					got_event = true;
-				}
-			}
-
-			/*if (ret == WAIT_OBJECT_0) {
-				got_event = true;
-				Win32TCPConnection[] to_remove;
-				foreach( fw; m_fileWriters.byKey )
-					if( fw.testFileWritten() )
-						to_remove ~= fw;
-				foreach( fw; to_remove )
-				m_fileWriters.remove(fw);
-			}*/
+		while (!m_ioEvents.empty) {
+			auto evt = m_ioEvents.consumeOne();
+			evt.process(evt.error, evt.bytesTransferred, evt.overlapped);
 		}
+
+		if (ret == WAIT_IO_COMPLETION) got_event = true;
+		else if (ret >= WAIT_OBJECT_0 && ret < WAIT_OBJECT_0 + m_registeredEvents.length) {
+			if (auto pc = m_registeredEvents[ret - WAIT_OBJECT_0] in m_eventCallbacks) {
+				(*pc)();
+				got_event = true;
+			}
+		}
+
+		/*if (ret == WAIT_OBJECT_0) {
+			got_event = true;
+			Win32TCPConnection[] to_remove;
+			foreach( fw; m_fileWriters.byKey )
+				if( fw.testFileWritten() )
+					to_remove ~= fw;
+			foreach( fw; to_remove )
+			m_fileWriters.remove(fw);
+		}*/
 
 		MSG msg;
 		//uint cnt = 0;
