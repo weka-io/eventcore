@@ -216,7 +216,7 @@ interface EventDriverSockets {
 	void setKeepAlive(StreamSocketFD socket, bool enable);
 
 	/** Enables keepalive for the TCP socket and sets additional parameters.
-		Silently ignores unsupported systems.
+		Silently ignores unsupported systems (anything but Windows and Linux).
 
 		Params:
 			socket = Socket file descriptor to set options on.

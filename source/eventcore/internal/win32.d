@@ -4,6 +4,7 @@ version(Windows):
 
 public import core.sys.windows.windows;
 public import core.sys.windows.winsock2;
+public import core.stdc.config: c_ulong;
 
 extern(System) nothrow:
 
@@ -106,9 +107,9 @@ struct ADDRINFOW {
 
 // https://msdn.microsoft.com/en-us/library/windows/desktop/dd877220(v=vs.85).aspx
 struct tcp_keepalive {
-	ulong onoff;
-	ulong keepalivetime;
-	ulong keepaliveinterval;
+	c_ulong onoff;
+	c_ulong keepalivetime;
+	c_ulong keepaliveinterval;
 };
 
 // https://gist.github.com/piscisaureus/906386#file-winsock2-h-L1099

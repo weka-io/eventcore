@@ -8,7 +8,7 @@ import eventcore.core;
 import eventcore.socket;
 import eventcore.internal.utils : print;
 import std.socket : InternetAddress;
-import core.time : Duration, msecs;
+import core.time : Duration, msecs, seconds;
 
 ubyte[256] s_rbuf;
 bool s_done;
@@ -69,6 +69,10 @@ void main()
 		client = sock;
 		assert(status == ConnectStatus.connected);
 		assert(sock.state == ConnectionState.connected);
+		print("Setting keepalive and timeout options");
+		client.setKeepAlive(true);
+		client.setKeepAliveParams(10.seconds, 10.seconds, 4);
+		client.setUserTimeout(5.seconds);
 		print("Initial write");
 		client.write!((wstatus, bytes) {
 			print("Initial write done");

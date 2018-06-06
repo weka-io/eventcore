@@ -225,15 +225,12 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	override void setKeepAliveParams(StreamSocketFD socket, Duration idle, Duration interval, int probeCount) @trusted
 	{
-		tcp_keepalive opts = tcp_keepalive(1, cast(ulong) idle.total!"msecs"(),
-			cast(ulong) interval.total!"msecs");
-		int result = WSAIoctl(socket, SIO_KEEPALIVE_VALS, &opts, cast(uint) tcp_keepalive.sizeof,
+		tcp_keepalive opts = tcp_keepalive(1, cast(c_ulong) idle.total!"msecs"(),
+			cast(c_ulong) interval.total!"msecs");
+		int result = WSAIoctl(socket, SIO_KEEPALIVE_VALS, &opts, cast(DWORD) tcp_keepalive.sizeof,
 			null, 0, null, null, null);
 		if (result != 0)
-		{
-			print("WSAIoctl SIO_KEEPALIVE_VALS returned %d", result);
-			assert(0, "unable to set TCP keepAlive parameters");
-		}
+			print("WSAIoctl error on SIO_KEEPALIVE_VALS: %d", WSAGetLastError());
 	}
 
 	override void setUserTimeout(StreamSocketFD socket, Duration timeout) {}

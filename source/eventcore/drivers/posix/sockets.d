@@ -51,11 +51,16 @@ version (linux) {
 	// Linux-specific TCP options
 	// https://github.com/torvalds/linux/blob/master/include/uapi/linux/tcp.h#L95
 	// Some day we should siply import core.sys.linux.netinet.tcp;
-	enum SOL_TCP = 6;
-	enum TCP_KEEPIDLE = 4;
-	enum TCP_KEEPINTVL = 5;
-	enum TCP_KEEPCNT = 6;
-	enum TCP_USER_TIMEOUT = 18;
+	static if (!is(typeof(SOL_TCP)))
+		enum SOL_TCP = 6;
+	static if (!is(typeof(TCP_KEEPIDLE)))
+		enum TCP_KEEPIDLE = 4;
+	static if (!is(typeof(TCP_KEEPINTVL)))
+		enum TCP_KEEPINTVL = 5;
+	static if (!is(typeof(TCP_KEEPCNT)))
+		enum TCP_KEEPCNT = 6;
+	static if (!is(typeof(TCP_USER_TIMEOUT)))
+		enum TCP_USER_TIMEOUT = 18;
 }
 version(OSX) {
 	static if (__VERSION__ < 2077) {
@@ -310,36 +315,29 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		int opt = enable;
 		int err = setsockopt(cast(sock_t)socket, SOL_SOCKET, SO_KEEPALIVE, &opt, int.sizeof);
 		if (err != 0)
-		{
-			print("sock error %s", getSocketError);
-			assert(0, "unable to set SO_KEEPALIVE option");
-		}
+			print("sock error in setKeepAlive: %s", getSocketError);
 	}
 
 	override void setKeepAliveParams(StreamSocketFD socket, Duration idle, Duration interval, int probeCount) @trusted
 	{
+		// dunnno about BSD\OSX, maybe someone should fix it for them later
 		version (linux) {
 			setKeepAlive(socket, true);
 			int int_opt = cast(int) idle.total!"seconds"();
 			int err = setsockopt(cast(sock_t)socket, SOL_TCP, TCP_KEEPIDLE, &int_opt, int.sizeof);
-			if (err != 0)
-			{
-				print("sock error %s", getSocketError);
-				assert(0, "unable to set TCP_KEEPIDLE option");
+			if (err != 0) {
+				print("sock error on setsockopt TCP_KEEPIDLE: %s", getSocketError);
+				return;
 			}
 			int_opt = cast(int) interval.total!"seconds"();
 			err = setsockopt(cast(sock_t)socket, SOL_TCP, TCP_KEEPINTVL, &int_opt, int.sizeof);
-			if (err != 0)
-			{
-				print("sock error %s", getSocketError);
-				assert(0, "unable to set TCP_KEEPINTVL option");
+			if (err != 0) {
+				print("sock error on setsockopt TCP_KEEPINTVL: %s", getSocketError);
+				return;
 			}
 			err = setsockopt(cast(sock_t)socket, SOL_TCP, TCP_KEEPCNT, &probeCount, int.sizeof);
 			if (err != 0)
-			{
-				print("sock error %s", getSocketError);
-				assert(0, "unable to set TCP_KEEPCNT option");
-			}
+				print("sock error on setsockopt TCP_KEEPCNT: %s", getSocketError);
 		}
 	}
 
@@ -349,10 +347,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			uint tmsecs = cast(uint) timeout.total!"msecs";
 			int err = setsockopt(cast(sock_t)socket, SOL_TCP, TCP_USER_TIMEOUT, &tmsecs, uint.sizeof);
 			if (err != 0)
-			{
-				print("sock error %s", getSocketError);
-				assert(0, "unable to set TCP_USER_TIMEOUT option");
-			}
+				print("sock error on setsockopt TCP_USER_TIMEOUT %s", getSocketError);
 		}
 	}
 
