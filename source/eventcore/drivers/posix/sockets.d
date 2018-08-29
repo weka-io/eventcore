@@ -27,6 +27,7 @@ version (Posix) {
 	{
 		version (linux) enum O_CLOEXEC = 0x80000;
 		else version (FreeBSD) enum O_CLOEXEC = 0x100000;
+		else version (Solaris) enum O_CLOEXEC = 0x800000;
 		else version (DragonFlyBSD) enum O_CLOEXEC = 0x0020000;
 		else version (NetBSD) enum O_CLOEXEC = 0x400000;
 		else version (OpenBSD) enum O_CLOEXEC = 0x10000;
