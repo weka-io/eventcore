@@ -19,7 +19,7 @@ void main()
 		writeln("This doesn't work on macOS. Skipping this test until it is determined that this special case should stay supported.");
 		return;
 	} else {
-	
+
 	static ubyte[] pack1 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 	auto baddr 	= new InternetAddress(0x7F000001, 40002);

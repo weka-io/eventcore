@@ -8,6 +8,8 @@ import eventcore.internal.win32;
 import eventcore.internal.utils : AlgebraicChoppedVector, print, nogc_assert;
 import std.socket : Address;
 
+import core.time: Duration;
+
 private enum WM_USER_SOCKET = WM_USER + 1;
 
 
@@ -220,6 +222,18 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		BOOL eni = enable;
 		setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, &eni, eni.sizeof);
 	}
+
+	override void setKeepAliveParams(StreamSocketFD socket, Duration idle, Duration interval, int probeCount) @trusted
+	{
+		tcp_keepalive opts = tcp_keepalive(1, cast(c_ulong) idle.total!"msecs"(),
+			cast(c_ulong) interval.total!"msecs");
+		int result = WSAIoctl(socket, SIO_KEEPALIVE_VALS, &opts, cast(DWORD) tcp_keepalive.sizeof,
+			null, 0, null, null, null);
+		if (result != 0)
+			print("WSAIoctl error on SIO_KEEPALIVE_VALS: %d", WSAGetLastError());
+	}
+
+	override void setUserTimeout(StreamSocketFD socket, Duration timeout) {}
 
 	override void read(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish)
 	{

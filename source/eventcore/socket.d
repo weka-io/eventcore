@@ -2,6 +2,7 @@ module eventcore.socket;
 
 import eventcore.core : eventDriver;
 import eventcore.driver;
+import core.time: Duration;
 import std.exception : enforce;
 import std.socket : Address;
 
@@ -49,6 +50,11 @@ struct StreamSocket {
 
 	@property ConnectionState state() { return eventDriver.sockets.getConnectionState(m_fd); }
 	@property void tcpNoDelay(bool enable) { eventDriver.sockets.setTCPNoDelay(m_fd, enable); }
+	void setKeepAlive(bool enable) { eventDriver.sockets.setKeepAlive(m_fd, enable); }
+	void setKeepAliveParams(Duration idle, Duration interval, int probeCount = 5) {
+		eventDriver.sockets.setKeepAliveParams(m_fd, idle, interval, probeCount);
+	}
+	void setUserTimeout(Duration timeout) { eventDriver.sockets.setUserTimeout(m_fd, timeout); }
 }
 
 void read(alias callback)(ref StreamSocket socket, ubyte[] buffer, IOMode mode)

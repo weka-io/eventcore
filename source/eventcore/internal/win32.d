@@ -4,6 +4,7 @@ version(Windows):
 
 public import core.sys.windows.windows;
 public import core.sys.windows.winsock2;
+public import core.stdc.config: c_ulong;
 
 extern(System) nothrow:
 
@@ -104,6 +105,29 @@ struct ADDRINFOW {
 	ADDRINFOW* ai_next;
 }
 
+// https://msdn.microsoft.com/en-us/library/windows/desktop/dd877220(v=vs.85).aspx
+struct tcp_keepalive {
+	c_ulong onoff;
+	c_ulong keepalivetime;
+	c_ulong keepaliveinterval;
+};
+
+// https://gist.github.com/piscisaureus/906386#file-winsock2-h-L1099
+enum : DWORD {
+	IOC_VENDOR = 0x18000000,
+	IOC_OUT = 0x40000000,
+	IOC_IN = 0x80000000
+}
+
+DWORD _WSAIOW(DWORD x, DWORD y) pure @safe
+{
+	return IOC_IN | x | y;
+}
+
+enum : DWORD {
+	SIO_KEEPALIVE_VALS = _WSAIOW(IOC_VENDOR, 4)
+}
+
 struct WSAPROTOCOL_INFO {
 	DWORD            dwServiceFlags1;
 	DWORD            dwServiceFlags2;
@@ -154,6 +178,7 @@ void FreeAddrInfoExW(ADDRINFOEXW* pAddrInfo);
 void freeaddrinfo(ADDRINFOA* ai);
 BOOL TransmitFile(SOCKET hSocket, HANDLE hFile, DWORD nNumberOfBytesToWrite, DWORD nNumberOfBytesPerSend, OVERLAPPED* lpOverlapped, LPTRANSMIT_FILE_BUFFERS lpTransmitBuffers, DWORD dwFlags);
 BOOL CancelIoEx(HANDLE hFile, LPOVERLAPPED lpOverlapped);
+int WSAIoctl(SOCKET s, DWORD dwIoControlCode, void* lpvInBuffer, DWORD cbInBuffer, void* lpvOutBuffer, DWORD cbOutBuffer, DWORD* lpcbBytesReturned, in WSAOVERLAPPEDX* lpOverlapped, LPWSAOVERLAPPED_COMPLETION_ROUTINEX lpCompletionRoutine);
 
 /*struct WSAOVERLAPPEDX {
 	ULONG_PTR Internal;
