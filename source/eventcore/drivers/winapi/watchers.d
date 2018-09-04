@@ -109,6 +109,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 	private static nothrow
 	void onIOCompleted(DWORD dwError, DWORD cbTransferred, OVERLAPPED_CORE* overlapped)
 	{
+		import std.algorithm.iteration : map;
 		import std.conv : to;
 		import std.file : isDir;
 		import std.path : dirName, baseName, buildPath;
@@ -155,7 +156,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 			}
 
 			ch.baseDirectory = slot.directory;
-			auto path = () @trusted { scope (failure) assert(false); return to!string(fni.FileName[0 .. fni.FileNameLength/2]); } ();
+			auto path = () @trusted { try return fni.FileName[0 .. fni.FileNameLength/2].map!(ch => dchar(ch)).to!string; catch (Exception e) assert(false, e.msg); } ();
 			auto fullpath = buildPath(slot.directory, path);
 			ch.directory = dirName(path);
 			if (ch.directory == ".") ch.directory = "";
