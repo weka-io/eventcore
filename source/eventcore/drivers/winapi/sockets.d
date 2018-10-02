@@ -243,6 +243,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		slot.read.wsabuf[0].len = buffer.length;
 		slot.read.wsabuf[0].buf = () @trusted { return buffer.ptr; } ();
 
+		void resetBuffers() { slot.read.buffer = null; slot.read.wsabuf[0] = WSABUF.init; }
+
 		auto ovl = mode == IOMode.immediate ? null : &slot.read.overlapped.overlapped;
 		DWORD flags = 0;
 		auto handler = &overlappedIOHandler!(onIOReadCompleted, DWORD);
@@ -251,10 +253,12 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			auto err = WSAGetLastError();
 			if (err == WSA_IO_PENDING) {
 				if (mode == IOMode.immediate) {
+					resetBuffers();
 					on_read_finish(socket, IOStatus.wouldBlock, 0);
 					return;
 				}
 			} else {
+				resetBuffers();
 				on_read_finish(socket, IOStatus.error, 0);
 				return;
 			}
@@ -277,6 +281,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			slot.common.core.removeWaiter();
 			auto cb = slot.streamSocket.read.callback;
 			slot.streamSocket.read.callback = null;
+			slot.streamSocket.read.buffer = null;
+			slot.streamSocket.read.wsabuf[0] = WSABUF.init;
 			if (slot.common.driver.releaseRef(cast(StreamSocketFD)slot.common.fd))
 				cb(cast(StreamSocketFD)slot.common.fd, status, nsent);
 		}
@@ -562,6 +568,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			slot.common.core.removeWaiter();
 			auto cb = slot.datagramSocket.read.callback;
 			slot.datagramSocket.read.callback = null;
+			slot.datagramSocket.read.buffer = null;
+			slot.datagramSocket.read.wsabuf = WSABUF.init;
 			scope addr = new RefAddress(cast(sockaddr*)&slot.datagramSocket.sourceAddr, slot.datagramSocket.sourceAddrLen);
 			if (slot.common.driver.releaseRef(cast(DatagramSocketFD)slot.common.fd))
 				cb(cast(DatagramSocketFD)slot.common.fd, status, nsent, status == IOStatus.ok ? addr : null);
@@ -919,6 +927,8 @@ static struct StreamDirection(bool RO) {
 	size_t bytesTransferred;
 	IOMode mode;
 	IOCallback callback;
+
+	void reset() { buffer = null; wsabuf[0] = WSABUF.init; callback = null; }
 }
 
 private struct StreamListenSocketSlot {
@@ -943,4 +953,6 @@ static struct DgramDirection(bool RO) {
 	size_t bytesTransferred;
 	IOMode mode;
 	DatagramIOCallback callback;
+
+	void reset() { buffer = null; wsabuf[0] = WSABUF.init; callback = null; }
 }
