@@ -133,7 +133,8 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 
 		if (m_readyEvent != EventID.invalid) {
 			log("finishing file events");
-			m_events.cancelWait(m_readyEvent, &onReady);
+			if (m_waiting)
+				m_events.cancelWait(m_readyEvent, &onReady);
 			onReady(m_readyEvent);
 			m_events.releaseRef(m_readyEvent);
 			m_readyEvent = EventID.invalid;
