@@ -1,5 +1,8 @@
 module eventcore.internal.consumablequeue;
 
+import eventcore.internal.utils : mallocNT, freeNT;
+
+
 /** FIFO queue with support for chunk-wise consumption.
 */
 final class ConsumableQueue(T)
@@ -16,6 +19,12 @@ final class ConsumableQueue(T)
 		size_t m_first;
 		size_t m_consumedCount;
 		size_t m_pendingCount;
+	}
+
+	~this()
+	@trusted @nogc nothrow {
+		if (m_storage !is null)
+			freeNT(m_storage);
 	}
 
 	@property size_t length() const { return m_pendingCount; }
@@ -43,11 +52,15 @@ final class ConsumableQueue(T)
 		while (new_capacity < min_capacity) new_capacity *= 2;
 		auto new_capacity_mask = new_capacity - 1;
 
-		auto new_storage = new Slot[new_capacity];
+		auto new_storage = mallocNT!Slot(new_capacity);
 		foreach (i; 0 .. m_consumedCount + m_pendingCount)
 			new_storage[(m_first + i) & new_capacity_mask] = m_storage[(m_first + i) & m_capacityMask];
 
-		m_storage = new_storage;
+		() @trusted {
+			if (m_storage !is null)
+				freeNT(m_storage);
+			m_storage = new_storage;
+		} ();
 		m_capacityMask = new_capacity_mask;
 	}
 
