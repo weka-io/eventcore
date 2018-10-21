@@ -5,7 +5,7 @@
 	numbers of concurrently open sockets.
 */
 module eventcore.drivers.posix.epoll;
-@safe: /*@nogc:*/ nothrow:
+@safe @nogc nothrow:
 
 version (linux):
 
@@ -22,17 +22,16 @@ static if (!is(typeof(SOCK_CLOEXEC)))
 	enum SOCK_CLOEXEC = 0x80000;
 
 final class EpollEventLoop : PosixEventLoop {
-@safe: nothrow:
+@safe nothrow:
 
 	private {
 		int m_epoll;
-		epoll_event[] m_events;
+		epoll_event[100] m_events;
 	}
 
 	this()
-	{
+	@nogc {
 		m_epoll = () @trusted { return epoll_create1(SOCK_CLOEXEC); } ();
-		m_events.length = 100;
 	}
 
 	override bool doProcessEvents(Duration timeout)
@@ -60,7 +59,7 @@ final class EpollEventLoop : PosixEventLoop {
 	}
 
 	override void dispose()
-	{
+	@nogc {
 		import core.sys.posix.unistd : close;
 		close(m_epoll);
 	}

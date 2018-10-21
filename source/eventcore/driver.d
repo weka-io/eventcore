@@ -352,12 +352,30 @@ interface EventDriverSockets {
 
 	/** Retrieves a reference to a user-defined value associated with a descriptor.
 	*/
-	@property final ref T userData(T, FD)(FD descriptor)
-	@trusted {
+	@property final ref T userData(T, FD)(FD descriptor) @trusted
+		if (!hasNoGCLifetime!T)
+	{
 		import std.conv : emplace;
 		static void init(void* ptr) { emplace(cast(T*)ptr); }
 		static void destr(void* ptr) { destroy(*cast(T*)ptr); }
 		return *cast(T*)rawUserData(descriptor, T.sizeof, &init, &destr);
+	}
+	/// ditto
+	@property final ref T userData(T, FD)(FD descriptor) @trusted @nogc
+		if (hasNoGCLifetime!T)
+	{
+		import std.conv : emplace;
+		static void init(void* ptr) @nogc { emplace(cast(T*)ptr); }
+		static void destr(void* ptr) @nogc { destroy(*cast(T*)ptr); }
+
+		scope getter = {
+			return cast(T*)rawUserData(descriptor, T.sizeof, &init, &destr);
+		};
+
+		static if (__traits(compiles, () nothrow @trusted { getter(); }))
+			return *(cast(T* delegate() @nogc nothrow)getter)();
+		else
+			return *(cast(T* delegate() @nogc)getter)();
 	}
 
 	/// Low-level user data access. Use `getUserData` instead.
@@ -366,6 +384,14 @@ interface EventDriverSockets {
 	protected void* rawUserData(StreamListenSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
 	/// ditto
 	protected void* rawUserData(DatagramSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
+}
+
+enum hasNoGCLifetime(T) = __traits(compiles, () @nogc @trusted { import std.conv : emplace; T b = void; emplace!T(&b); destroy(b); });
+unittest {
+	static struct S1 {}
+	static struct S2 { ~this() { new int; } }
+	static assert(hasNoGCLifetime!S1);
+	static assert(!hasNoGCLifetime!S2);
 }
 
 

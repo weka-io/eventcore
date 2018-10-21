@@ -654,7 +654,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	}
 
 	package DatagramSocketFD adoptDatagramSocketInternal(int socket, bool is_internal = true, bool close_on_exec = false)
-	{
+	@nogc {
 		auto fd = DatagramSocketFD(socket);
 		if (m_loop.m_fds[fd].common.refCount) // FD already in use?
 			return DatagramSocketFD.init;
@@ -742,8 +742,16 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		on_receive_finish(socket, IOStatus.ok, ret, src_addrc);
 	}
 
+	package void receiveNoGC(DatagramSocketFD socket, ubyte[] buffer, IOMode mode, void delegate(DatagramSocketFD, IOStatus, size_t, scope RefAddress) @safe nothrow @nogc on_receive_finish)
+	@trusted @nogc {
+		scope void delegate() @safe nothrow do_it = {
+			receive(socket, buffer, mode, on_receive_finish);
+		};
+		(cast(void delegate() @safe nothrow @nogc)do_it)();
+	}
+
 	void cancelReceive(DatagramSocketFD socket)
-	{
+	@nogc {
 		assert(m_loop.m_fds[socket].datagramSocket.readCallback !is null, "Cancelling read when there is no read in progress.");
 		m_loop.setNotifyCallback!(EventType.read)(socket, null);
 		m_loop.m_fds[socket].datagramSocket.readBuffer = null;
@@ -855,7 +863,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	}
 
 	final override bool releaseRef(SocketFD fd)
-	{
+	@nogc {
 		import taggedalgebraic : hasType;
 		auto slot = () @trusted { return &m_loop.m_fds[fd]; } ();
 		nogc_assert(slot.common.refCount > 0, "Releasing reference to unreferenced socket FD.");

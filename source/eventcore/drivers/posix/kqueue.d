@@ -34,14 +34,14 @@ alias KqueueEventDriver = PosixEventDriver!KqueueEventLoop;
 final class KqueueEventLoop : PosixEventLoop {
 	private {
 		int m_queue;
-		kevent_t[] m_changes;
-		kevent_t[] m_events;
+		size_t m_changeCount = 0;
+		kevent_t[100] m_changes;
+		kevent_t[100] m_events;
 	}
 
 	this()
-	@safe nothrow {
+	@safe nothrow @nogc {
 		m_queue = () @trusted { return kqueue(); } ();
-		m_events.length = 100;
 		assert(m_queue >= 0, "Failed to create kqueue.");
 	}
 
@@ -57,9 +57,8 @@ final class KqueueEventLoop : PosixEventLoop {
 		ts.tv_sec = cast(time_t)secs;
 		ts.tv_nsec = cast(uint)hnsecs * 100;
 
-		auto ret = kevent(m_queue, m_changes.ptr, cast(int)m_changes.length, m_events.ptr, cast(int)m_events.length, timeout == Duration.max ? null : &ts);
-		m_changes.length = 0;
-		m_changes.assumeSafeAppend();
+		auto ret = kevent(m_queue, m_changes.ptr, cast(int)m_changeCount, m_events.ptr, cast(int)m_events.length, timeout == Duration.max ? null : &ts);
+		m_changeCount = 0;
 
 		//print("kevent returned %s", ret);
 
@@ -97,11 +96,11 @@ final class KqueueEventLoop : PosixEventLoop {
 		if (edge_triggered) ev.flags |= EV_CLEAR;
 		if (mask & EventMask.read) {
 			ev.filter = EVFILT_READ;
-			m_changes ~= ev;
+			putChange(ev);
 		}
 		if (mask & EventMask.write) {
 			ev.filter = EVFILT_WRITE;
-			m_changes ~= ev;
+			putChange(ev);
 		}
 		//if (mask & EventMask.status) ev.events |= EPOLLERR|EPOLLRDHUP;
 	}
@@ -111,7 +110,7 @@ final class KqueueEventLoop : PosixEventLoop {
 		kevent_t ev;
 		ev.ident = fd;
 		ev.flags = EV_DELETE;
-		m_changes ~= ev;
+		putChange(ev);
 	}
 
 	override void updateFD(FD fd, EventMask old_mask, EventMask new_mask, bool edge_triggered = true)
@@ -124,16 +123,26 @@ final class KqueueEventLoop : PosixEventLoop {
 			ev.filter = EVFILT_READ;
 			ev.flags = new_mask & EventMask.read ? EV_ADD : EV_DELETE;
 			if (edge_triggered) ev.flags |= EV_CLEAR;
-			m_changes ~= ev;
+			putChange(ev);
 		}
 
 		if (changes & EventMask.write) {
 			ev.filter = EVFILT_WRITE;
 			ev.flags = new_mask & EventMask.write ? EV_ADD : EV_DELETE;
 			if (edge_triggered) ev.flags |= EV_CLEAR;
-			m_changes ~= ev;
+			putChange(ev);
 		}
 
 		//if (mask & EventMask.status) ev.events |= EPOLLERR|EPOLLRDHUP;
+	}
+
+	private void putChange(ref kevent_t ev)
+	@safe nothrow @nogc {
+		m_changes[m_changeCount++] = ev;
+		if (m_changeCount == m_changes.length) {
+			auto ret = (() @trusted => kevent(m_queue, &m_changes[0], cast(int)m_changes.length, null, 0, null)) ();
+			assert(ret == 0);
+			m_changeCount = 0;
+		}
 	}
 }

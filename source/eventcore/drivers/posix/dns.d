@@ -43,7 +43,7 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 	}
 
 	this(Events events, Signals signals)
-	{
+	@nogc {
 		m_events = events;
 		setupEvent();
 	}
@@ -139,7 +139,7 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 	}
 
 	private void setupEvent()
-	{
+	@nogc {
 		if (m_event == EventID.invalid) {
 			m_event = m_events.createInternal();
 			m_events.wait(m_event, &onDNSSignal);

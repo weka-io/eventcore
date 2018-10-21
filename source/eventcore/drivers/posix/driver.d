@@ -64,16 +64,16 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 	}
 
 	this()
-	{
-		m_loop = new Loop;
-		m_sockets = new SocketsDriver(m_loop);
-		m_events = new EventsDriver(m_loop, m_sockets);
-		m_signals = new SignalsDriver(m_loop);
-		m_timers = new TimerDriver;
-		m_core = new CoreDriver(m_loop, m_timers, m_events);
-		m_dns = new DNSDriver(m_events, m_signals);
-		m_files = new FileDriver(m_events);
-		m_watchers = new WatcherDriver(m_events);
+	@nogc @trusted {
+		m_loop = mallocT!Loop;
+		m_sockets = mallocT!SocketsDriver(m_loop);
+		m_events = mallocT!EventsDriver(m_loop, m_sockets);
+		m_signals = mallocT!SignalsDriver(m_loop);
+		m_timers = mallocT!TimerDriver;
+		m_core = mallocT!CoreDriver(m_loop, m_timers, m_events);
+		m_dns = mallocT!DNSDriver(m_events, m_signals);
+		m_files = mallocT!FileDriver(m_events);
+		m_watchers = mallocT!WatcherDriver(m_events);
 	}
 
 	// force overriding these in the (final) sub classes to avoid virtual calls
@@ -96,6 +96,19 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 		m_core.dispose();
 		m_loop.dispose();
 		m_loop = null;
+
+		try () @trusted {
+				freeT(m_watchers);
+				freeT(m_files);
+				freeT(m_dns);
+				freeT(m_core);
+				freeT(m_timers);
+				freeT(m_signals);
+				freeT(m_events);
+				freeT(m_sockets);
+				freeT(m_loop);
+			} ();
+		catch (Exception e) assert(false, e.msg);
 	}
 }
 
@@ -121,29 +134,32 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 		ConsumableQueue!(Tuple!(ThreadCallback, intptr_t)) m_threadCallbacks;
 	}
 
-	protected this(Loop loop, Timers timers, Events events)
-	{
+	this(Loop loop, Timers timers, Events events)
+	@nogc {
 		m_loop = loop;
 		m_timers = timers;
 		m_events = events;
 		m_wakeupEvent = events.createInternal();
 
 		static if (__VERSION__ >= 2074)
-			m_threadCallbackMutex = new shared Mutex;
+			m_threadCallbackMutex = mallocT!(shared(Mutex));
 		else {
-			() @trusted { m_threadCallbackMutex = cast(shared)new Mutex; } ();
+			() @trusted { m_threadCallbackMutex = cast(shared)mallocT!Mutex; } ();
 		}
 
-		m_threadCallbacks = new ConsumableQueue!(Tuple!(ThreadCallback, intptr_t));
+		m_threadCallbacks = mallocT!(ConsumableQueue!(Tuple!(ThreadCallback, intptr_t)));
 		m_threadCallbacks.reserve(1000);
 	}
 
-	protected final void dispose()
+	final void dispose()
 	{
 		executeThreadCallbacks();
 		m_events.releaseRef(m_wakeupEvent);
-		atomicStore(m_threadCallbackMutex, null);
 		m_wakeupEvent = EventID.invalid; // FIXME: this needs to be synchronized!
+		try {
+			() @trusted { freeT(m_threadCallbackMutex); } ();
+			() @trusted { freeT(m_threadCallbacks); } ();
+		} catch (Exception e) assert(false, e.msg);
 	}
 
 	@property size_t waiterCount() const { return m_loop.m_waiterCount + m_timers.pendingCount; }
@@ -274,11 +290,11 @@ package class PosixEventLoop {
 	protected abstract bool doProcessEvents(Duration dur);
 
 	/// Registers the FD for general notification reception.
-	protected abstract void registerFD(FD fd, EventMask mask, bool edge_triggered = true);
+	protected abstract void registerFD(FD fd, EventMask mask, bool edge_triggered = true) @nogc;
 	/// Unregisters the FD for general notification reception.
-	protected abstract void unregisterFD(FD fd, EventMask mask);
+	protected abstract void unregisterFD(FD fd, EventMask mask) @nogc;
 	/// Updates the event mask to use for listening for notifications.
-	protected abstract void updateFD(FD fd, EventMask old_mask, EventMask new_mask, bool edge_triggered = true);
+	protected abstract void updateFD(FD fd, EventMask old_mask, EventMask new_mask, bool edge_triggered = true) @nogc;
 
 	final protected void notify(EventType evt)(FD fd)
 	{
@@ -342,7 +358,7 @@ package class PosixEventLoop {
 	}
 
 	package final void* rawUserDataImpl(size_t descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
-	@system {
+	@system @nogc {
 		FDSlot* fds = &m_fds[descriptor].common;
 		assert(fds.userDataDestructor is null || fds.userDataDestructor is destroy,
 			"Requesting user data with differing type (destructor).");

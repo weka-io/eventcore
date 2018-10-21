@@ -245,7 +245,7 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 	}
 
 	this(Events events)
-	{
+	@nogc {
 		m_events = events;
 	}
 
