@@ -4,8 +4,9 @@
 module eventcore.drivers.timer;
 
 import eventcore.driver;
+import eventcore.internal.consumablequeue;
 import eventcore.internal.dlist;
-import eventcore.internal.utils : nogc_assert;
+import eventcore.internal.utils : mallocT, freeT, nogc_assert;
 
 
 final class LoopTimeoutTimerDriver : EventDriverTimers {
@@ -24,12 +25,23 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		TimerSlot*[TimerID] m_timers;
 		StackDList!TimerSlot m_timerQueue;
 		TimerID m_lastTimerID;
-		TimerSlot*[] m_firedTimers;
+		ConsumableQueue!(TimerSlot*) m_firedTimers;
 	}
 
 	static this()
 	{
 		ms_allocator.parent = Mallocator.instance;
+	}
+
+	this()
+	@nogc @safe nothrow {
+		m_firedTimers = mallocT!(ConsumableQueue!(TimerSlot*));
+	}
+
+	~this()
+	@nogc @trusted nothrow {
+		try freeT(m_firedTimers);
+		catch (Exception e) assert(false, e.msg);
 	}
 
 	package @property size_t pendingCount() const @safe nothrow { return m_timerQueue.length; }
@@ -53,27 +65,24 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 				do tm.timeout += tm.repeatDuration;
 				while (tm.timeout <= stdtime);
 			} else tm.pending = false;
-			m_firedTimers ~= tm;
+			m_firedTimers.put(tm);
 		}
 
-		foreach (tm; m_firedTimers) {
+		auto processed_timers = m_firedTimers.consume();
+
+		foreach (tm; processed_timers) {
 			m_timerQueue.remove(tm);
 			if (tm.repeatDuration > 0)
 				enqueueTimer(tm);
 		}
 
-		foreach (tm; m_firedTimers) {
+		foreach (tm; processed_timers) {
 			auto cb = tm.callback;
 			tm.callback = null;
 			if (cb) cb(tm.id);
 		}
 
-		bool any_fired = m_firedTimers.length > 0;
-
-		m_firedTimers.length = 0;
-		m_firedTimers.assumeSafeAppend();
-
-		return any_fired;
+		return processed_timers.length > 0;
 	}
 
 	final override TimerID create()
