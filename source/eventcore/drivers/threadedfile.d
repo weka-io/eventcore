@@ -421,10 +421,10 @@ private struct StaticTaskPool {
 
 		if (!m_refCount++) {
 			try {
-				m_pool = new TaskPool(4);
+				m_pool = mallocT!TaskPool(4);
 				m_pool.isDaemon = true;
 			} catch (Exception e) {
-				assert(false, "Failed to create file thread pool: "~e.msg);
+				assert(false, e.msg);
 			}
 		}
 
@@ -447,8 +447,10 @@ private struct StaticTaskPool {
 
 		if (fin_pool) {
 			log("finishing thread pool");
-			try fin_pool.finish();
-			catch (Exception e) {
+			try {
+				fin_pool.finish(true);
+				freeT(fin_pool);
+			} catch (Exception e) {
 				//log("Failed to shut down file I/O thread pool.");
 			}
 		}
