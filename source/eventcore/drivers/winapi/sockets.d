@@ -25,7 +25,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	}
 
 	this(WinAPIEventDriverCore core)
-	@trusted {
+	@trusted @nogc {
 		m_tid = GetCurrentThreadId();
 		m_core = core;
 
@@ -406,7 +406,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	}
 
 	override void cancelRead(StreamSocketFD socket)
-	@trusted {
+	@trusted @nogc {
 		if (!m_sockets[socket].streamSocket.read.callback) return;
 		CancelIoEx(cast(HANDLE)cast(SOCKET)socket, cast(LPOVERLAPPED)&m_sockets[socket].streamSocket.read.overlapped);
 		m_sockets[socket].streamSocket.read.callback = null;
@@ -414,7 +414,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	}
 
 	override void cancelWrite(StreamSocketFD socket)
-	@trusted {
+	@trusted @nogc {
 		if (!m_sockets[socket].streamSocket.write.callback) return;
 		CancelIoEx(cast(HANDLE)cast(SOCKET)socket, cast(LPOVERLAPPED)&m_sockets[socket].streamSocket.write.overlapped);
 		m_sockets[socket].streamSocket.write.callback = null;
@@ -549,7 +549,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	}
 
 	override void cancelReceive(DatagramSocketFD socket)
-	@trusted {
+	@trusted @nogc {
 		if (!m_sockets[socket].datagramSocket.read.callback) return;
 		CancelIoEx(cast(HANDLE)cast(SOCKET)socket, cast(LPOVERLAPPED)&m_sockets[socket].datagramSocket.read.overlapped);
 		m_sockets[socket].datagramSocket.read.callback = null;
@@ -643,7 +643,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	}
 
 	override void cancelSend(DatagramSocketFD socket)
-	@trusted {
+	@trusted @nogc {
 		if (!m_sockets[socket].datagramSocket.write.callback) return;
 		CancelIoEx(cast(HANDLE)cast(SOCKET)socket, cast(LPOVERLAPPED)&m_sockets[socket].datagramSocket.write.overlapped);
 		m_sockets[socket].datagramSocket.write.callback = null;
@@ -719,7 +719,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	}
 
 	override bool releaseRef(SocketFD fd)
-	{
+	@nogc {
 		import taggedalgebraic : hasType;
 		auto slot = () @trusted { return &m_sockets[fd]; } ();
 		nogc_assert(slot.common.refCount > 0, "Releasing reference to unreferenced socket FD.");
@@ -787,7 +787,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	}
 
 	private void* rawUserDataImpl(FD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
-	@system {
+	@system @nogc {
 		SocketSlot* fds = &m_sockets[descriptor].common;
 		assert(fds.userDataDestructor is null || fds.userDataDestructor is destroy,
 			"Requesting user data with differing type (destructor).");
@@ -808,7 +808,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	}
 
 	package void clearSocketSlot(FD fd)
-	{
+	@nogc {
 		auto slot = () @trusted { return &m_sockets[fd]; } ();
 		if (slot.common.userDataDestructor)
 			() @trusted { slot.common.userDataDestructor(slot.common.userData.ptr); } ();
@@ -889,8 +889,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	}
 }
 
-void setupWindowClass() nothrow
-@trusted {
+void setupWindowClass()
+@trusted nothrow @nogc {
 	static __gshared registered = false;
 
 	if (registered) return;

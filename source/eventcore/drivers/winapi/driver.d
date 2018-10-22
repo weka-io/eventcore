@@ -18,6 +18,7 @@ import eventcore.drivers.winapi.files;
 import eventcore.drivers.winapi.signals;
 import eventcore.drivers.winapi.sockets;
 import eventcore.drivers.winapi.watchers;
+import eventcore.internal.utils : mallocT, freeT;
 import core.sys.windows.windows;
 
 static assert(HANDLE.sizeof <= FD.BaseType.sizeof);
@@ -39,23 +40,25 @@ final class WinAPIEventDriver : EventDriver {
 	static WinAPIEventDriver threadInstance;
 
 	this()
-	@safe {
+	@safe nothrow @nogc {
 		assert(threadInstance is null);
 		threadInstance = this;
 
 		import std.exception : enforce;
 
 		WSADATA wd;
-		enforce(() @trusted { return WSAStartup(0x0202, &wd); } () == 0, "Failed to initialize WinSock");
 
-		m_signals = new WinAPIEventDriverSignals();
-		m_timers = new LoopTimeoutTimerDriver();
-		m_core = new WinAPIEventDriverCore(m_timers);
-		m_events = new WinAPIEventDriverEvents(m_core);
-		m_files = new WinAPIEventDriverFiles(m_core);
-		m_sockets = new WinAPIEventDriverSockets(m_core);
-		m_dns = new WinAPIEventDriverDNS();
-		m_watchers = new WinAPIEventDriverWatchers(m_core);
+		auto res = () @trusted { return WSAStartup(0x0202, &wd); } ();
+		assert(res == 0, "Failed to initialize WinSock");
+
+		m_signals = mallocT!WinAPIEventDriverSignals();
+		m_timers = mallocT!LoopTimeoutTimerDriver();
+		m_core = mallocT!WinAPIEventDriverCore(m_timers);
+		m_events = mallocT!WinAPIEventDriverEvents(m_core);
+		m_files = mallocT!WinAPIEventDriverFiles(m_core);
+		m_sockets = mallocT!WinAPIEventDriverSockets(m_core);
+		m_dns = mallocT!WinAPIEventDriverDNS();
+		m_watchers = mallocT!WinAPIEventDriverWatchers(m_core);
 	}
 
 @safe: /*@nogc:*/ nothrow:
@@ -75,8 +78,20 @@ final class WinAPIEventDriver : EventDriver {
 	{
 		if (!m_events) return;
 		m_events.dispose();
-		m_events = null;
+		m_core.dispose();
 		assert(threadInstance !is null);
 		threadInstance = null;
+
+		try () @trusted {
+			freeT(m_watchers);
+			freeT(m_dns);
+			freeT(m_sockets);
+			freeT(m_files);
+			freeT(m_events);
+			freeT(m_core);
+			freeT(m_timers);
+			freeT(m_signals);
+		} ();
+		catch (Exception e) assert(false, e.msg);
 	}
 }

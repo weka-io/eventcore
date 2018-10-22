@@ -6,7 +6,7 @@ import eventcore.driver;
 import eventcore.drivers.winapi.core;
 import eventcore.internal.win32;
 import eventcore.internal.consumablequeue;
-import eventcore.internal.utils : nogc_assert;
+import eventcore.internal.utils : mallocT, freeT, nogc_assert;
 
 
 final class WinAPIEventDriverEvents : EventDriverEvents {
@@ -31,10 +31,10 @@ final class WinAPIEventDriverEvents : EventDriverEvents {
 	}
 
 	this(WinAPIEventDriverCore core)
-	{
+	@nogc {
 		m_core = core;
 		m_event = () @trusted { return CreateEvent(null, false, false, null); } ();
-		m_pending = new ConsumableQueue!Trigger; // FIXME: avoid GC allocation
+		m_pending = mallocT!(ConsumableQueue!Trigger); // FIXME: avoid GC allocation
 		InitializeCriticalSection(&m_mutex);
 		m_core.registerEvent(m_event, &triggerPending);
 	}
@@ -42,7 +42,7 @@ final class WinAPIEventDriverEvents : EventDriverEvents {
 	void dispose()
 	@trusted {
 		scope (failure) assert(false);
-		destroy(m_pending);
+		freeT(m_pending);
 	}
 
 	override EventID create()

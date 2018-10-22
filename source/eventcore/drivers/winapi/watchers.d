@@ -16,7 +16,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 	}
 
 	this(WinAPIEventDriverCore core)
-	{
+	@nogc {
 		m_core = core;
 	}
 

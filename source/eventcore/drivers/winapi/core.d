@@ -5,7 +5,7 @@ version (Windows):
 import eventcore.driver;
 import eventcore.drivers.timer;
 import eventcore.internal.consumablequeue;
-import eventcore.internal.utils : nogc_assert;
+import eventcore.internal.utils : mallocT, freeT, nogc_assert;
 import eventcore.internal.win32;
 import core.sync.mutex : Mutex;
 import core.time : Duration;
@@ -21,8 +21,9 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		size_t m_waiterCount;
 		DWORD m_tid;
 		LoopTimeoutTimerDriver m_timers;
-		HANDLE[] m_registeredEvents;
-		void delegate() @safe nothrow[HANDLE] m_eventCallbacks;
+		HANDLE[MAXIMUM_WAIT_OBJECTS] m_registeredEvents;
+		void delegate() @safe nothrow[MAXIMUM_WAIT_OBJECTS] m_registeredEventCallbacks;
+		DWORD m_registeredEventCount = 0;
 		HANDLE m_fileCompletionEvent;
 		ConsumableQueue!IOEvent m_ioEvents;
 
@@ -35,27 +36,36 @@ final class WinAPIEventDriverCore : EventDriverCore {
 	}
 
 	this(LoopTimeoutTimerDriver timers)
-	{
+	@nogc {
 		m_timers = timers;
 		m_tid = () @trusted { return GetCurrentThreadId(); } ();
 		m_fileCompletionEvent = () @trusted { return CreateEventW(null, false, false, null); } ();
 		registerEvent(m_fileCompletionEvent);
-		m_ioEvents = new ConsumableQueue!IOEvent;
+		m_ioEvents = mallocT!(ConsumableQueue!IOEvent);
 
 		static if (__VERSION__ >= 2074)
-			m_threadCallbackMutex = new shared Mutex;
+			m_threadCallbackMutex = mallocT!(shared(Mutex));
 		else {
-			() @trusted { m_threadCallbackMutex = cast(shared)new Mutex; } ();
+			() @trusted { m_threadCallbackMutex = cast(shared)mallocT!Mutex; } ();
 		}
-		m_threadCallbacks = new ConsumableQueue!(Tuple!(ThreadCallback, intptr_t));
+		m_threadCallbacks = mallocT!(ConsumableQueue!(Tuple!(ThreadCallback, intptr_t)));
 		m_threadCallbacks.reserve(1000);
+	}
+
+	void dispose()
+	@trusted {
+		try {
+			freeT(m_threadCallbacks);
+			freeT(m_threadCallbackMutex);
+			freeT(m_ioEvents);
+		} catch (Exception e) assert(false, e.msg);
 	}
 
 	override size_t waiterCount() { return m_waiterCount + m_timers.pendingCount; }
 
-	package void addWaiter() { m_waiterCount++; }
+	package void addWaiter() @nogc { m_waiterCount++; }
 	package void removeWaiter()
-	{
+	@nogc {
 		assert(m_waiterCount > 0, "Decrementing waiter count below zero.");
 		m_waiterCount--;
 	}
@@ -159,7 +169,7 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		bool got_event;
 
 		DWORD timeout_msecs = max_wait == Duration.max ? INFINITE : cast(DWORD)min(max(max_wait.total!"msecs", 0), DWORD.max);
-		auto ret = () @trusted { return MsgWaitForMultipleObjectsEx(cast(DWORD)m_registeredEvents.length, m_registeredEvents.ptr,
+		auto ret = () @trusted { return MsgWaitForMultipleObjectsEx(m_registeredEventCount, m_registeredEvents.ptr,
 			timeout_msecs, QS_ALLEVENTS, MWMO_ALERTABLE|MWMO_INPUTAVAILABLE); } ();
 
 		while (!m_ioEvents.empty) {
@@ -168,9 +178,9 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		}
 
 		if (ret == WAIT_IO_COMPLETION) got_event = true;
-		else if (ret >= WAIT_OBJECT_0 && ret < WAIT_OBJECT_0 + m_registeredEvents.length) {
-			if (auto pc = m_registeredEvents[ret - WAIT_OBJECT_0] in m_eventCallbacks) {
-				(*pc)();
+		else if (ret >= WAIT_OBJECT_0 && ret < WAIT_OBJECT_0 + m_registeredEventCount) {
+			if (auto cb = m_registeredEventCallbacks[ret - WAIT_OBJECT_0]) {
+				cb();
 				got_event = true;
 			}
 		}
@@ -209,9 +219,11 @@ final class WinAPIEventDriverCore : EventDriverCore {
 
 
 	package void registerEvent(HANDLE event, void delegate() @safe nothrow callback = null)
-	{
-		m_registeredEvents ~= event;
-		if (callback) m_eventCallbacks[event] = callback;
+	@nogc {
+		assert(m_registeredEventCount < MAXIMUM_WAIT_OBJECTS, "Too many registered events.");
+		m_registeredEvents[m_registeredEventCount] = event;
+		if (callback) m_registeredEventCallbacks[m_registeredEventCount] = callback;
+		m_registeredEventCount++;
 	}
 
 	package SlotType* setupSlot(SlotType)(HANDLE h)
@@ -231,7 +243,7 @@ final class WinAPIEventDriverCore : EventDriverCore {
 	}
 
 	package void discardEvents(scope OVERLAPPED_CORE*[] overlapped...)
-	{
+@nogc	{
 		import std.algorithm.searching : canFind;
 		m_ioEvents.filterPending!(evt => !overlapped.canFind(evt.overlapped));
 	}
