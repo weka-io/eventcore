@@ -352,38 +352,34 @@ interface EventDriverSockets {
 
 	/** Retrieves a reference to a user-defined value associated with a descriptor.
 	*/
-	@property final ref T userData(T, FD)(FD descriptor) @trusted
-		if (!hasNoGCLifetime!T)
-	{
-		import std.conv : emplace;
-		static void init(void* ptr) { emplace(cast(T*)ptr); }
-		static void destr(void* ptr) { destroy(*cast(T*)ptr); }
-		return *cast(T*)rawUserData(descriptor, T.sizeof, &init, &destr);
-	}
-	/// ditto
 	@property final ref T userData(T, FD)(FD descriptor) @trusted @nogc
 		if (hasNoGCLifetime!T)
 	{
 		import std.conv : emplace;
 		static void init(void* ptr) @nogc { emplace(cast(T*)ptr); }
 		static void destr(void* ptr) @nogc { destroy(*cast(T*)ptr); }
-
-		scope getter = {
-			return cast(T*)rawUserData(descriptor, T.sizeof, &init, &destr);
-		};
-
-		static if (__traits(compiles, () nothrow @trusted { getter(); }))
-			return *(cast(T* delegate() @nogc nothrow)getter)();
-		else
-			return *(cast(T* delegate() @nogc)getter)();
+		return *cast(T*)rawUserData(descriptor, T.sizeof, &init, &destr);
+	}
+	/// ditto
+	deprecated("Only @nogc constructible and destructible user data allowed.")
+	@property final ref T userData(T, FD)(FD descriptor) @trusted
+		if (!hasNoGCLifetime!T)
+	{
+		import std.conv : emplace;
+		static void init(void* ptr) { emplace(cast(T*)ptr); }
+		static void destr(void* ptr) { destroy(*cast(T*)ptr); }
+		static if (__traits(compiles, () nothrow { init(null); destr(null); }))
+			alias F = void function(void*) @nogc nothrow;
+		else alias F = void function(void*) @nogc;
+		return *cast(T*)rawUserData(descriptor, T.sizeof, cast(F)&init, cast(F)&destr);
 	}
 
 	/// Low-level user data access. Use `getUserData` instead.
-	protected void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
+	protected void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system @nogc;
 	/// ditto
-	protected void* rawUserData(StreamListenSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
+	protected void* rawUserData(StreamListenSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system @nogc;
 	/// ditto
-	protected void* rawUserData(DatagramSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
+	protected void* rawUserData(DatagramSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system @nogc;
 }
 
 enum hasNoGCLifetime(T) = __traits(compiles, () @nogc @trusted { import std.conv : emplace; T b = void; emplace!T(&b); destroy(b); });
@@ -668,7 +664,7 @@ alias EventCallback = void delegate(EventID);
 alias SignalCallback = void delegate(SignalListenID, SignalStatus, int);
 alias TimerCallback = void delegate(TimerID);
 alias FileChangesCallback = void delegate(WatcherID, in ref FileChange change);
-@system alias DataInitializer = void function(void*);
+@system alias DataInitializer = void function(void*) @nogc;
 
 enum ExitReason {
 	timeout,
