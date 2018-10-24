@@ -31,7 +31,9 @@ final class EpollEventLoop : PosixEventLoop {
 
 	this()
 	@nogc {
-		m_epoll = () @trusted { return epoll_create1(SOCK_CLOEXEC); } ();
+		assumeSafeNoGC({
+			m_epoll = epoll_create1(SOCK_CLOEXEC);
+		});
 	}
 
 	override bool doProcessEvents(Duration timeout)
@@ -73,13 +75,17 @@ final class EpollEventLoop : PosixEventLoop {
 		if (mask & EventMask.write) ev.events |= EPOLLOUT;
 		if (mask & EventMask.status) ev.events |= EPOLLERR|EPOLLHUP|EPOLLRDHUP;
 		ev.data.fd = cast(int)fd;
-		() @trusted { epoll_ctl(m_epoll, EPOLL_CTL_ADD, cast(int)fd, &ev); } ();
+		assumeSafeNoGC({
+			epoll_ctl(m_epoll, EPOLL_CTL_ADD, cast(int)fd, &ev);
+		});
 	}
 
 	override void unregisterFD(FD fd, EventMask mask)
 	{
 		debug (EventCoreEpollDebug) print("Epoll unregister FD %s", fd);
-		() @trusted { epoll_ctl(m_epoll, EPOLL_CTL_DEL, cast(int)fd, null); } ();
+		assumeSafeNoGC({
+			epoll_ctl(m_epoll, EPOLL_CTL_DEL, cast(int)fd, null);
+		});
 	}
 
 	override void updateFD(FD fd, EventMask old_mask, EventMask mask, bool edge_triggered = true)
@@ -92,7 +98,9 @@ final class EpollEventLoop : PosixEventLoop {
 		if (mask & EventMask.write) ev.events |= EPOLLOUT;
 		if (mask & EventMask.status) ev.events |= EPOLLERR|EPOLLHUP|EPOLLRDHUP;
 		ev.data.fd = cast(int)fd;
-		() @trusted { epoll_ctl(m_epoll, EPOLL_CTL_MOD, cast(int)fd, &ev); } ();
+		assumeSafeNoGC({
+			epoll_ctl(m_epoll, EPOLL_CTL_MOD, cast(int)fd, &ev);
+		});
 	}
 }
 
@@ -101,4 +109,9 @@ private timeval toTimeVal(Duration dur)
 	timeval tvdur;
 	dur.split!("seconds", "usecs")(tvdur.tv_sec, tvdur.tv_usec);
 	return tvdur;
+}
+
+private void assumeSafeNoGC(scope void delegate() nothrow doit)
+@trusted {
+	(cast(void delegate() nothrow @nogc)doit)();
 }
