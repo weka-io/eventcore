@@ -39,6 +39,8 @@ void freeT(T)(ref T inst) @nogc
 {
 	import core.stdc.stdlib : free;
 
+	if (!inst) return;
+
 	noGCDestroy(inst);
 	static if (hasIndirections!T)
 		GC.removeRange(cast(void*)inst);
@@ -151,12 +153,13 @@ struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
 	@nogc {
 		() @trusted {
 			foreach (i; 0 .. m_chunkCount) {
-				destroy(m_chunks[i]);
+				destroy(*m_chunks[i]);
 				static if (hasIndirections!T)
 					GC.removeRange(m_chunks[i]);
 				free(m_chunks[i]);
 			}
 			free(m_chunks.ptr);
+			m_chunks = null;
 		} ();
 		m_chunkCount = 0;
 		m_length = 0;
