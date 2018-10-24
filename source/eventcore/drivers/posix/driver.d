@@ -95,7 +95,6 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 		m_dns.dispose();
 		m_core.dispose();
 		m_loop.dispose();
-		m_loop = null;
 
 		try () @trusted {
 				freeT(m_watchers);
