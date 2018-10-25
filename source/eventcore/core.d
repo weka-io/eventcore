@@ -7,6 +7,7 @@ import eventcore.drivers.posix.epoll;
 import eventcore.drivers.posix.kqueue;
 import eventcore.drivers.libasync;
 import eventcore.drivers.winapi.driver;
+import eventcore.internal.utils : mallocT, freeT;
 
 version (EventcoreEpollDriver) alias NativeEventDriver = EpollEventDriver;
 else version (EventcoreKqueueDriver) alias NativeEventDriver = KqueueEventDriver;
@@ -19,8 +20,11 @@ else alias NativeEventDriver = EventDriver;
 @safe @nogc nothrow {
 	static if (is(NativeEventDriver == EventDriver))
 		assert(s_driver !is null, "setupEventDriver() was not called for this thread.");
-	else
-		assert(s_driver !is null, "eventcore.core static constructor didn't run!?");
+	else {
+		if (!s_driver) {
+			s_driver = mallocT!NativeEventDriver();
+		}
+	}
 	return s_driver;
 }
 
@@ -30,7 +34,6 @@ static if (!is(NativeEventDriver == EventDriver)) {
 		if (!s_isMainThread) {
 			if (!s_initCount++) {
 				assert(s_driver is null);
-				s_driver = new NativeEventDriver;
 			}
 		}
 	}
@@ -38,15 +41,18 @@ static if (!is(NativeEventDriver == EventDriver)) {
 	static ~this()
 	{
 		if (!s_isMainThread) {
-			if (!--s_initCount)
-				s_driver.dispose();
+			if (!--s_initCount) {
+				if (s_driver) {
+					s_driver.dispose();
+					freeT(s_driver);
+				}
+			}
 		}
 	}
 
 	shared static this()
 	{
 		if (!s_initCount++) {
-			s_driver = new NativeEventDriver;
 			s_isMainThread = true;
 		}
 	}
@@ -54,7 +60,10 @@ static if (!is(NativeEventDriver == EventDriver)) {
 	shared static ~this()
 	{
 		if (!--s_initCount) {
-			s_driver.dispose();
+			if (s_driver) {
+				s_driver.dispose();
+				freeT(s_driver);
+			}
 		}
 	}
 } else {

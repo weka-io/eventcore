@@ -4,7 +4,8 @@ module eventcore.drivers.posix.events;
 import eventcore.driver;
 import eventcore.drivers.posix.driver;
 import eventcore.internal.consumablequeue : ConsumableQueue;
-import eventcore.internal.utils : nogc_assert;
+import eventcore.internal.utils : nogc_assert, mallocT, freeT;
+
 
 version (linux) {
 	nothrow @nogc extern (C) int eventfd(uint initval, int flags);
@@ -25,21 +26,12 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 		Loop m_loop;
 		Sockets m_sockets;
 		ubyte[ulong.sizeof] m_buf;
-		version (linux) {}
-		else {
-			// TODO: avoid the overhead of a mutex backed map here
-			import core.sync.mutex : Mutex;
-			Mutex m_eventsMutex;
-			EventID[DatagramSocketFD] m_events;
-		}
 	}
 
 	this(Loop loop, Sockets sockets)
-	{
+	@nogc {
 		m_loop = loop;
 		m_sockets = sockets;
-		version (linux) {}
-		else m_eventsMutex = new Mutex;
 	}
 
 	package @property Loop loop() { return m_loop; }
@@ -50,14 +42,14 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 	}
 
 	package(eventcore) EventID createInternal(bool is_internal = true)
-	{
+	@nogc {
 		version (linux) {
 			auto eid = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
 			if (eid == -1) return EventID.invalid;
 			auto id = cast(EventID)eid;
 			// FIXME: avoid dynamic memory allocation for the queue
 			m_loop.initFD(id, FDFlags.internal,
-				EventSlot(new ConsumableQueue!EventCallback, false, is_internal));
+				EventSlot(mallocT!(ConsumableQueue!EventCallback), false, is_internal));
 			m_loop.registerFD(id, EventMask.read);
 			m_loop.setNotifyCallback!(EventType.read)(id, &onEvent);
 			releaseRef(id); // setNotifyCallback increments the reference count, but we need a value of 1 upon return
@@ -83,7 +75,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 			} else {
 				// fake missing socketpair support on Windows
 				import std.socket : InternetAddress;
-				auto addr = new InternetAddress(0x7F000001, 0);
+				scope addr = new InternetAddress(0x7F000001, 0);
 				auto s = m_sockets.createDatagramSocketInternal(addr, null, true);
 				if (s == DatagramSocketFD.invalid) return EventID.invalid;
 				fd[0] = cast(sock_t)s;
@@ -106,18 +98,16 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 				}
 			}
 
-			m_sockets.receive(s, m_buf, IOMode.once, &onSocketData);
+			m_sockets.receiveNoGC(s, m_buf, IOMode.once, &onSocketData);
 
 			// use the second socket as the event ID and as the sending end for
 			// other threads
 			auto id = cast(EventID)fd[1];
-			try {
-				synchronized (m_eventsMutex)
-					m_events[s] = id;
-			} catch (Exception e) assert(false, e.msg);
+			try m_sockets.userData!EventID(s) = id;
+			catch (Exception e) assert(false, e.msg);
 			// FIXME: avoid dynamic memory allocation for the queue
 			m_loop.initFD(id, FDFlags.internal,
-				EventSlot(new ConsumableQueue!EventCallback, false, is_internal, s));
+				EventSlot(mallocT!(ConsumableQueue!EventCallback), false, is_internal, s));
 			assert(getRC(id) == 1);
 			return id;
 		}
@@ -142,7 +132,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 	}
 
 	final override void trigger(EventID event, bool notify_all)
-	shared @trusted {
+	shared @trusted @nogc {
 		import core.atomic : atomicStore;
 		auto thisus = cast(PosixEventDriverEvents)this;
 		assert(event < thisus.m_loop.m_fds.length, "Invalid event ID passed to shared triggerEvent.");
@@ -154,7 +144,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 	}
 
 	final override void wait(EventID event, EventCallback on_event)
-	{
+	@nogc {
 		if (!isInternal(event)) m_loop.m_waiterCount++;
 		getSlot(event).waiters.put(on_event);
 	}
@@ -183,13 +173,12 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 	version (linux) {}
 	else {
 		private void onSocketData(DatagramSocketFD s, IOStatus, size_t, scope RefAddress)
-		{
-			m_sockets.receive(s, m_buf, IOMode.once, &onSocketData);
-			EventID evt;
+		@nogc {
+			m_sockets.receiveNoGC(s, m_buf, IOMode.once, &onSocketData);
 			try {
-				synchronized (m_eventsMutex)
-					evt = m_events[s];
-				onEvent(evt);
+				EventID evt = m_sockets.userData!EventID(s);
+				scope doit = { onEvent(evt); }; // cast to nogc
+				() @trusted { (cast(void delegate() @nogc)doit)(); } ();
 			} catch (Exception e) assert(false, e.msg);
 		}
 	}
@@ -201,13 +190,13 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 	}
 
 	final override bool releaseRef(EventID descriptor)
-	{
+	@nogc {
 		nogc_assert(getRC(descriptor) > 0, "Releasing reference to unreferenced event FD.");
 		if (--getRC(descriptor) == 0) {
 			if (!isInternal(descriptor))
 		 		m_loop.m_waiterCount -= getSlot(descriptor).waiters.length;
 			() @trusted nothrow {
-				try .destroy(getSlot(descriptor).waiters);
+				try freeT(getSlot(descriptor).waiters);
 				catch (Exception e) nogc_assert(false, e.msg);
 			} ();
 			version (linux) {
@@ -216,10 +205,6 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 				auto rs = getSlot(descriptor).recvSocket;
 				m_sockets.cancelReceive(rs);
 				m_sockets.releaseRef(rs);
-				try {
-					synchronized (m_eventsMutex)
-						m_events.remove(rs);
-				} catch (Exception e) nogc_assert(false, e.msg);
 			}
 			m_loop.clearFD!EventSlot(descriptor);
 			version (Posix) close(cast(int)descriptor);
@@ -235,9 +220,9 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 	}
 
 	private EventSlot* getSlot(EventID id)
-	{
+	@nogc {
 		nogc_assert(id < m_loop.m_fds.length, "Invalid event ID.");
-		return () @trusted { return &m_loop.m_fds[id].event(); } ();
+		return () @trusted @nogc { return &m_loop.m_fds[id].event(); } ();
 	}
 
 	private ref uint getRC(EventID id)
@@ -246,7 +231,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 	}
 
 	private bool isInternal(EventID id)
-	{
+	@nogc {
 		return getSlot(id).isInternal;
 	}
 }

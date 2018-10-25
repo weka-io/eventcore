@@ -17,7 +17,7 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 	}
 
 	this(WinAPIEventDriverCore core)
-	{
+	@nogc {
 		m_core = core;
 	}
 

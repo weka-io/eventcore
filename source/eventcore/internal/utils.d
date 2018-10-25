@@ -1,5 +1,7 @@
 module eventcore.internal.utils;
 
+import core.memory : GC;
+import std.traits : hasIndirections;
 import taggedalgebraic;
 
 
@@ -8,17 +10,83 @@ void print(ARGS...)(string str, ARGS args)
 	import std.format : formattedWrite;
 	StdoutRange r;
 	scope cb = () {
-		scope (failure) assert(false);
-		(&r).formattedWrite(str, args);
+		try (&r).formattedWrite(str, args);
+		catch (Exception e) assert(false, e.msg);
 	};
 	(cast(void delegate() @nogc @safe nothrow)cb)();
 	r.put('\n');
 }
 
+T mallocT(T, ARGS...)(ARGS args)
+@trusted @nogc {
+	import core.stdc.stdlib : malloc;
+	import std.conv : emplace;
+
+	enum size = __traits(classInstanceSize, T);
+	auto ret = cast(T)malloc(size);
+	static if (hasIndirections!T)
+		GC.addRange(cast(void*)ret, __traits(classInstanceSize, T));
+	scope doit = { emplace!T((cast(void*)ret)[0 .. size], args); };
+	static if (__traits(compiles, () nothrow { typeof(doit).init(); })) // NOTE: doing the typeof thing here, because LDC 1.7.0 otherwise thinks doit gets escaped here
+		(cast(void delegate() @nogc nothrow)doit)();
+	else
+		(cast(void delegate() @nogc)doit)();
+	return ret;
+}
+
+void freeT(T)(ref T inst) @nogc
+	if (is(T == class))
+{
+	import core.stdc.stdlib : free;
+
+	if (!inst) return;
+
+	noGCDestroy(inst);
+	static if (hasIndirections!T)
+		GC.removeRange(cast(void*)inst);
+	free(cast(void*)inst);
+	inst = null;
+}
+
+T[] mallocNT(T)(size_t cnt)
+@trusted {
+	import core.stdc.stdlib : malloc;
+	import std.conv : emplace;
+
+	auto ret = (cast(T*)malloc(T.sizeof * cnt))[0 .. cnt];
+	static if (hasIndirections!T)
+		GC.addRange(cast(void*)ret, T.sizeof * cnt);
+	foreach (ref v; ret)
+		static if (!is(T == class))
+			emplace!T(&v);
+		else v = null;
+	return ret;
+}
+
+void freeNT(T)(ref T[] arr)
+{
+	import core.stdc.stdlib : free;
+
+	foreach (ref v; arr)
+		static if (!is(T == class))
+			destroy(v);
+	static if (hasIndirections!T)
+		GC.removeRange(arr.ptr);
+	free(arr.ptr);
+	arr = null;
+}
+
+private void noGCDestroy(T)(ref T t)
+@trusted {
+	// FIXME: only do this if the destructor chain is actually nogc
+	scope doit = { destroy(t); };
+	(cast(void delegate() @nogc)doit)();
+}
+
 private extern(C) Throwable.TraceInfo _d_traceContext(void* ptr = null);
 
 void nogc_assert(bool cond, string message, string file = __FILE__, int line = __LINE__)
-@trusted nothrow {
+@trusted nothrow @nogc {
 	import core.stdc.stdlib : abort;
 	import std.stdio : stderr;
 
@@ -28,12 +96,15 @@ void nogc_assert(bool cond, string message, string file = __FILE__, int line = _
 			assert(false);
 		}
 
-		stderr.writefln("Assertion failure @%s(%s): %s", file, line, message);
-		stderr.writeln("------------------------");
-		if (auto info = _d_traceContext(null)) {
-			foreach (s; info)
-				stderr.writeln(s);
-		} else stderr.writeln("no stack trace available");
+		scope doit = {
+			stderr.writefln("Assertion failure @%s(%s): %s", file, line, message);
+			stderr.writeln("------------------------");
+			if (auto info = _d_traceContext(null)) {
+				foreach (s; info)
+					stderr.writeln(s);
+			} else stderr.writeln("no stack trace available");
+		};
+		(cast(void delegate() @nogc)doit)(); // write and _d_traceContext are not nogc
 	}
 }
 
@@ -53,14 +124,11 @@ struct StdoutRange {
 }
 
 struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
-	import core.memory : GC;
-
 	static assert(nextPOT(CHUNK_SIZE) == CHUNK_SIZE,
 		"CHUNK_SIZE must be a power of two for performance reasons.");
 
 	@safe: nothrow:
 	import core.stdc.stdlib : calloc, free, malloc, realloc;
-	import std.traits : hasIndirections;
 
 	alias chunkSize = CHUNK_SIZE;
 
@@ -85,12 +153,13 @@ struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
 	@nogc {
 		() @trusted {
 			foreach (i; 0 .. m_chunkCount) {
-				destroy(m_chunks[i]);
+				destroy(*m_chunks[i]);
 				static if (hasIndirections!T)
 					GC.removeRange(m_chunks[i]);
 				free(m_chunks[i]);
 			}
 			free(m_chunks.ptr);
+			m_chunks = null;
 		} ();
 		m_chunkCount = 0;
 		m_length = 0;
@@ -183,7 +252,7 @@ struct AlgebraicChoppedVector(TCommon, TSpecific...)
 		import std.format : format;
 		string ret;
 		foreach (i, U; TSpecific)
-			ret ~= "@property ref TSpecific[%s] %s() nothrow @safe { return this.specific.get!(TSpecific[%s]); }\n"
+			ret ~= "@property ref TSpecific[%s] %s() nothrow @safe @nogc { return this.specific.get!(TSpecific[%s]); }\n"
 				.format(i, U.Handle.name, i);
 		return ret;
 	}
@@ -207,10 +276,13 @@ struct SmallIntegerSet(V : size_t)
 		size_t m_count;
 	}
 
+	@disable this(this);
+
 	@property bool empty() const { return m_count == 0; }
 
 	void insert(V i)
 	{
+		assert(i >= 0);
 		foreach (j; 0 .. m_bits.length) {
 			uint b = 1u << (i%32);
 			i /= 32;
@@ -223,6 +295,9 @@ struct SmallIntegerSet(V : size_t)
 
 	void remove(V i)
 	{
+		assert(i >= 0);
+		if (i >= m_bits[0].length * 32) return;
+
 		foreach (j; 0 .. m_bits.length) {
 			uint b = 1u << (i%32);
 			i /= 32;

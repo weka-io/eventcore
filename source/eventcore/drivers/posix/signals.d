@@ -17,7 +17,7 @@ final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSigna
 
 	private Loop m_loop;
 
-	this(Loop loop) { m_loop = loop; }
+	this(Loop loop) @nogc { m_loop = loop; }
 
 	override SignalListenID listen(int sig, SignalCallback on_signal)
 	{
