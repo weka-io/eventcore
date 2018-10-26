@@ -114,12 +114,12 @@ struct StdoutRange {
 
 	void put(string str)
 	{
-		() @trusted { fwrite(str.ptr, str.length, 1, stdout); } ();
+		() @trusted { fwrite(str.ptr, str.length, 1, stderr); } ();
 	}
 
 	void put(char ch)
 	{
-		() @trusted { fputc(ch, stdout); } ();
+		() @trusted { fputc(ch, stderr); } ();
 	}
 }
 
