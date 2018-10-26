@@ -52,8 +52,13 @@ interface EventDriver {
 	/// Directory change watching
 	@property inout(EventDriverWatchers) watchers() inout;
 
-	/// Releases all resources associated with the driver
-	void dispose();
+	/** Releases all resources associated with the driver.
+
+		In case of any left-over referenced handles, this function returns
+		`false` and does not free any resources. It may choose to free the
+		resources once the last handle gets dereferenced.
+	*/
+	bool dispose();
 }
 
 

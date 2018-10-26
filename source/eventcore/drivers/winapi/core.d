@@ -5,7 +5,7 @@ version (Windows):
 import eventcore.driver;
 import eventcore.drivers.timer;
 import eventcore.internal.consumablequeue;
-import eventcore.internal.utils : mallocT, freeT, nogc_assert;
+import eventcore.internal.utils : mallocT, freeT, nogc_assert, print;
 import eventcore.internal.win32;
 import core.sync.mutex : Mutex;
 import core.time : Duration;
@@ -59,6 +59,29 @@ final class WinAPIEventDriverCore : EventDriverCore {
 			freeT(m_threadCallbackMutex);
 			freeT(m_ioEvents);
 		} catch (Exception e) assert(false, e.msg);
+	}
+
+	package bool checkForLeakedHandles()
+	@trusted {
+		import core.thread : Thread;
+
+		static string getThreadName()
+		{
+			string thname;
+			try thname = Thread.getThis().name;
+			catch (Exception e) assert(false, e.msg);
+			return thname.length ? thname : "unknown";
+		}
+
+		foreach (k; m_handles.byKey) {
+			print("Warning (thread: %s): Leaked handles detected at driver shutdown", getThreadName());
+			foreach (ks; m_handles.byKeyValue)
+				if (!ks.value.specific.hasType!(typeof(null)))
+					print("   FD %04X (%s)", ks.key, ks.value.specific.kind);
+			return true;
+		}
+
+		return false;
 	}
 
 	override size_t waiterCount() { return m_waiterCount + m_timers.pendingCount; }

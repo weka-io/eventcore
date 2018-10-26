@@ -74,9 +74,14 @@ final class WinAPIEventDriver : EventDriver {
 	override @property inout(WinAPIEventDriverSignals) signals() inout { return m_signals; }
 	override @property inout(WinAPIEventDriverWatchers) watchers() inout { return m_watchers; }
 
-	override void dispose()
+	override bool dispose()
 	{
-		if (!m_events) return;
+		if (!m_events) return true;
+
+		if (m_core.checkForLeakedHandles()) return false;
+		if (m_events.checkForLeakedHandles()) return false;
+		if (m_sockets.checkForLeakedHandles()) return false;
+
 		m_events.dispose();
 		m_core.dispose();
 		assert(threadInstance !is null);
@@ -93,5 +98,7 @@ final class WinAPIEventDriver : EventDriver {
 			freeT(m_signals);
 		} ();
 		catch (Exception e) assert(false, e.msg);
+
+		return true;
 	}
 }

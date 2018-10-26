@@ -88,9 +88,29 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 	final override @property inout(FileDriver) files() inout { return m_files; }
 	final override @property inout(WatcherDriver) watchers() inout { return m_watchers; }
 
-	final override void dispose()
+	final override bool dispose()
 	{
-		if (!m_loop) return;
+		import core.thread : Thread;
+		import taggedalgebraic : hasType;
+
+		if (!m_loop) return true;
+
+		static string getThreadName()
+		{
+			string thname;
+			try thname = Thread.getThis().name;
+			catch (Exception e) assert(false, e.msg);
+			return thname.length ? thname : "unknown";
+		}
+
+		if (m_loop.m_handleCount > 0) {
+			print("Warning (thread: %s): leaking eventcore driver because there are still active handles", getThreadName());
+			foreach (id, ref s; m_loop.m_fds)
+				if (!s.specific.hasType!(typeof(null)) && !(s.common.flags & FDFlags.internal))
+					print("   FD %s (%s)", id, s.specific.kind);
+			return false;
+		}
+
 		m_files.dispose();
 		m_dns.dispose();
 		m_core.dispose();
@@ -108,6 +128,8 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 				freeT(m_loop);
 			} ();
 		catch (Exception e) assert(false, e.msg);
+
+		return true;
 	}
 }
 
@@ -279,6 +301,7 @@ package class PosixEventLoop {
 
 	package {
 		AlgebraicChoppedVector!(FDSlot, StreamSocketSlot, StreamListenSocketSlot, DgramSocketSlot, DNSSlot, WatcherSlot, EventSlot, SignalSlot) m_fds;
+		size_t m_handleCount = 0;
 		size_t m_waiterCount = 0;
 	}
 
@@ -338,6 +361,8 @@ package class PosixEventLoop {
 			common.flags = flags;
 			specific = slot_init;
 		}
+		if (!(flags & FDFlags.internal))
+			m_handleCount++;
 	}
 
 	package void clearFD(T)(FD fd)
@@ -347,6 +372,10 @@ package class PosixEventLoop {
 		auto slot = () @trusted { return &m_fds[fd.value]; } ();
 		assert(slot.common.refCount == 0, "Clearing referenced file descriptor slot.");
 		assert(slot.specific.hasType!T, "Clearing file descriptor slot with unmatched type.");
+
+		if (!(slot.common.flags & FDFlags.internal))
+			m_handleCount--;
+
 		if (slot.common.userDataDestructor)
 			() @trusted { slot.common.userDataDestructor(slot.common.userData.ptr); } ();
 		if (!(slot.common.flags & FDFlags.internal))
