@@ -6,7 +6,7 @@ import eventcore.driver;
 import eventcore.drivers.winapi.core;
 import eventcore.internal.win32;
 import eventcore.internal.consumablequeue;
-import eventcore.internal.utils : mallocT, freeT, nogc_assert;
+import eventcore.internal.utils : mallocT, freeT, nogc_assert, print;
 
 
 final class WinAPIEventDriverEvents : EventDriverEvents {
@@ -43,6 +43,15 @@ final class WinAPIEventDriverEvents : EventDriverEvents {
 	@trusted {
 		scope (failure) assert(false);
 		freeT(m_pending);
+	}
+
+	package bool checkForLeakedHandles()
+	@trusted {
+		foreach (evt; m_events.byKey) {
+			print("Warning: Event handles leaked at driver shutdown.");
+			return true;
+		}
+		return false;
 	}
 
 	override EventID create()

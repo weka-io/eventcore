@@ -22,7 +22,7 @@ else alias NativeEventDriver = EventDriver;
 		assert(s_driver !is null, "setupEventDriver() was not called for this thread.");
 	else {
 		if (!s_driver) {
-			s_driver = mallocT!NativeEventDriver();
+			s_driver = mallocT!NativeEventDriver;
 		}
 	}
 	return s_driver;
@@ -43,8 +43,8 @@ static if (!is(NativeEventDriver == EventDriver)) {
 		if (!s_isMainThread) {
 			if (!--s_initCount) {
 				if (s_driver) {
-					s_driver.dispose();
-					freeT(s_driver);
+					if (s_driver.dispose())
+						freeT(s_driver);
 				}
 			}
 		}
@@ -61,8 +61,8 @@ static if (!is(NativeEventDriver == EventDriver)) {
 	{
 		if (!--s_initCount) {
 			if (s_driver) {
-				s_driver.dispose();
-				freeT(s_driver);
+				if (s_driver.dispose())
+					freeT(s_driver);
 			}
 		}
 	}

@@ -18,6 +18,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	private {
 		alias SocketVector = AlgebraicChoppedVector!(SocketSlot, StreamSocketSlot, StreamListenSocketSlot, DatagramSocketSlot);
 		SocketVector m_sockets;
+		size_t m_socketCount = 0;
 		WinAPIEventDriverCore m_core;
 		DWORD m_tid;
 		HWND m_hwnd;
@@ -37,6 +38,13 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	}
 
 	package @property size_t waiterCount() const { return m_waiters; }
+
+	package bool checkForLeakedHandles()
+	{
+		if (m_socketCount == 0) return false;
+		print("Warning: Socket handles leaked at driver shutdown.");
+		return true;
+	}
 
 	override StreamSocketFD connectStream(scope Address peer_address, scope Address bind_address, ConnectCallback on_connect)
 	@trusted {
@@ -802,6 +810,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	private void initSocketSlot(SocketFD fd)
 	{
+		m_socketCount++;
 		m_sockets[fd.value].common.refCount = 1;
 		m_sockets[fd.value].common.fd = fd;
 		m_sockets[fd.value].common.driver = this;
@@ -809,6 +818,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	package void clearSocketSlot(FD fd)
 	@nogc {
+		m_socketCount--;
 		auto slot = () @trusted { return &m_sockets[fd]; } ();
 		if (slot.common.userDataDestructor)
 			() @trusted { slot.common.userDataDestructor(slot.common.userData.ptr); } ();
