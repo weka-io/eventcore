@@ -79,7 +79,10 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		foreach (tm; processed_timers) {
 			auto cb = tm.callback;
 			tm.callback = null;
-			if (cb) cb(tm.id, true);
+			if (cb) {
+				cb(tm.id, true);
+				releaseRef(tm.id);
+			}
 		}
 
 		return processed_timers.length > 0;
@@ -119,7 +122,10 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		if (!tm.pending) return;
 		TimerCallback2 cb;
 		swap(cb, tm.callback);
-		if (cb) cb(timer, false);
+		if (cb) {
+			cb(timer, false);
+			releaseRef(timer);
+		}
 		tm.pending = false;
 		m_timerQueue.remove(tm);
 	}
@@ -138,6 +144,7 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 	{
 		assert(!m_timers[timer].callback, "Calling wait() on a timer that is already waiting.");
 		m_timers[timer].callback = callback;
+		addRef(timer);
 	}
 	alias wait = EventDriverTimers.wait;
 
@@ -146,6 +153,7 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		auto pt = m_timers[timer];
 		assert(pt.callback);
 		pt.callback = null;
+		releaseRef(timer);
 	}
 
 	final override void addRef(TimerID descriptor)
@@ -164,7 +172,20 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		if (descriptor !in m_timers) return true;
 
 		auto tm = m_timers[descriptor];
-		if (!--tm.refCount) {
+		tm.refCount--;
+
+		// cancel starved timer waits
+		if (tm.callback && tm.refCount == 1 && !tm.pending) {
+			debug addRef(descriptor);
+			cancelWait(tm.id);
+			debug {
+				assert(tm.refCount == 1);
+				releaseRef(descriptor);
+			}
+			return false;
+		}
+
+		if (!tm.refCount) {
 			if (tm.pending) stop(tm.id);
 			m_timers.remove(descriptor);
 			() @trusted {
