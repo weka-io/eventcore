@@ -57,6 +57,21 @@ void main()
 
 	eventDriver.timers.set(tm, 1200.msecs, 0.msecs);
 
+	// test if stop() produces a callback with fire==false
+	bool got_event = false;
+	auto tm2 = eventDriver.timers.create();
+	eventDriver.timers.wait(tm2, (t, fired) { assert(!fired); got_event = true; });
+	eventDriver.timers.set(tm2, 100.msecs, 0.msecs);
+	eventDriver.timers.stop(tm2);
+	assert(got_event);
+
+
+	// test that cancelWait() does not produce a callback
+	eventDriver.timers.wait(tm2, (t, fired) { assert(false); });
+	eventDriver.timers.set(tm2, 100.msecs, 0.msecs);
+	eventDriver.timers.cancelWait(tm2);
+	eventDriver.timers.stop(tm2);
+
 	ExitReason er;
 	do er = eventDriver.core.processEvents(Duration.max);
 	while (er == ExitReason.idle);
