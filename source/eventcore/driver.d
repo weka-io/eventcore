@@ -564,7 +564,12 @@ interface EventDriverTimers {
 	void stop(TimerID timer);
 	bool isPending(TimerID timer);
 	bool isPeriodic(TimerID timer);
-	void wait(TimerID timer, TimerCallback callback);
+	final void wait(TimerID timer, TimerCallback callback) {
+		wait(timer, (tm, fired) {
+			if (fired) callback(tm);
+		});
+	}
+	void wait(TimerID timer, TimerCallback2 callback);
 	void cancelWait(TimerID timer);
 
 	/** Increments the reference count of the given resource.
@@ -668,6 +673,7 @@ alias FileIOCallback = void delegate(FileFD, IOStatus, size_t);
 alias EventCallback = void delegate(EventID);
 alias SignalCallback = void delegate(SignalListenID, SignalStatus, int);
 alias TimerCallback = void delegate(TimerID);
+alias TimerCallback2 = void delegate(TimerID, bool fired);
 alias FileChangesCallback = void delegate(WatcherID, in ref FileChange change);
 @system alias DataInitializer = void function(void*) @nogc;
 

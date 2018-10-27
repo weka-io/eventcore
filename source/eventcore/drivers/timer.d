@@ -79,7 +79,7 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		foreach (tm; processed_timers) {
 			auto cb = tm.callback;
 			tm.callback = null;
-			if (cb) cb(tm.id);
+			if (cb) cb(tm.id, true);
 		}
 
 		return processed_timers.length > 0;
@@ -91,8 +91,8 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		TimerSlot* tm;
 		try tm = ms_allocator.make!TimerSlot;
 		catch (Exception e) return TimerID.invalid;
-		GC.addRange(tm, TimerSlot.sizeof, typeid(TimerSlot));
 		assert(tm !is null);
+		GC.addRange(tm, TimerSlot.sizeof, typeid(TimerSlot));
 		tm.id = id;
 		tm.refCount = 1;
 		tm.timeout = long.max;
@@ -113,8 +113,13 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 
 	final override void stop(TimerID timer)
 	@trusted {
+		import std.algorithm.mutation : swap;
+
 		auto tm = m_timers[timer];
 		if (!tm.pending) return;
+		TimerCallback2 cb;
+		swap(cb, tm.callback);
+		if (cb) cb(timer, false);
 		tm.pending = false;
 		m_timerQueue.remove(tm);
 	}
@@ -129,11 +134,12 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		return m_timers[descriptor].repeatDuration > 0;
 	}
 
-	final override void wait(TimerID timer, TimerCallback callback)
+	final override void wait(TimerID timer, TimerCallback2 callback)
 	{
-		assert(!m_timers[timer].callback, "Calling wait() no a timer that is already waiting.");
+		assert(!m_timers[timer].callback, "Calling wait() on a timer that is already waiting.");
 		m_timers[timer].callback = callback;
 	}
+	alias wait = EventDriverTimers.wait;
 
 	final override void cancelWait(TimerID timer)
 	{
@@ -214,7 +220,7 @@ struct TimerSlot {
 	bool pending;
 	long timeout; // stdtime
 	long repeatDuration;
-	TimerCallback callback; // TODO: use a list with small-value optimization
+	TimerCallback2 callback; // TODO: use a list with small-value optimization
 
 	DataInitializer userDataDestructor;
 	ubyte[16*size_t.sizeof] userData;
