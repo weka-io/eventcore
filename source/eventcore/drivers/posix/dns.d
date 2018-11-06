@@ -84,7 +84,7 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 		debug (EventCoreLogDNS) print("lookup %s start", lookup.name);
 		addrinfo hints;
 		hints.ai_flags = AI_ADDRCONFIG;
-		version (linx) hints.ai_flags |= AI_V4MAPPED;
+		version (linux) hints.ai_flags |= AI_V4MAPPED;
 		hints.ai_family = af;
 		() @trusted { lookup.retcode = getaddrinfo(lookup.name.toStringz(), null, af == AddressFamily.UNSPEC ? null : &hints, &lookup.result); } ();
 		if (lookup.retcode == -1)
