@@ -5,12 +5,20 @@ copyright "Copyright © 2016-2018 Sönke Ludwig"
 
 targetType "library"
 
-libs "anl" "resolv" platform="linux"
+libs "resolv" platform="linux"
 libs "ws2_32" "user32" platform="windows-dmd"
 
 dependency "taggedalgebraic" version="~>0.10.12"
 
 configuration "epoll" {
+	platforms "linux"
+	versions "EventcoreEpollDriver"
+}
+
+// getaddrinfo_a based DNS lookups
+configuration "epoll-gaia" {
+	libs "anl"
+	versions "EventcoreUseGAIA"
 	platforms "linux"
 	versions "EventcoreEpollDriver"
 }

@@ -158,6 +158,7 @@ final class EventDriverDNS_GAIA(Events : EventDriverEvents, Signals : EventDrive
 			DNSLookupCallback callback;
 		}
 		ChoppedVector!Lookup m_lookups;
+		Events m_events;
 		Signals m_signals;
 		int m_dnsSignal;
 		SignalListenID m_sighandle;
@@ -167,6 +168,7 @@ final class EventDriverDNS_GAIA(Events : EventDriverEvents, Signals : EventDrive
 
 	this(Events events, Signals signals)
 	{
+		m_events = events;
 		m_signals = signals;
 		m_dnsSignal = () @trusted { return SIGRTMIN; } ();
 		m_sighandle = signals.listenInternal(m_dnsSignal, &onDNSSignal);
@@ -214,6 +216,8 @@ final class EventDriverDNS_GAIA(Events : EventDriverEvents, Signals : EventDrive
 	{
 		assert(status == SignalStatus.ok);
 		foreach (i, ref l; m_lookups) {
+			scope (failure) assert(false);
+
 			if (!l.callback) continue;
 			auto err = gai_error(&l.ctx);
 			if (err == EAI_INPROGRESS) continue;
@@ -242,6 +246,8 @@ final class EventDriverDNS_GAIA(Events : EventDriverEvents, Signals : EventDrive
 
 version (linux) extern(C) {
 	import core.sys.posix.signal : sigevent;
+
+	nothrow @nogc:
 
 	struct gaicb {
 		const(char)* ar_name;
