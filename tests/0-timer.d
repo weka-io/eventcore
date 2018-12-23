@@ -5,17 +5,16 @@
 module test;
 
 import eventcore.core;
-import std.datetime : Clock, SysTime, UTC;
+import core.time : Duration, MonoTime, msecs;
 import std.stdio : writefln;
-import core.time : Duration, msecs;
 
-SysTime s_startTime;
+MonoTime s_startTime;
 int s_cnt = 0;
 bool s_done;
 
 void main()
 {
-	s_startTime = Clock.currTime(UTC());
+	s_startTime = MonoTime.currTime();
 
 	auto tm = eventDriver.timers.create();
 	eventDriver.timers.wait(tm, (tm) nothrow @safe {
@@ -23,7 +22,7 @@ void main()
 
 		{
 			scope (failure) assert(false);
-			dur = Clock.currTime(UTC()) - s_startTime;
+			dur = MonoTime.currTime() - s_startTime;
 		}
 
 		try {
@@ -37,7 +36,7 @@ void main()
 
 		void secondTier(TimerID timer) nothrow @safe {
 			try {
-				auto dur = Clock.currTime(UTC()) - s_startTime;
+				auto dur = MonoTime.currTime() - s_startTime;
 				s_cnt++;
 				assert(dur > 300.msecs * s_cnt, (dur - 300.msecs * s_cnt).toString());
 				assert(dur < 300.msecs * s_cnt + 100.msecs, (dur - 300.msecs * s_cnt).toString());

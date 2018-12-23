@@ -7,7 +7,7 @@ module test;
 import eventcore.core;
 import eventcore.internal.utils : print;
 import core.thread : Thread;
-import core.time : Duration, msecs;
+import core.time : Duration, MonoTime, msecs;
 import std.file : exists, remove, rename, rmdirRecurse, mkdir;
 import std.format : format;
 import std.functional : toDelegate;
@@ -80,9 +80,7 @@ void testCallback(WatcherID w, in ref FileChange ch)
 
 void expectChange(FileChange ch, bool expect_change)
 {
-	import std.datetime : Clock, UTC;
-
-	auto starttime = Clock.currTime(UTC());
+	auto starttime = MonoTime.currTime();
 	again: while (!pendingChanges.length) {
 		auto er = eventDriver.core.processEvents(10.msecs);
 		switch (er) {
@@ -95,7 +93,7 @@ void expectChange(FileChange ch, bool expect_change)
 				assert(!expect_change, "No watcher left, but expected change.");
 				return;
 		}
-		if (!pendingChanges.length && Clock.currTime(UTC()) - starttime >= 2000.msecs) {
+		if (!pendingChanges.length && MonoTime.currTime() - starttime >= 2000.msecs) {
 			assert(!expect_change, format("Got no change, expected %s.", ch));
 			return;
 		}
