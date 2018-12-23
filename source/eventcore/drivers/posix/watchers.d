@@ -404,17 +404,16 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 
 		private void run()
 		nothrow @trusted {
-			import core.time : msecs;
+			import core.time : MonoTime, msecs;
 			import std.algorithm.comparison : min;
-			import std.datetime : Clock, UTC;
 
 			try while (true) {
-				auto timeout = Clock.currTime(UTC()) + min(m_entryCount, 60000).msecs + 1000.msecs;
+				auto timeout = MonoTime.currTime() + min(m_entryCount, 60000).msecs + 1000.msecs;
 				while (true) {
 					try synchronized (m_changesMutex) {
 						if (m_changesEvent == EventID.invalid) return;
 					} catch (Exception e) assert(false, "Mutex lock failed: "~e.msg);
-					auto remaining = timeout - Clock.currTime(UTC());
+					auto remaining = timeout - MonoTime.currTime();
 					if (remaining <= 0.msecs) break;
 					sleep(min(1000.msecs, remaining));
 				}
