@@ -196,6 +196,22 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 		}
 	}
 
+	override void truncate(FileFD file, ulong size, FileIOCallback on_finish)
+	{
+		version (Posix) {
+			// FIXME: do this in the thread pool
+
+			if (ftruncate(cast(int)file, size) != 0) {
+				on_finish(file, IOStatus.error, 0);
+				return;
+			}
+			on_finish(file, IOStatus.ok, 0);
+		} else {
+			on_finish(file, IOStatus.error, 0);
+		}
+	}
+
+
 	final override void write(FileFD file, ulong offset, const(ubyte)[] buffer, IOMode, FileIOCallback on_write_finish)
 	{
 		//assert(this.writable);
