@@ -88,6 +88,26 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		return size.QuadPart;
 	}
 
+	override void truncate(FileFD file, ulong size, FileIOCallback on_finish)
+	@trusted {
+		auto h = idToHandle(file);
+
+		// FIXME: do this in a separate thread
+
+		LARGE_INTEGER li = {QuadPart: size};
+		if (!SetFilePointerEx(h, li, null, FILE_BEGIN)) {
+			on_finish(file, IOStatus.error, 0);
+			return;
+		}
+
+		if (!SetEndOfFile(h)) {
+			on_finish(file, IOStatus.error, 0);
+			return;
+		}
+
+		on_finish(file, IOStatus.ok, 0);
+	}
+
 	override void write(FileFD file, ulong offset, const(ubyte)[] buffer, IOMode mode, FileIOCallback on_write_finish)
 	{
 		auto h = idToHandle(file);

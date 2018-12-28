@@ -426,6 +426,16 @@ interface EventDriverFiles {
 
 	ulong getSize(FileFD file);
 
+	/** Shrinks or extends a file to the specified size.
+
+		Params:
+			file = Handle of the file to resize
+			size = Desired file size in bytes
+			on_finish = Called when the operation finishes - the `size`
+				parameter is always set to zero
+	*/
+	void truncate(FileFD file, ulong size, FileIOCallback on_finish);
+
 	void write(FileFD file, ulong offset, const(ubyte)[] buffer, IOMode mode, FileIOCallback on_write_finish);
 	void read(FileFD file, ulong offset, ubyte[] buffer, IOMode mode, FileIOCallback on_read_finish);
 	void cancelWrite(FileFD file);
