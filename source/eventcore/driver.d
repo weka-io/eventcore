@@ -789,14 +789,15 @@ struct FileChange {
 	bool isDirectory;
 }
 
-struct Handle(string NAME, T, T invalid_value = T.init) {
-	import std.traits : isInstanceOf;
-	static if (isInstanceOf!(.Handle, T)) alias BaseType = T.BaseType;
+mixin template Handle(string NAME, T, T invalid_value = T.init) {
+	static if (is(T.BaseType)) alias BaseType = T.BaseType;
 	else alias BaseType = T;
 
 	alias name = NAME;
 
-	enum invalid = Handle.init;
+	enum invalid = typeof(this).init;
+
+	nothrow @nogc @safe:
 
 	T value = invalid_value;
 
@@ -817,15 +818,15 @@ struct Handle(string NAME, T, T invalid_value = T.init) {
 
 alias ThreadCallback = void function(intptr_t param) @safe nothrow;
 
-alias FD = Handle!("fd", size_t, size_t.max);
-alias SocketFD = Handle!("socket", FD);
-alias StreamSocketFD = Handle!("streamSocket", SocketFD);
-alias StreamListenSocketFD = Handle!("streamListen", SocketFD);
-alias DatagramSocketFD = Handle!("datagramSocket", SocketFD);
-alias FileFD = Handle!("file", FD);
-alias EventID = Handle!("event", FD);
-alias TimerID = Handle!("timer", size_t, size_t.max);
-alias WatcherID = Handle!("watcher", size_t, size_t.max);
-alias EventWaitID = Handle!("eventWait", size_t, size_t.max);
-alias SignalListenID = Handle!("signal", size_t, size_t.max);
-alias DNSLookupID = Handle!("dns", size_t, size_t.max);
+struct FD { mixin Handle!("fd", size_t, size_t.max); }
+struct SocketFD { mixin Handle!("socket", FD); }
+struct StreamSocketFD { mixin Handle!("streamSocket", SocketFD); }
+struct StreamListenSocketFD { mixin Handle!("streamListen", SocketFD); }
+struct DatagramSocketFD { mixin Handle!("datagramSocket", SocketFD); }
+struct FileFD { mixin Handle!("file", FD); }
+struct EventID { mixin Handle!("event", FD); }
+struct TimerID { mixin Handle!("timer", size_t, size_t.max); }
+struct WatcherID { mixin Handle!("watcher", size_t, size_t.max); }
+struct EventWaitID { mixin Handle!("eventWait", size_t, size_t.max); }
+struct SignalListenID { mixin Handle!("signal", size_t, size_t.max); }
+struct DNSLookupID { mixin Handle!("dns", size_t, size_t.max); }
