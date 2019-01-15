@@ -12,6 +12,8 @@ import eventcore.drivers.posix.events;
 import eventcore.drivers.posix.signals;
 import eventcore.drivers.posix.sockets;
 import eventcore.drivers.posix.watchers;
+import eventcore.drivers.posix.processes;
+import eventcore.drivers.posix.pipes;
 import eventcore.drivers.timer;
 import eventcore.drivers.threadedfile;
 import eventcore.internal.consumablequeue : ConsumableQueue;
@@ -48,9 +50,11 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 		else version (EventcoreUseGAIA) alias DNSDriver = EventDriverDNS_GAIA!(EventsDriver, SignalsDriver);
 		else alias DNSDriver = EventDriverDNS_GAI!(EventsDriver, SignalsDriver);
 		alias FileDriver = ThreadedFileEventDriver!EventsDriver;
+		alias PipeDriver = PosixEventDriverPipes!Loop;
 		version (linux) alias WatcherDriver = InotifyEventDriverWatchers!EventsDriver;
 		//else version (OSX) alias WatcherDriver = FSEventsEventDriverWatchers!EventsDriver;
 		else alias WatcherDriver = PollEventDriverWatchers!EventsDriver;
+		alias ProcessDriver = SignalEventDriverProcesses!Loop;
 
 		Loop m_loop;
 		CoreDriver m_core;
@@ -60,7 +64,9 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 		SocketsDriver m_sockets;
 		DNSDriver m_dns;
 		FileDriver m_files;
+		PipeDriver m_pipes;
 		WatcherDriver m_watchers;
+		ProcessDriver m_processes;
 	}
 
 	this()
@@ -73,7 +79,9 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 		m_core = mallocT!CoreDriver(m_loop, m_timers, m_events);
 		m_dns = mallocT!DNSDriver(m_events, m_signals);
 		m_files = mallocT!FileDriver(m_events);
+		m_pipes = mallocT!PipeDriver(m_loop);
 		m_watchers = mallocT!WatcherDriver(m_events);
+		m_processes = mallocT!ProcessDriver(m_loop, m_pipes);
 	}
 
 	// force overriding these in the (final) sub classes to avoid virtual calls
@@ -86,7 +94,9 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 	final override @property inout(SocketsDriver) sockets() inout { return m_sockets; }
 	final override @property inout(DNSDriver) dns() inout { return m_dns; }
 	final override @property inout(FileDriver) files() inout { return m_files; }
+	final override @property inout(PipeDriver) pipes() inout { return m_pipes; }
 	final override @property inout(WatcherDriver) watchers() inout { return m_watchers; }
+	final override @property inout(ProcessDriver) processes() inout { return m_processes; }
 
 	final override bool dispose()
 	{
@@ -111,13 +121,16 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 			return false;
 		}
 
+		m_processes.dispose();
 		m_files.dispose();
 		m_dns.dispose();
 		m_core.dispose();
 		m_loop.dispose();
 
 		try () @trusted {
+				freeT(m_processes);
 				freeT(m_watchers);
+				freeT(m_pipes);
 				freeT(m_files);
 				freeT(m_dns);
 				freeT(m_core);
@@ -300,7 +313,7 @@ package class PosixEventLoop {
 	import core.time : Duration;
 
 	package {
-		AlgebraicChoppedVector!(FDSlot, StreamSocketSlot, StreamListenSocketSlot, DgramSocketSlot, DNSSlot, WatcherSlot, EventSlot, SignalSlot) m_fds;
+		AlgebraicChoppedVector!(FDSlot, StreamSocketSlot, StreamListenSocketSlot, DgramSocketSlot, DNSSlot, WatcherSlot, EventSlot, SignalSlot, PipeSlot) m_fds;
 		size_t m_handleCount = 0;
 		size_t m_waiterCount = 0;
 	}
@@ -342,11 +355,11 @@ package class PosixEventLoop {
 		// ensure that the FD doesn't get closed before the callback gets called.
 		with (m_fds[fd.value]) {
 			if (callback !is null) {
-				if (!(common.flags & FDFlags.internal)) m_waiterCount++;
+				m_waiterCount++;
 				common.refCount++;
 			} else {
 				common.refCount--;
-				if (!(common.flags & FDFlags.internal)) m_waiterCount--;
+				m_waiterCount--;
 			}
 			common.callback[evt] = callback;
 		}

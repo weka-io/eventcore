@@ -19,8 +19,10 @@ module eventcore.driver;
 @safe: /*@nogc:*/ nothrow:
 
 import core.time : Duration;
+import std.process : StdProcessConfig = Config;
 import std.socket : Address;
 import std.stdint : intptr_t;
+import std.variant : Algebraic;
 
 
 /** Encapsulates a full event driver.
@@ -51,6 +53,10 @@ interface EventDriver {
 	@property inout(EventDriverFiles) files() inout;
 	/// Directory change watching
 	@property inout(EventDriverWatchers) watchers() inout;
+	/// Sub-process handling
+	@property inout(EventDriverProcesses) processes() inout;
+	/// Pipes
+	@property inout(EventDriverPipes) pipes() inout;
 
 	/** Releases all resources associated with the driver.
 
@@ -646,6 +652,154 @@ interface EventDriverWatchers {
 	protected void* rawUserData(WatcherID descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
 }
 
+interface EventDriverProcesses {
+@safe: /*@nogc:*/ nothrow:
+	/** Adopt an existing process.
+	*/
+	ProcessID adopt(int system_pid);
+
+	/** Spawn a child process.
+
+		Note that if a default signal handler exists for the signal, it will be
+		disabled by using this function.
+
+		Params:
+			args = The program arguments. First one must be an executable.
+			stdin = What should be done for stdin. Allows inheritance, piping,
+				nothing or any specific fd. If this results in a Pipe,
+				the PipeFD will be set in the stdin result.
+			stdout = See stdin, but also allows redirecting to stderr.
+			stderr = See stdin, but also allows redirecting to stdout.
+			env = The environment variables to spawn the process with.
+			config = Special process configurations.
+			working_dir = What to set the working dir in the process.
+
+		Returns:
+			Returns a Process struct containing the ProcessID and whatever
+			pipes have been adopted for stdin, stdout and stderr.
+	*/
+	Process spawn(string[] args, ProcessStdinFile stdin, ProcessStdoutFile stdout, ProcessStderrFile stderr, const string[string] env = null, ProcessConfig config = ProcessConfig.none, string working_dir = null);
+
+	/** Returns whether the process has exited yet.
+	*/
+	bool hasExited(ProcessID pid);
+
+	/** Kill the process using the given signal. Has different effects on different platforms.
+	*/
+	void kill(ProcessID pid, int signal);
+
+	/** Wait for the process to exit. Returns an identifier that can be used to cancel the wait.
+	*/
+	size_t wait(ProcessID pid, ProcessWaitCallback on_process_exit);
+
+	/** Cancel a wait for the given identifier returned by wait.
+	*/
+	void cancelWait(ProcessID pid, size_t waitId);
+
+	/** Increments the reference count of the given resource.
+	*/
+	void addRef(ProcessID pid);
+
+	/** Decrements the reference count of the given resource.
+
+		Once the reference count reaches zero, all associated resources will be
+		freed and the resource descriptor gets invalidated. This will not kill
+		the sub-process, nor "detach" it.
+
+		Returns:
+			Returns `false` $(I iff) the last reference was removed by this call.
+	*/
+	bool releaseRef(ProcessID pid);
+
+	/** Retrieves a reference to a user-defined value associated with a descriptor.
+	*/
+	@property final ref T userData(T)(ProcessID descriptor)
+	@trusted {
+		import std.conv : emplace;
+		static void init(void* ptr) { emplace(cast(T*)ptr); }
+		static void destr(void* ptr) { destroy(*cast(T*)ptr); }
+		return *cast(T*)rawUserData(descriptor, T.sizeof, &init, &destr);
+	}
+
+	/// Low-level user data access. Use `userData` instead.
+	protected void* rawUserData(ProcessID descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
+}
+
+interface EventDriverPipes {
+@safe: /*@nogc:*/ nothrow:
+	/** Adopt an existing pipe. This will modify the pipe to be non-blocking.
+
+		Note that pipes generally only allow either reads or writes but not
+		both, it is up to you to only call valid functions.
+	*/
+	PipeFD adopt(int system_pipe_handle);
+
+	/** Reads data from a stream socket.
+
+		Note that only a single read operation is allowed at once. The caller
+		needs to make sure that either `on_read_finish` got called, or
+		`cancelRead` was called before issuing the next call to `read`.
+	*/
+	void read(PipeFD pipe, ubyte[] buffer, IOMode mode, PipeIOCallback on_read_finish);
+
+	/** Cancels an ongoing read operation.
+
+		After this function has been called, the `PipeIOCallback` specified in
+		the call to `read` is guaranteed to not be called.
+	*/
+	void cancelRead(PipeFD pipe);
+
+	/** Writes data from a stream socket.
+
+		Note that only a single write operation is allowed at once. The caller
+		needs to make sure that either `on_write_finish` got called, or
+		`cancelWrite` was called before issuing the next call to `write`.
+	*/
+	void write(PipeFD pipe, const(ubyte)[] buffer, IOMode mode, PipeIOCallback on_write_finish);
+
+	/** Cancels an ongoing write operation.
+
+		After this function has been called, the `PipeIOCallback` specified in
+		the call to `write` is guaranteed to not be called.
+	*/
+	void cancelWrite(PipeFD pipe);
+
+	/** Waits for incoming data without actually reading it.
+	*/
+	void waitForData(PipeFD pipe, PipeIOCallback on_data_available);
+
+	/** Immediately close the pipe. Future read or write operations may fail.
+	*/
+	void close(PipeFD pipe);
+
+	/** Increments the reference count of the given resource.
+	*/
+	void addRef(PipeFD pid);
+
+	/** Decrements the reference count of the given resource.
+
+		Once the reference count reaches zero, all associated resources will be
+		freed and the resource descriptor gets invalidated.
+
+		Returns:
+			Returns `false` $(I iff) the last reference was removed by this call.
+	*/
+	bool releaseRef(PipeFD pid);
+
+	/** Retrieves a reference to a user-defined value associated with a descriptor.
+	*/
+	@property final ref T userData(T)(PipeFD descriptor)
+	@trusted {
+		import std.conv : emplace;
+		static void init(void* ptr) { emplace(cast(T*)ptr); }
+		static void destr(void* ptr) { destroy(*cast(T*)ptr); }
+		return *cast(T*)rawUserData(descriptor, T.sizeof, &init, &destr);
+	}
+
+	/// Low-level user data access. Use `userData` instead.
+	protected void* rawUserData(PipeFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
+
+}
 
 // Helper class to enable fully stack allocated `std.socket.Address` instances.
 final class RefAddress : Address {
@@ -680,12 +834,21 @@ alias IOCallback = void delegate(StreamSocketFD, IOStatus, size_t);
 alias DatagramIOCallback = void delegate(DatagramSocketFD, IOStatus, size_t, scope RefAddress);
 alias DNSLookupCallback = void delegate(DNSLookupID, DNSStatus, scope RefAddress[]);
 alias FileIOCallback = void delegate(FileFD, IOStatus, size_t);
+alias PipeIOCallback = void delegate(PipeFD, IOStatus, size_t);
 alias EventCallback = void delegate(EventID);
 alias SignalCallback = void delegate(SignalListenID, SignalStatus, int);
 alias TimerCallback = void delegate(TimerID);
 alias TimerCallback2 = void delegate(TimerID, bool fired);
 alias FileChangesCallback = void delegate(WatcherID, in ref FileChange change);
+alias ProcessWaitCallback = void delegate(ProcessID, int);
 @system alias DataInitializer = void function(void*) @nogc;
+
+enum ProcessRedirect { inherit, pipe, none }
+alias ProcessStdinFile = Algebraic!(int, ProcessRedirect);
+enum ProcessStdoutRedirect { toStderr }
+alias ProcessStdoutFile = Algebraic!(int, ProcessRedirect, ProcessStdoutRedirect);
+enum ProcessStderrRedirect { toStdout }
+alias ProcessStderrFile = Algebraic!(int, ProcessRedirect, ProcessStderrRedirect);
 
 enum ExitReason {
 	timeout,
@@ -775,6 +938,13 @@ enum SignalStatus {
 	error
 }
 
+/// See std.process.Config
+enum ProcessConfig {
+	none = StdProcessConfig.none,
+	detached = StdProcessConfig.detached,
+	newEnv = StdProcessConfig.newEnv,
+	suppressConsole = StdProcessConfig.suppressConsole,
+}
 
 /** Describes a single change in a watched directory.
 */
@@ -799,6 +969,17 @@ struct FileChange {
 	bool isDirectory;
 }
 
+/** Describes a spawned process
+*/
+struct Process {
+	ProcessID pid;
+
+	// TODO: Convert these to PipeFD once dmd is fixed
+	PipeFD stdin;
+	PipeFD stdout;
+	PipeFD stderr;
+}
+
 mixin template Handle(string NAME, T, T invalid_value = T.init) {
 	static if (is(T.BaseType)) alias BaseType = T.BaseType;
 	else alias BaseType = T;
@@ -813,13 +994,14 @@ mixin template Handle(string NAME, T, T invalid_value = T.init) {
 
 	this(BaseType value) { this.value = T(value); }
 
-	U opCast(U : Handle!(V, M), V, int M)() {
+	U opCast(U : Handle!(V, M), V, int M)()
+	const {
 		// TODO: verify that U derives from typeof(this)!
 		return U(value);
 	}
 
 	U opCast(U : BaseType)()
-	{
+	const {
 		return cast(U)value;
 	}
 
@@ -834,9 +1016,12 @@ struct StreamSocketFD { mixin Handle!("streamSocket", SocketFD); }
 struct StreamListenSocketFD { mixin Handle!("streamListen", SocketFD); }
 struct DatagramSocketFD { mixin Handle!("datagramSocket", SocketFD); }
 struct FileFD { mixin Handle!("file", FD); }
+// FD.init is required here due to https://issues.dlang.org/show_bug.cgi?id=19585
+struct PipeFD { mixin Handle!("pipe", FD, FD.init); }
 struct EventID { mixin Handle!("event", FD); }
 struct TimerID { mixin Handle!("timer", size_t, size_t.max); }
 struct WatcherID { mixin Handle!("watcher", size_t, size_t.max); }
 struct EventWaitID { mixin Handle!("eventWait", size_t, size_t.max); }
 struct SignalListenID { mixin Handle!("signal", size_t, size_t.max); }
 struct DNSLookupID { mixin Handle!("dns", size_t, size_t.max); }
+struct ProcessID { mixin Handle!("process", size_t, size_t.max); }
