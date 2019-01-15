@@ -10,12 +10,10 @@ import std.algorithm : min, max;
 
 final class PosixEventDriverPipes(Loop : PosixEventLoop) : EventDriverPipes {
 @safe: /*@nogc:*/ nothrow:
-    import core.stdc.errno : errno, EAGAIN, EINPROGRESS;
-    import core.sys.posix.signal;
+    import core.stdc.errno : errno, EAGAIN;
     import core.sys.posix.unistd : close, read, write;
     import core.sys.posix.fcntl;
     import core.sys.posix.poll;
-    import core.sys.linux.sys.signalfd;
 
     private Loop m_loop;
 
@@ -321,6 +319,62 @@ final class PosixEventDriverPipes(Loop : PosixEventLoop) : EventDriverPipes {
         return m_loop.rawUserDataImpl(fd, size, initialize, destroy);
     }
 }
+
+final class DummyEventDriverPipes(Loop : PosixEventLoop) : EventDriverPipes {
+@safe: /*@nogc:*/ nothrow:
+    this(Loop loop) {}
+
+    override PipeFD adopt(int system_pipe_handle)
+    {
+        assert(false, "TODO!");
+    }
+
+    override void read(PipeFD pipe, ubyte[] buffer, IOMode mode, PipeIOCallback on_read_finish)
+    {
+        assert(false, "TODO!");
+    }
+
+    override void cancelRead(PipeFD pipe)
+    {
+        assert(false, "TODO!");
+    }
+
+    override void write(PipeFD pipe, const(ubyte)[] buffer, IOMode mode, PipeIOCallback on_write_finish)
+    {
+        assert(false, "TODO!");
+    }
+
+    override void cancelWrite(PipeFD pipe)
+    {
+        assert(false, "TODO!");
+    }
+
+    override void waitForData(PipeFD pipe, PipeIOCallback on_data_available)
+    {
+        assert(false, "TODO!");
+    }
+
+    override void close(PipeFD pipe)
+    {
+        assert(false, "TODO!");
+    }
+
+    override void addRef(PipeFD pid)
+    {
+        assert(false, "TODO!");
+    }
+
+    override bool releaseRef(PipeFD pid)
+    {
+        assert(false, "TODO!");
+    }
+
+    protected override void* rawUserData(PipeFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+    @system {
+        assert(false, "TODO!");
+    }
+}
+
 
 package struct PipeSlot {
     alias Handle = PipeFD;

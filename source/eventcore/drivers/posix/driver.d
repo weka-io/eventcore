@@ -50,7 +50,8 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 		else version (EventcoreUseGAIA) alias DNSDriver = EventDriverDNS_GAIA!(EventsDriver, SignalsDriver);
 		else alias DNSDriver = EventDriverDNS_GAI!(EventsDriver, SignalsDriver);
 		alias FileDriver = ThreadedFileEventDriver!EventsDriver;
-		alias PipeDriver = PosixEventDriverPipes!Loop;
+		version (Posix) alias PipeDriver = PosixEventDriverPipes!Loop;
+		else alias PipeDriver = DummyEventDriverPipes!Loop;
 		version (linux) alias WatcherDriver = InotifyEventDriverWatchers!EventsDriver;
 		//else version (OSX) alias WatcherDriver = FSEventsEventDriverWatchers!EventsDriver;
 		else alias WatcherDriver = PollEventDriverWatchers!EventsDriver;
