@@ -42,17 +42,17 @@ final class WinAPIEventDriverPipes : EventDriverPipes {
         assert(false, "TODO!");
     }
 
-    override void addRef(PipeID pid)
+    override void addRef(PipeFD pid)
     {
         assert(false, "TODO!");
     }
 
-    override bool releaseRef(PipeID pid)
+    override bool releaseRef(PipeFD pid)
     {
         assert(false, "TODO!");
     }
 
-    protected override void* rawUserData(PipeID descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+    protected override void* rawUserData(PipeFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
     @system {
         assert(false, "TODO!");
     }

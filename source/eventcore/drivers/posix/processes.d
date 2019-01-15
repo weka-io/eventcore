@@ -6,9 +6,6 @@ import eventcore.drivers.posix.driver;
 import eventcore.drivers.posix.signals;
 import eventcore.internal.utils : nogc_assert, print;
 
-import core.stdc.errno : errno, EAGAIN, EINPROGRESS;
-import core.sys.posix.signal;
-import core.sys.posix.unistd : close, read, write, dup;
 import std.algorithm.comparison : among;
 import std.variant : visit;
 
@@ -17,7 +14,9 @@ private enum SIGCHLD = 17;
 
 final class SignalEventDriverProcesses(Loop : PosixEventLoop) : EventDriverProcesses {
 @safe: /*@nogc:*/ nothrow:
+    import core.stdc.errno : errno, EAGAIN, EINPROGRESS;
     import core.sys.linux.sys.signalfd;
+    import core.sys.posix.unistd : close, read, write, dup;
 
     private {
         static struct ProcessInfo {
@@ -38,6 +37,8 @@ final class SignalEventDriverProcesses(Loop : PosixEventLoop) : EventDriverProce
 
     this(Loop loop, EventDriverPipes pipes)
     {
+        import core.sys.posix.signal;
+
         m_loop = loop;
         m_pipes = pipes;
 
@@ -182,7 +183,9 @@ final class SignalEventDriverProcesses(Loop : PosixEventLoop) : EventDriverProce
 
     final override void kill(ProcessID pid, int signal)
     @trusted {
-        .kill(cast(int)pid, signal);
+        import core.sys.posix.signal : pkill = kill;
+
+        pkill(cast(int)pid, signal);
     }
 
     final override size_t wait(ProcessID pid, ProcessWaitCallback on_process_exit)
