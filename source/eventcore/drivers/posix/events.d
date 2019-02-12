@@ -8,7 +8,8 @@ import eventcore.internal.utils : nogc_assert, mallocT, freeT;
 
 
 version (linux) {
-	import core.sys.linux.sys.eventfd : eventfd, EFD_NONBLOCK, EFD_CLOEXEC;
+	nothrow @nogc extern (C) int eventfd(uint initval, int flags);
+    import core.sys.linux.sys.eventfd : EFD_NONBLOCK, EFD_CLOEXEC;
 }
 version (Posix) {
 	import core.sys.posix.unistd : close, read, write;
