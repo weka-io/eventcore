@@ -40,7 +40,7 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 
 
 	private {
-		alias CoreDriver = PosixEventDriverCore!(Loop, TimerDriver, EventsDriver);
+		alias CoreDriver = PosixEventDriverCore!(Loop, TimerDriver, EventsDriver, ProcessDriver);
 		alias EventsDriver = PosixEventDriverEvents!(Loop, SocketsDriver);
 		version (linux) alias SignalsDriver = SignalFDEventDriverSignals!Loop;
 		else alias SignalsDriver = DummyEventDriverSignals!Loop;
@@ -78,12 +78,12 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 		m_events = mallocT!EventsDriver(m_loop, m_sockets);
 		m_signals = mallocT!SignalsDriver(m_loop);
 		m_timers = mallocT!TimerDriver;
-		m_core = mallocT!CoreDriver(m_loop, m_timers, m_events);
+		m_pipes = mallocT!PipeDriver(m_loop);
+		m_processes = mallocT!ProcessDriver(m_loop, m_pipes);
+		m_core = mallocT!CoreDriver(m_loop, m_timers, m_events, m_processes);
 		m_dns = mallocT!DNSDriver(m_events, m_signals);
 		m_files = mallocT!FileDriver(m_events);
-		m_pipes = mallocT!PipeDriver(m_loop);
 		m_watchers = mallocT!WatcherDriver(m_events);
-		m_processes = mallocT!ProcessDriver(m_loop, m_pipes);
 	}
 
 	// force overriding these in the (final) sub classes to avoid virtual calls
@@ -149,7 +149,7 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 }
 
 
-final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTimers, Events : EventDriverEvents) : EventDriverCore {
+final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTimers, Events : EventDriverEvents, Processes : EventDriverProcesses) : EventDriverCore {
 @safe nothrow:
 	import core.atomic : atomicLoad, atomicStore;
 	import core.sync.mutex : Mutex;
@@ -163,6 +163,7 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 		Loop m_loop;
 		Timers m_timers;
 		Events m_events;
+		Processes m_processes;
 		bool m_exit = false;
 		EventID m_wakeupEvent;
 
@@ -170,11 +171,12 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 		ConsumableQueue!(Tuple!(ThreadCallback, intptr_t)) m_threadCallbacks;
 	}
 
-	this(Loop loop, Timers timers, Events events)
+	this(Loop loop, Timers timers, Events events, Processes processes)
 	@nogc {
 		m_loop = loop;
 		m_timers = timers;
 		m_events = events;
+		m_processes = processes;
 		m_wakeupEvent = events.createInternal();
 
 		static if (__VERSION__ >= 2074)
@@ -198,7 +200,7 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 		} catch (Exception e) assert(false, e.msg);
 	}
 
-	@property size_t waiterCount() const { return m_loop.m_waiterCount + m_timers.pendingCount; }
+	@property size_t waiterCount() const { return m_loop.m_waiterCount + m_timers.pendingCount + m_processes.pendingCount; }
 
 	final override ExitReason processEvents(Duration timeout)
 	{
@@ -357,11 +359,11 @@ package class PosixEventLoop {
 		// ensure that the FD doesn't get closed before the callback gets called.
 		with (m_fds[fd.value]) {
 			if (callback !is null) {
-				m_waiterCount++;
+				if (!(common.flags & FDFlags.internal)) m_waiterCount++;
 				common.refCount++;
 			} else {
 				common.refCount--;
-				m_waiterCount--;
+				if (!(common.flags & FDFlags.internal)) m_waiterCount--;
 			}
 			common.callback[evt] = callback;
 		}

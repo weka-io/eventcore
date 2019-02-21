@@ -291,6 +291,8 @@ final class SignalEventDriverProcesses(Loop : PosixEventLoop) : EventDriverProce
         }
         return info.userData.ptr;
     }
+
+    package final @property size_t pendingCount() const nothrow { return m_processes.length; }
 }
 
 final class DummyEventDriverProcesses(Loop : PosixEventLoop) : EventDriverProcesses {
@@ -344,4 +346,6 @@ final class DummyEventDriverProcesses(Loop : PosixEventLoop) : EventDriverProces
     @system {
         assert(false, "TODO!");
     }
+
+    package final @property size_t pendingCount() const nothrow { return 0; }
 }
