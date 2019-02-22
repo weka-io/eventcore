@@ -135,10 +135,11 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 		while (result.length) {
 			assert(result.length >= FILE_NOTIFY_INFORMATION._FileName.offsetof);
 			auto fni = () @trusted { return cast(FILE_NOTIFY_INFORMATION*)result.ptr; } ();
-			if (fni.NextEntryOffset > result.length) {
+			auto fulllen = () @trusted { try return cast(ubyte*)&fni.FileName[fni.FileNameLength/2] - result.ptr; catch (Exception e) return size_t.max; } ();
+			if (fni.NextEntryOffset > result.length || fulllen > (fni.NextEntryOffset ? fni.NextEntryOffset : result.length)) {
 				import std.stdio : stderr;
 				() @trusted {
-					try stderr.writeln("ERROR: Invalid directory watcher event received.");
+					try stderr.writefln("ERROR: Invalid directory watcher event received: %s", *fni);
 					catch (Exception e) {}
 				} ();
 				break;
@@ -156,7 +157,23 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 			}
 
 			ch.baseDirectory = slot.directory;
-			auto path = () @trusted { try return fni.FileName[0 .. fni.FileNameLength/2].map!(ch => dchar(ch)).to!string; catch (Exception e) assert(false, e.msg); } ();
+			string path;
+			try {
+				() @trusted {
+					path = fni.FileName[0 .. fni.FileNameLength/2].map!(ch => dchar(ch)).to!string;
+				} ();
+			} catch (Exception e) {
+				import std.stdio : stderr;
+				// NOTE: sometimes corrupted strings and invalid UTF-16
+				//       surrogate pairs occur here, until the cause of this is
+				//       found, the best alternative is to ignore those changes
+				() @trusted {
+					try stderr.writefln("Invalid path in directory change: %(%02X %)", cast(ushort[])fni.FileName[0 .. fni.FileNameLength/2]);
+					catch (Exception e) assert(false, e.msg);
+				} ();
+				if (fni.NextEntryOffset > 0) continue;
+				else break;
+			}
 			auto fullpath = buildPath(slot.directory, path);
 			ch.directory = dirName(path);
 			if (ch.directory == ".") ch.directory = "";
