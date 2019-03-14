@@ -19,6 +19,7 @@ version (Posix) {
 	import core.sys.posix.unistd : close, read, write;
 	import core.stdc.errno : errno, EAGAIN, EINPROGRESS;
 	import core.sys.posix.fcntl;
+	import core.sys.posix.sys.socket;
 
 	version (linux) enum SO_REUSEPORT = 15;
 	else enum SO_REUSEPORT = 0x200;
