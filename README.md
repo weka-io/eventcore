@@ -57,6 +57,8 @@ Unix Signals          | yes²   | yes   | &mdash; | &mdash; | &mdash;
 Files                 | yes    | yes   | yes     | yes     | &mdash;
 UI Integration        | yes¹   | yes¹  | yes     | yes¹    | &mdash;
 File watcher          | yes²   | yes   | yes     | yes²    | &mdash;
+Pipes                 | yes    | yes   | &mdash; | yes     | &mdash;
+Processes             | yes    | yes   | &mdash; | yes     | &mdash;
 
 ¹ Manually, by adopting the X11 display connection socket
 

@@ -15,6 +15,8 @@ import eventcore.drivers.winapi.core;
 import eventcore.drivers.winapi.dns;
 import eventcore.drivers.winapi.events;
 import eventcore.drivers.winapi.files;
+import eventcore.drivers.winapi.pipes;
+import eventcore.drivers.winapi.processes;
 import eventcore.drivers.winapi.signals;
 import eventcore.drivers.winapi.sockets;
 import eventcore.drivers.winapi.watchers;
@@ -35,6 +37,8 @@ final class WinAPIEventDriver : EventDriver {
 		WinAPIEventDriverEvents m_events;
 		WinAPIEventDriverSignals m_signals;
 		WinAPIEventDriverWatchers m_watchers;
+		WinAPIEventDriverProcesses m_processes;
+		WinAPIEventDriverPipes m_pipes;
 	}
 
 	static WinAPIEventDriver threadInstance;
@@ -57,8 +61,10 @@ final class WinAPIEventDriver : EventDriver {
 		m_events = mallocT!WinAPIEventDriverEvents(m_core);
 		m_files = mallocT!WinAPIEventDriverFiles(m_core);
 		m_sockets = mallocT!WinAPIEventDriverSockets(m_core);
+		m_pipes = mallocT!WinAPIEventDriverPipes();
 		m_dns = mallocT!WinAPIEventDriverDNS();
 		m_watchers = mallocT!WinAPIEventDriverWatchers(m_core);
+		m_processes = mallocT!WinAPIEventDriverProcesses();
 	}
 
 @safe: /*@nogc:*/ nothrow:
@@ -73,6 +79,8 @@ final class WinAPIEventDriver : EventDriver {
 	override @property shared(inout(WinAPIEventDriverEvents)) events() inout shared { return m_events; }
 	override @property inout(WinAPIEventDriverSignals) signals() inout { return m_signals; }
 	override @property inout(WinAPIEventDriverWatchers) watchers() inout { return m_watchers; }
+	override @property inout(WinAPIEventDriverProcesses) processes() inout { return m_processes; }
+	override @property inout(WinAPIEventDriverPipes) pipes() inout { return m_pipes; }
 
 	override bool dispose()
 	{
@@ -88,8 +96,10 @@ final class WinAPIEventDriver : EventDriver {
 		threadInstance = null;
 
 		try () @trusted {
+			freeT(m_processes);
 			freeT(m_watchers);
 			freeT(m_dns);
+			freeT(m_pipes);
 			freeT(m_sockets);
 			freeT(m_files);
 			freeT(m_events);
