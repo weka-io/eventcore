@@ -42,7 +42,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	package bool checkForLeakedHandles()
 	{
 		if (m_socketCount == 0) return false;
-		print("Warning: Socket handles leaked at driver shutdown.");
+		print("Warning: %s socket handles leaked at driver shutdown.", m_socketCount);
 		return true;
 	}
 
@@ -155,10 +155,12 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		void invalidateSocket() @nogc @trusted nothrow { closesocket(fd); fd = INVALID_SOCKET; }
 
 		() @trusted {
-			int tmp_reuse = 1;
-			if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &tmp_reuse, tmp_reuse.sizeof) != 0) {
-				invalidateSocket();
-				return;
+			if (options & StreamListenOptions.reuseAddress) {
+				int tmp_reuse = 1;
+				if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &tmp_reuse, tmp_reuse.sizeof) != 0) {
+					invalidateSocket();
+					return;
+				}
 			}
 
 			// FIXME: should SO_EXCLUSIVEADDRUSE be used of StreamListenOptions.reuseAddress isn't set?

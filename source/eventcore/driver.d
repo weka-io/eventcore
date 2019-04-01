@@ -876,8 +876,13 @@ enum ConnectionState {
 }
 
 enum StreamListenOptions {
-	defaults = 0,
+	none = 0,
+	/// Applies the `SO_REUSEPORT` flag
 	reusePort = 1<<0,
+	/// Avoids applying the `SO_REUSEADDR` flag
+	reuseAddress = 1<<1,
+	///
+	defaults = reuseAddress,
 }
 
 enum StreamSocketOption {

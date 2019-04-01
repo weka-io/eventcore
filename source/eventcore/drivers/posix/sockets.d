@@ -221,9 +221,11 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		() @trusted {
 			int tmp_reuse = 1;
 			// FIXME: error handling!
-			if ((options & StreamListenOptions.reusePort) && setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &tmp_reuse, tmp_reuse.sizeof) != 0) {
-				invalidateSocket();
-				return;
+			if (options & StreamListenOptions.reuseAddress) {
+				if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &tmp_reuse, tmp_reuse.sizeof) != 0) {
+					invalidateSocket();
+					return;
+				}
 			}
 			version (Windows) {} else {
 				if ((options & StreamListenOptions.reusePort) && setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &tmp_reuse, tmp_reuse.sizeof) != 0) {
