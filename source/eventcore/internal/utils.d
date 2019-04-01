@@ -210,6 +210,7 @@ struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
 			() @trusted {
 				auto newptr = cast(ChunkPtr*)realloc(m_chunks.ptr, l * ChunkPtr.length);
 				assert(newptr !is null, "Failed to allocate chunk index!");
+				newptr[m_chunks.length .. l] = ChunkPtr.init;
 				m_chunks = newptr[0 .. l];
 			} ();
 		}
