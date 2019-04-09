@@ -6,7 +6,8 @@ import eventcore.driver;
 import eventcore.drivers.winapi.core;
 import eventcore.drivers.winapi.driver : WinAPIEventDriver; // FIXME: this is an ugly dependency
 import eventcore.internal.win32;
-import std.experimental.allocator : dispose, makeArray, theAllocator;
+import std.experimental.allocator.mallocator : Mallocator;
+import std.experimental.allocator : dispose, makeArray;
 
 
 final class WinAPIEventDriverWatchers : EventDriverWatchers {
@@ -23,6 +24,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 	override WatcherID watchDirectory(string path, bool recursive, FileChangesCallback callback)
 	{
 		import std.utf : toUTF16z;
+
 		auto handle = () @trusted {
 			scope (failure) assert(false);
 			return CreateFileW(path.toUTF16z, FILE_LIST_DIRECTORY,
@@ -43,7 +45,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 		slot.callback = callback;
 		slot.overlapped.driver = m_core;
 		slot.buffer = () @trusted {
-			try return theAllocator.makeArray!ubyte(16384);
+			try return Mallocator.instance.makeArray!ubyte(16384);
 			catch (Exception e) assert(false, "Failed to allocate directory watcher buffer.");
 		} ();
 		if (!triggerRead(handle, *slot)) {
@@ -83,7 +85,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 				CloseHandle(handle);
 
 				() @trusted {
-					try theAllocator.dispose(slot.watcher.buffer);
+					try Mallocator.instance.dispose(slot.watcher.buffer);
 					catch (Exception e) assert(false, "Freeing directory watcher buffer failed.");
 				} ();
 				slot.watcher.buffer = null;
