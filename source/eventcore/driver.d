@@ -466,8 +466,8 @@ interface EventDriverFiles {
 	@property final ref T userData(T)(FileFD descriptor)
 	@trusted {
 		import std.conv : emplace;
-		static void init(void* ptr) { emplace(cast(T*)ptr); }
-		static void destr(void* ptr) { destroy(*cast(T*)ptr); }
+		static void init(void* ptr) @nogc { emplace(cast(T*)ptr); }
+		static void destr(void* ptr) @nogc { destroy(*cast(T*)ptr); }
 		return *cast(T*)rawUserData(descriptor, T.sizeof, &init, &destr);
 	}
 
@@ -524,8 +524,8 @@ interface EventDriverEvents {
 	@property final ref T userData(T)(EventID descriptor)
 	@trusted {
 		import std.conv : emplace;
-		static void init(void* ptr) { emplace(cast(T*)ptr); }
-		static void destr(void* ptr) { destroy(*cast(T*)ptr); }
+		static void init(void* ptr) @nogc { emplace(cast(T*)ptr); }
+		static void destr(void* ptr) @nogc { destroy(*cast(T*)ptr); }
 		return *cast(T*)rawUserData(descriptor, T.sizeof, &init, &destr);
 	}
 
@@ -610,8 +610,8 @@ interface EventDriverTimers {
 	@property final ref T userData(T)(TimerID descriptor)
 	@trusted {
 		import std.conv : emplace;
-		static void init(void* ptr) { emplace(cast(T*)ptr); }
-		static void destr(void* ptr) { destroy(*cast(T*)ptr); }
+		static void init(void* ptr) @nogc { emplace(cast(T*)ptr); }
+		static void destr(void* ptr) @nogc { destroy(*cast(T*)ptr); }
 		return *cast(T*)rawUserData(descriptor, T.sizeof, &init, &destr);
 	}
 
@@ -643,8 +643,8 @@ interface EventDriverWatchers {
 	@property final ref T userData(T)(WatcherID descriptor)
 	@trusted {
 		import std.conv : emplace;
-		static void init(void* ptr) { emplace(cast(T*)ptr); }
-		static void destr(void* ptr) { destroy(*cast(T*)ptr); }
+		static void init(void* ptr) @nogc { emplace(cast(T*)ptr); }
+		static void destr(void* ptr) @nogc { destroy(*cast(T*)ptr); }
 		return *cast(T*)rawUserData(descriptor, T.sizeof, &init, &destr);
 	}
 
@@ -716,8 +716,8 @@ interface EventDriverProcesses {
 	@property final ref T userData(T)(ProcessID descriptor)
 	@trusted {
 		import std.conv : emplace;
-		static void init(void* ptr) { emplace(cast(T*)ptr); }
-		static void destr(void* ptr) { destroy(*cast(T*)ptr); }
+		static void init(void* ptr) @nogc { emplace(cast(T*)ptr); }
+		static void destr(void* ptr) @nogc { destroy(*cast(T*)ptr); }
 		return *cast(T*)rawUserData(descriptor, T.sizeof, &init, &destr);
 	}
 
@@ -791,8 +791,8 @@ interface EventDriverPipes {
 	@property final ref T userData(T)(PipeFD descriptor)
 	@trusted {
 		import std.conv : emplace;
-		static void init(void* ptr) { emplace(cast(T*)ptr); }
-		static void destr(void* ptr) { destroy(*cast(T*)ptr); }
+		static void init(void* ptr) @nogc { emplace(cast(T*)ptr); }
+		static void destr(void* ptr) @nogc { destroy(*cast(T*)ptr); }
 		return *cast(T*)rawUserData(descriptor, T.sizeof, &init, &destr);
 	}
 
