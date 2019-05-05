@@ -195,7 +195,7 @@ final class PosixEventDriverPipes(Loop : PosixEventLoop) : EventDriverPipes {
             auto cb = slot.writeCallback;
             slot.writeCallback = null;
             slot.writeBuffer = null;
-            cb(pipe, IOStatus.error, slot.bytesRead);
+            cb(pipe, status, slot.bytesWritten);
         }
 
         ssize_t ret = () @trusted { return write(cast(int)pipe, slot.writeBuffer.ptr, min(slot.writeBuffer.length, int.max)); } ();
