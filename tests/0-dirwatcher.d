@@ -50,18 +50,24 @@ void main()
 		}
 	});
 
-	auto fil = File(testDir~"/"~testFilename, "wt");
+	File fil;
 
 	auto tm = eventDriver.timers.create();
-	eventDriver.timers.set(tm, 1500.msecs, 0.msecs);
+	eventDriver.timers.set(tm, 500.msecs, 0.msecs);
 	eventDriver.timers.wait(tm, (tm) {
-		scope (failure) assert(false);
-		fil.write("test");
-		fil.close();
+		try fil = File(testDir~"/"~testFilename, "wt");
+		catch (Exception e) assert(false, e.msg);
+
 		eventDriver.timers.set(tm, 1500.msecs, 0.msecs);
 		eventDriver.timers.wait(tm, (tm) {
 			scope (failure) assert(false);
-			remove(testDir~"/"~testFilename);
+			fil.write("test");
+			fil.close();
+			eventDriver.timers.set(tm, 1500.msecs, 0.msecs);
+			eventDriver.timers.wait(tm, (tm) {
+				scope (failure) assert(false);
+				remove(testDir~"/"~testFilename);
+			});
 		});
 	});
 

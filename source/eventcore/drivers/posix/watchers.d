@@ -332,40 +332,6 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 			immutable string m_basePath;
 			immutable bool m_recursive;
 			immutable FileChangesCallback m_callback;
-
-			final static class Entry {
-				Entry parent;
-				string name;
-				ulong size;
-				long lastChange;
-
-				this(Entry parent, string name, ulong size, long lastChange)
-				{
-					this.parent = parent;
-					this.name = name;
-					this.size = size;
-					this.lastChange = lastChange;
-				}
-
-				string path()
-				{
-					import std.path : buildPath;
-					if (parent)
-						return buildPath(parent.path, name);
-					else return name;
-				}
-
-				bool isDir() const { return size == ulong.max; }
-			}
-
-			struct Key {
-				Entry parent;
-				string name;
-			}
-
-			// used only within the polling thread
-			Entry[Key] m_entries;
-			size_t m_entryCount;
 		}
 
 		this(shared(Events) event_driver, EventID event, string path, bool recursive, FileChangesCallback callback)
@@ -378,7 +344,6 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 			m_basePath = path;
 			m_recursive = recursive;
 			m_callback = callback;
-			scan(false);
 
 			try super(&run);
 			catch (Exception e) assert(false, e.msg);
@@ -407,8 +372,16 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 			import core.time : MonoTime, msecs;
 			import std.algorithm.comparison : min;
 
+			auto poller = new DirectoryPoller(m_basePath, m_recursive, (ch) {
+				try synchronized (m_changesMutex) {
+					m_changes ~= ch;
+				} catch (Exception e) assert(false, "Mutex lock failed: "~e.msg);
+			});
+
+			poller.scan(false);
+
 			try while (true) {
-				auto timeout = MonoTime.currTime() + min(m_entryCount, 60000).msecs + 1000.msecs;
+				auto timeout = MonoTime.currTime() + min(poller.entryCount, 60000).msecs + 1000.msecs;
 				while (true) {
 					try synchronized (m_changesMutex) {
 						if (m_changesEvent == EventID.invalid) return;
@@ -418,7 +391,7 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 					sleep(min(1000.msecs, remaining));
 				}
 
-				scan(true);
+				poller.scan(true);
 
 				try synchronized (m_changesMutex) {
 					if (m_changesEvent == EventID.invalid) return;
@@ -434,11 +407,62 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 			}
 		}
 
+	}
+
+	private final class DirectoryPoller {
+		private final static class Entry {
+			Entry parent;
+			string name;
+			ulong size;
+			long lastChange;
+
+			this(Entry parent, string name, ulong size, long lastChange)
+			{
+				this.parent = parent;
+				this.name = name;
+				this.size = size;
+				this.lastChange = lastChange;
+			}
+
+			string path()
+			{
+				import std.path : buildPath;
+				if (parent)
+					return buildPath(parent.path, name);
+				else return name;
+			}
+
+			bool isDir() const { return size == ulong.max; }
+		}
+
+		private struct Key {
+			Entry parent;
+			string name;
+		}
+
+		alias ChangeCallback = void delegate(FileChange) @safe nothrow;
+
+		private {
+			immutable string m_basePath;
+			immutable bool m_recursive;
+
+			Entry[Key] m_entries;
+			size_t m_entryCount;
+			ChangeCallback m_onChange;
+		}
+
+		this(string path, bool recursive, ChangeCallback on_change)
+		{
+			m_basePath = path;
+			m_recursive = recursive;
+			m_onChange = on_change;
+		}
+
+		@property size_t entryCount() const { return m_entryCount; }
+
 		private void addChange(FileChangeKind kind, Key key, bool is_dir)
 		{
-			try synchronized (m_changesMutex) {
-				m_changes ~= FileChange(kind, m_basePath, key.parent ? key.parent.path : "", key.name, is_dir);
-			} catch (Exception e) assert(false, "Mutex lock failed: "~e.msg);
+			m_onChange(FileChange(kind, m_basePath, key.parent ? key.parent.path : "", key.name, is_dir));
 		}
 
 		private void scan(bool generate_changes)
