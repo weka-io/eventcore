@@ -134,7 +134,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 		auto ret = () @trusted { return connect(cast(sock_t)sock, address.name, address.nameLen); } ();
 		if (ret == 0) {
-			m_loop.m_fds[sock].specific.state = ConnectionState.connected;
+			m_loop.m_fds[sock].streamSocket.state = ConnectionState.connected;
 			on_connect(sock, ConnectStatus.connected);
 		} else {
 			auto err = getSocketError();
