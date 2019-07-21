@@ -79,7 +79,7 @@ final class PosixEventDriver(Loop : PosixEventLoop) : EventDriver {
 		m_signals = mallocT!SignalsDriver(m_loop);
 		m_timers = mallocT!TimerDriver;
 		m_pipes = mallocT!PipeDriver(m_loop);
-		m_processes = mallocT!ProcessDriver(m_loop, m_pipes);
+		m_processes = mallocT!ProcessDriver(m_loop, this);
 		m_core = mallocT!CoreDriver(m_loop, m_timers, m_events, m_processes);
 		m_dns = mallocT!DNSDriver(m_events, m_signals);
 		m_files = mallocT!FileDriver(m_events);
