@@ -295,7 +295,7 @@ final class SignalEventDriverProcesses(Loop : PosixEventLoop) : EventDriverProce
         // thread.
         if (() @trusted { return cast(void*)this == cast(void*)driver; } ()) {
             onLocalProcessExit(cast(intptr_t)pid);
-        } else {
+        } else if (driver) {
             auto sharedDriver = () @trusted { return cast(shared typeof(this))driver; } ();
 
             sharedDriver.m_driver.core.runInOwnerThread(&onLocalProcessExit, cast(intptr_t)pid);
