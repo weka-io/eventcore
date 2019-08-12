@@ -50,10 +50,12 @@ configuration "select-optlink" {
 	sourceFiles "lib/ws2_32.lib" "lib/kernel32.lib"
 }
 
+/*
 configuration "libasync" {
 	dependency "libasync" version="~>0.8.2"
 	versions "EventcoreLibasyncDriver"
 }
+*/
 
 configuration "generic" {
 	// Defines eventDriver as the generic EventDriver interface. Setup must be done manually.
