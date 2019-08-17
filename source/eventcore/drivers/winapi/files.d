@@ -26,7 +26,7 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		import std.utf : toUTF16z;
 
 		auto access = mode == FileOpenMode.readWrite || mode == FileOpenMode.createTrunc ? (GENERIC_WRITE | GENERIC_READ) :
-						mode == FileOpenMode.append ? GENERIC_WRITE : GENERIC_READ;
+						mode == FileOpenMode.append ? FILE_APPEND_DATA : GENERIC_READ;
 		auto shareMode = FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE;
 		auto creation = mode == FileOpenMode.createTrunc ? CREATE_ALWAYS : mode == FileOpenMode.append? OPEN_ALWAYS : OPEN_EXISTING;
 
