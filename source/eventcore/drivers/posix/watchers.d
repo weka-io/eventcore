@@ -475,12 +475,11 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 
 			scan(null, generate_changes, new_entries, added, ec);
 
+			// detect all roots of removed sub trees
 			foreach (e; m_entries.byKeyValue) {
 				if (!e.key.parent || Key(e.key.parent.parent, e.key.parent.name) !in m_entries) {
 					if (generate_changes)
 						addChange(FileChangeKind.removed, e.key, e.value.isDir);
-					try freeT(e.value);
-					catch (Exception e) assert(false, e.msg);
 				}
 			}
 
@@ -489,6 +488,12 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 
 			swap(m_entries, new_entries);
 			m_entryCount = ec;
+
+			// clear all left-over entries (delted directly or indirectly)
+			foreach (e; new_entries.byValue) {
+				try freeT(e);
+				catch (Exception e) assert(false, e.msg);
+			}
 		}
 
 		private void scan(Entry parent, bool generate_changes, ref Entry[Key] new_entries, ref Entry[] added, ref size_t ec)
