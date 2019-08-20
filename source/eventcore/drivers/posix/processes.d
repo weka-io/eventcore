@@ -8,6 +8,7 @@ import eventcore.internal.utils : nogc_assert, print;
 
 import std.algorithm.comparison : among;
 import std.variant : visit;
+import std.stdint;
 
 private struct ProcessInfo {
     bool exited = true;
