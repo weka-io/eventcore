@@ -258,17 +258,26 @@ final class SignalEventDriverProcesses(Loop : PosixEventLoop) : EventDriverProce
 
 	private void onSignal(FD fd)
 	{
+		import core.sys.posix.sys.wait : WNOHANG, WEXITSTATUS, waitpid;
+
 		SignalListenID lid = cast(SignalListenID)fd;
 
+		// drain the signalfd - note that multiple signals can be combined into
+		// a single value, so that individual siginfo results are useless for
+		// us
 		signalfd_siginfo nfo;
-		do {
-			auto ret = () @trusted { return read(cast(int)fd, &nfo, nfo.sizeof); } ();
+		while (() @trusted { return read(cast(int)fd, &nfo, nfo.sizeof); } () == nfo.sizeof)
+		{
+		}
 
-			if (ret == -1 && errno.among!(EAGAIN, EINPROGRESS) || ret != nfo.sizeof)
-				return;
+		// instead, use waitpid to determine all exited processes
+		while (true) {
+			int status;
+			auto ret = () @trusted { return waitpid(-1, &status, WNOHANG); } ();
+			if (ret <= 0) break;
 
-			onProcessExit(nfo.ssi_pid, nfo.ssi_status);
-		} while (true);
+			onProcessExit(ret, () @trusted { return WEXITSTATUS(status); } ());
+		}
 	}
 
 	private void onProcessExit(int system_pid, int exitCode)
