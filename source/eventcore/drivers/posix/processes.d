@@ -273,12 +273,18 @@ final class SignalEventDriverProcesses(Loop : PosixEventLoop) : EventDriverProce
 		}
 
 		// instead, use waitpid to determine all exited processes
-		while (true) {
-			int status;
-			auto ret = () @trusted { return waitpid(-1, &status, WNOHANG); } ();
-			if (ret <= 0) break;
+		ProcessID[] allprocs;
+		() @trusted {
+			try synchronized (StaticProcesses.m_mutex)
+				allprocs = StaticProcesses.m_processes.keys;
+			catch (Exception e) assert(false, e.msg);
+		} ();
 
-			onProcessExit(ret, () @trusted { return WEXITSTATUS(status); } ());
+		foreach (pid; allprocs) {
+			int status;
+			auto ret = () @trusted { return waitpid(cast(int)pid, &status, WNOHANG); } ();
+			if (ret == cast(int)pid)
+				onProcessExit(ret, () @trusted { return WEXITSTATUS(status); } ());
 		}
 	}
 
