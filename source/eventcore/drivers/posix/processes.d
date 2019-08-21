@@ -231,7 +231,7 @@ final class SignalEventDriverProcesses(Loop : PosixEventLoop) : EventDriverProce
 			if (info.exited) {
 				exited = true;
 				exitCode = info.exitCode;
-				return 0;
+				return size_t.max;
 			} else {
 				info.callbacks ~= on_process_exit;
 				return info.callbacks.length - 1;
@@ -245,14 +245,16 @@ final class SignalEventDriverProcesses(Loop : PosixEventLoop) : EventDriverProce
 		return id;
 	}
 
-	final override void cancelWait(ProcessID pid, size_t waitId)
+	final override void cancelWait(ProcessID pid, size_t wait_id)
 	{
+		if (wait_id == size_t.max) return;
+
 		lockedProcessInfo!((info) {
 			assert(info !is null, "Unknown process ID");
 			assert(!info.exited, "Cannot cancel wait when none are pending");
-			assert(info.callbacks.length > waitId, "Invalid process wait ID");
+			assert(info.callbacks.length > wait_id, "Invalid process wait ID");
 
-			info.callbacks[waitId] = null;
+			info.callbacks[wait_id] = null;
 		})(pid);
 	}
 
