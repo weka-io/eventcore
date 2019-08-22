@@ -158,7 +158,10 @@ final class PosixEventDriverProcesses(Loop : PosixEventLoop) : EventDriverProces
 	@trusted {
 		import core.sys.posix.signal : pkill = kill;
 
-		pkill(cast(int)pid, signal);
+		assert(cast(int)pid > 0, "Invalid PID passed to kill.");
+
+		if (cast(int)pid > 0)
+			pkill(cast(int)pid, signal);
 	}
 
 	final override size_t wait(ProcessID pid, ProcessWaitCallback on_process_exit)
