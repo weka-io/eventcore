@@ -48,7 +48,7 @@ void main(string[] args)
 	auto procs = new Process[](20);
 	foreach (i, ref p; procs) {
 		p = eventDriver.processes.spawn(
-			["./test", targettime.stdTime.to!string],
+			[args[0], targettime.stdTime.to!string],
 			ProcessStdinFile(ProcessRedirect.inherit),
 			ProcessStdoutFile(ProcessRedirect.inherit),
 			ProcessStderrFile(ProcessRedirect.inherit),
