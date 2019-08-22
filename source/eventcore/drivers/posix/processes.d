@@ -133,7 +133,7 @@ private auto lockedProcessInfo(alias fn)(ProcessID pid) @trusted {
 
 private enum SIGCHLD = 17;
 
-final class SignalEventDriverProcesses(Loop : PosixEventLoop) : EventDriverProcesses {
+final class PosixEventDriverProcesses(Loop : PosixEventLoop) : EventDriverProcesses {
 @safe: /*@nogc:*/ nothrow:
 	import core.stdc.errno : errno, EAGAIN, EINPROGRESS;
 	import core.sys.linux.sys.signalfd;
