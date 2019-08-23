@@ -16,10 +16,8 @@ private enum SIGCHLD = 17;
 
 final class PosixEventDriverProcesses(Loop : PosixEventLoop) : EventDriverProcesses {
 @safe: /*@nogc:*/ nothrow:
-	import core.stdc.errno : errno, EAGAIN, EINPROGRESS;
 	import core.sync.mutex : Mutex;
-	import core.sys.linux.sys.signalfd;
-	import core.sys.posix.unistd : close, read, write, dup;
+	import core.sys.posix.unistd : dup;
 	import core.thread : Thread;
 
 	private {
@@ -34,8 +32,6 @@ final class PosixEventDriverProcesses(Loop : PosixEventLoop) : EventDriverProces
 
 	this(Loop loop, EventDriver driver)
 	{
-		import core.sys.posix.signal;
-
 		m_loop = loop;
 		m_driver = driver;
 	}
@@ -302,85 +298,83 @@ final class PosixEventDriverProcesses(Loop : PosixEventLoop) : EventDriverProces
 		fn(info);
 	}
 
-		private static void add(ProcessID pid, ProcessInfo info) @trusted {
-			s_mutex.lock_nothrow();
-			scope (exit) s_mutex.unlock_nothrow();
+	private static void add(ProcessID pid, ProcessInfo info) @trusted {
+		s_mutex.lock_nothrow();
+		scope (exit) s_mutex.unlock_nothrow();
 
-			if (!s_waitThread) {
-				s_waitThread = new Thread(&waitForProcesses);
-				s_waitThread.start();
-			}
-
-			assert(pid !in s_processes, "Process adopted twice");
-			s_processes[pid] = info;
+		if (!s_waitThread) {
+			s_waitThread = new Thread(&waitForProcesses);
+			s_waitThread.start();
 		}
 
-		private static void waitForProcesses()
-		@system {
-			import core.stdc.errno : ECHILD, errno;
-			import core.sys.posix.sys.wait : idtype_t, WNOHANG, WNOWAIT, WEXITED, WEXITSTATUS, WIFEXITED, WTERMSIG, waitid, waitpid;
-			import core.sys.posix.signal : siginfo_t;
+		assert(pid !in s_processes, "Process adopted twice");
+		s_processes[pid] = info;
+	}
 
-			while (true) {
-				siginfo_t dummy;
-				auto ret = waitid(idtype_t.P_ALL, -1, &dummy, WEXITED|WNOWAIT);
-				if (ret == -1) {
-					{
-						s_mutex.lock_nothrow();
-						scope (exit) s_mutex.unlock_nothrow();
-						s_waitThread = null;
-					}
-					break;
-				}
+	private static void waitForProcesses()
+	@system {
+		import core.sys.posix.sys.wait : idtype_t, WNOHANG, WNOWAIT, WEXITED, WEXITSTATUS, WIFEXITED, WTERMSIG, waitid, waitpid;
+		import core.sys.posix.signal : siginfo_t;
 
-				ProcessID[] allprocs;
-
+		while (true) {
+			siginfo_t dummy;
+			auto ret = waitid(idtype_t.P_ALL, -1, &dummy, WEXITED|WNOWAIT);
+			if (ret == -1) {
 				{
 					s_mutex.lock_nothrow();
 					scope (exit) s_mutex.unlock_nothrow();
-
-
-					() @trusted {
-						foreach (ref entry; s_processes.byKeyValue) {
-							if (!entry.value.exited)
-								allprocs ~= entry.key;
-						}
-					} ();
+					s_waitThread = null;
 				}
+				break;
+			}
 
-				foreach (pid; allprocs) {
-					int status;
-					ret = () @trusted { return waitpid(cast(int)pid, &status, WNOHANG); } ();
-					if (ret == cast(int)pid) {
-						int exitstatus = WIFEXITED(status) ? WEXITSTATUS(status) : -WTERMSIG(status);
-						onProcessExitStatic(ret, exitstatus);
+			ProcessID[] allprocs;
+
+			{
+				s_mutex.lock_nothrow();
+				scope (exit) s_mutex.unlock_nothrow();
+
+
+				() @trusted {
+					foreach (ref entry; s_processes.byKeyValue) {
+						if (!entry.value.exited)
+							allprocs ~= entry.key;
 					}
+				} ();
+			}
+
+			foreach (pid; allprocs) {
+				int status;
+				ret = () @trusted { return waitpid(cast(int)pid, &status, WNOHANG); } ();
+				if (ret == cast(int)pid) {
+					int exitstatus = WIFEXITED(status) ? WEXITSTATUS(status) : -WTERMSIG(status);
+					onProcessExitStatic(ret, exitstatus);
 				}
 			}
 		}
+	}
 
-		private static void onProcessExitStatic(int system_pid, int exit_status)
-		{
-			auto pid = cast(ProcessID)system_pid;
+	private static void onProcessExitStatic(int system_pid, int exit_status)
+	{
+		auto pid = cast(ProcessID)system_pid;
 
-			ProcessWaitCallback[] callbacks;
-			PosixEventDriverProcesses driver;
-			lockedProcessInfo(pid, (ProcessInfo* info) @safe {
-				// We get notified of any child exiting, so ignore the ones we're
-				// not aware of
-				if (info is null) return;
+		PosixEventDriverProcesses driver;
+		lockedProcessInfo(pid, (ProcessInfo* info) @safe {
+			// We get notified of any child exiting, so ignore the ones we're
+			// not aware of
+			if (info is null) return;
 
-				// Increment the ref count to make sure it doesn't get removed
-				info.refCount++;
+			// Increment the ref count to make sure it doesn't get removed
+			info.refCount++;
 
-				info.exited = true;
-				info.exitCode = exit_status;
-				driver = info.driver;
-			});
+			info.exited = true;
+			info.exitCode = exit_status;
+			driver = info.driver;
+		});
 
-			if (driver)
-				() @trusted { return cast(shared)driver; } ().onProcessExit(cast(int)pid);
-		}
+		if (driver)
+			() @trusted { return cast(shared)driver; } ().onProcessExit(cast(int)pid);
+	}
 
 	private static struct ProcessInfo {
 		bool exited = true;
