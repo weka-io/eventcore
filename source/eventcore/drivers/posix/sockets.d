@@ -708,9 +708,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	}
 
 	void receive(DatagramSocketFD socket, ubyte[] buffer, IOMode mode, DatagramIOCallback on_receive_finish)
-	@trusted { // DMD 2.072.0-b2: scope considered unsafe
-		import std.typecons : scoped;
-
+	@safe {
 		assert(mode != IOMode.all, "Only IOMode.immediate and IOMode.once allowed for datagram sockets.");
 
 		sizediff_t ret;
@@ -761,7 +759,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	}
 
 	private void onDgramRead(FD fd)
-	@trusted { // DMD 2.072.0-b2: scope considered unsafe
+	@safe {
 		auto slot = () @trusted { return &m_loop.m_fds[fd].datagramSocket(); } ();
 		auto socket = cast(DatagramSocketFD)fd;
 
