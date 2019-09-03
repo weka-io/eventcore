@@ -8,7 +8,7 @@ import eventcore.internal.utils : nogc_assert;
 import std.algorithm.comparison : among;
 
 
-final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSignals {
+final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSignalsExt {
 @safe: /*@nogc:*/ nothrow:
 	import core.stdc.errno : errno, EAGAIN, EINPROGRESS;
 	import core.sys.posix.signal;
@@ -21,15 +21,22 @@ final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSigna
 
 	override SignalListenID listen(int sig, SignalCallback on_signal)
 	{
-		return listenInternal(sig, on_signal, false);
+		return listenInternal([sig], SignalSlot(on_signal), false);
 	}
 
-	package SignalListenID listenInternal(int sig, SignalCallback on_signal, bool is_internal = true)
+	override SignalListenID listenMultiple(SignalInfoCallback on_signal, int[] sigs...)
+	{
+		return listenInternal(sigs, SignalSlot(null, on_signal), false);
+	}
+
+	package SignalListenID listenInternal(int[] sigs, SignalSlot slot, bool is_internal = true)
 	{
 		auto sigfd = () @trusted {
 			sigset_t sset;
 			sigemptyset(&sset);
-			sigaddset(&sset, sig);
+			foreach (sig; sigs) {
+				sigaddset(&sset, sig);
+			}
 
 			if (sigprocmask(SIG_BLOCK, &sset, null) != 0)
 				return -1;
@@ -38,7 +45,7 @@ final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSigna
 		} ();
 
 
-		auto fd = m_loop.initFD!SignalListenID(sigfd, is_internal ? FDFlags.internal : FDFlags.none, SignalSlot(on_signal));
+		auto fd = m_loop.initFD!SignalListenID(sigfd, is_internal ? FDFlags.internal : FDFlags.none, slot);
 		m_loop.registerFD(cast(FD)fd, EventMask.read);
 		m_loop.setNotifyCallback!(EventType.read)(cast(FD)fd, &onSignal);
 
@@ -79,19 +86,41 @@ final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSigna
 
 	private void onSignal(FD fd)
 	{
+		void callCb(SignalListenID lid, SignalStatus status, in ref signalfd_siginfo nfo) {
+			auto siginfo_cb = m_loop.m_fds[fd].signal.siginfoCallback;
+			if (siginfo_cb != null) {
+				siginfo_t siginfo = {
+					si_signo: nfo.ssi_signo,
+					si_errno: nfo.ssi_errno,
+					si_code: nfo.ssi_code,
+				};
+				if (siginfo.si_code == SI_QUEUE) {
+					() @trusted {
+						siginfo.si_pid = nfo.ssi_pid;
+						siginfo.si_uid = nfo.ssi_uid;
+						siginfo.si_value.sival_ptr = cast(void*) nfo.ssi_ptr;
+						siginfo.si_value.sival_int = nfo.ssi_int;
+					}();
+				}
+				siginfo_cb(lid, status, siginfo);
+				return;
+			}
+			auto cb = m_loop.m_fds[fd].signal.callback;
+			cb(lid, status, status == SignalStatus.error ? -1 : nfo.ssi_signo);
+		}
+
 		SignalListenID lid = cast(SignalListenID)fd;
 		signalfd_siginfo nfo;
 		do {
 			auto ret = () @trusted { return read(cast(int)fd, &nfo, nfo.sizeof); } ();
 			if (ret == -1 && errno.among!(EAGAIN, EINPROGRESS))
 				break;
-			auto cb = m_loop.m_fds[fd].signal.callback;
 			if (ret != nfo.sizeof) {
-				cb(lid, SignalStatus.error, -1);
+				callCb(lid, SignalStatus.error, nfo);
 				return;
 			}
 			addRef(lid);
-			cb(lid, SignalStatus.ok, nfo.ssi_signo);
+			callCb(lid, SignalStatus.ok, nfo);
 			releaseRef(lid);
 		} while (m_loop.m_fds[fd].common.refCount > 0);
 	}
@@ -133,4 +162,5 @@ final class DummyEventDriverSignals(Loop : PosixEventLoop) : EventDriverSignals 
 package struct SignalSlot {
 	alias Handle = SignalListenID;
 	SignalCallback callback;
+	SignalInfoCallback siginfoCallback;
 }
