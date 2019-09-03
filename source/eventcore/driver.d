@@ -573,6 +573,12 @@ interface EventDriverSignals {
 	bool releaseRef(SignalListenID descriptor);
 }
 
+version (Posix) {
+	interface EventDriverSignalsExt : EventDriverSignals {
+		SignalListenID listenMultiple(SignalInfoCallback on_signal, int[] sigs...);
+	}
+}
+
 interface EventDriverTimers {
 @safe: /*@nogc:*/ nothrow:
 	TimerID create();
@@ -837,6 +843,10 @@ alias FileIOCallback = void delegate(FileFD, IOStatus, size_t);
 alias PipeIOCallback = void delegate(PipeFD, IOStatus, size_t);
 alias EventCallback = void delegate(EventID);
 alias SignalCallback = void delegate(SignalListenID, SignalStatus, int);
+version (Posix) {
+	import core.sys.posix.signal : siginfo_t;
+	alias SignalInfoCallback = void delegate(SignalListenID, SignalStatus, in ref siginfo_t);
+}
 alias TimerCallback = void delegate(TimerID);
 alias TimerCallback2 = void delegate(TimerID, bool fired);
 alias FileChangesCallback = void delegate(WatcherID, in ref FileChange change);
