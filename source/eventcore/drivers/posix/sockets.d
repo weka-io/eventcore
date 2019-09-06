@@ -96,6 +96,16 @@ version (Windows) {
 	extern (C) int close(int fd) nothrow @safe;
 }
 
+version (Posix) {
+	version (OSX) {
+		enum SEND_FLAGS = 0;
+	} else {
+		enum SEND_FLAGS = MSG_NOSIGNAL;
+	}
+} else {
+	enum SEND_FLAGS = 0;
+}
+
 
 final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets {
 @safe: /*@nogc:*/ nothrow:
@@ -464,7 +474,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		}
 
 		sizediff_t ret;
-		() @trusted { ret = .send(cast(sock_t)socket, buffer.ptr, min(buffer.length, int.max), 0); } ();
+		() @trusted { ret = .send(cast(sock_t)socket, buffer.ptr, min(buffer.length, int.max), SEND_FLAGS); } ();
 
 		if (ret < 0) {
 			auto err = getSocketError();
@@ -517,7 +527,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		auto socket = cast(StreamSocketFD)fd;
 
 		sizediff_t ret;
-		() @trusted { ret = .send(cast(sock_t)socket, slot.writeBuffer.ptr, min(slot.writeBuffer.length, int.max), 0); } ();
+		() @trusted { ret = .send(cast(sock_t)socket, slot.writeBuffer.ptr, min(slot.writeBuffer.length, int.max), SEND_FLAGS); } ();
 
 		if (ret < 0) {
 			auto err = getSocketError();
@@ -792,10 +802,10 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 		sizediff_t ret;
 		if (target_address) {
-			() @trusted { ret = .sendto(cast(sock_t)socket, buffer.ptr, min(buffer.length, int.max), 0, target_address.name, target_address.nameLen); } ();
+			() @trusted { ret = .sendto(cast(sock_t)socket, buffer.ptr, min(buffer.length, int.max), SEND_FLAGS, target_address.name, target_address.nameLen); } ();
 			m_loop.m_fds[socket].datagramSocket.targetAddr = target_address;
 		} else {
-			() @trusted { ret = .send(cast(sock_t)socket, buffer.ptr, min(buffer.length, int.max), 0); } ();
+			() @trusted { ret = .send(cast(sock_t)socket, buffer.ptr, min(buffer.length, int.max), SEND_FLAGS); } ();
 		}
 
 		if (ret < 0) {
@@ -838,9 +848,9 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 		sizediff_t ret;
 		if (slot.targetAddr) {
-			() @trusted { ret = .sendto(cast(sock_t)socket, slot.writeBuffer.ptr, min(slot.writeBuffer.length, int.max), 0, slot.targetAddr.name, slot.targetAddr.nameLen); } ();
+			() @trusted { ret = .sendto(cast(sock_t)socket, slot.writeBuffer.ptr, min(slot.writeBuffer.length, int.max), SEND_FLAGS, slot.targetAddr.name, slot.targetAddr.nameLen); } ();
 		} else {
-			() @trusted { ret = .send(cast(sock_t)socket, slot.writeBuffer.ptr, min(slot.writeBuffer.length, int.max), 0); } ();
+			() @trusted { ret = .send(cast(sock_t)socket, slot.writeBuffer.ptr, min(slot.writeBuffer.length, int.max), SEND_FLAGS); } ();
 		}
 
 		if (ret < 0) {
@@ -940,6 +950,12 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			() @trusted { sock = socket(family, type, 0); } ();
 			if (sock == -1) return -1;
 			setSocketNonBlocking(cast(SocketFD)sock, true);
+
+			// Prevent SIGPIPE on failed send
+			version (OSX) {
+				int val = 1;
+				() @trusted { setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, &val, val.sizeof); } ();
+			}
 		}
 		return sock;
 	}
