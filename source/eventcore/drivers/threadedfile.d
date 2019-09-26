@@ -405,11 +405,6 @@ log("ready event");
 private auto safeAtomicLoad(T)(ref shared(T) v) @trusted { return atomicLoad(v); }
 private auto safeAtomicStore(T)(ref shared(T) v, T a) @trusted { return atomicStore(v, a); }
 private auto safeCAS(T, U, V)(ref shared(T) v, U a, V b) @trusted { return cas(&v, a, b); }
-private void safeYield() @trusted nothrow {
-	import core.thread : Thread;
-	import core.time : seconds;
-	Thread.sleep(0.seconds);
-}
 
 private void log(ARGS...)(string fmt, ARGS args)
 @trusted nothrow {
