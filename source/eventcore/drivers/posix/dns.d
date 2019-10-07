@@ -28,11 +28,12 @@ version (Posix)
 final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriverSignals) : EventDriverDNS {
 	import std.parallelism : task, taskPool;
 	import std.string : toStringz;
+	import core.atomic : atomicFence, atomicLoad, atomicStore;
 	import core.thread : Thread;
 
 	private {
 		static struct Lookup {
-			bool done;
+			shared(bool) done;
 			DNSLookupCallback callback;
 			addrinfo* result;
 			int retcode;
@@ -104,7 +105,8 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 					if (m_lookup.retcode == -1)
 						version (CRuntime_Glibc) version (linux) __res_init();
 
-					m_lookup.done = true;
+					atomicStore(m_lookup.done, true);
+					atomicFence(); // synchronize the other fields in m_lookup with the main thread
 					m_events.trigger(m_event, true);
 					debug (EventCoreLogDNS) print("lookup %s finished", m_lookup.name);
 				}
@@ -131,10 +133,13 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 	{
 		debug (EventCoreLogDNS) print("DNS event triggered");
 		m_events.wait(m_event, &onDNSSignal);
+
 		size_t lastmax;
 		foreach (i, ref l; m_lookups) {
 			if (i > m_maxHandle) break;
-			if (!l.done) continue;
+			if (!atomicLoad(l.done)) continue;
+			// synchronize the other fields in m_lookup with the lookup thread
+			atomicFence();
 
 			try {
 				l.thread.join();
