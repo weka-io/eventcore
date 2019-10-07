@@ -28,13 +28,16 @@ version (Posix)
 final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriverSignals) : EventDriverDNS {
 	import std.parallelism : task, taskPool;
 	import std.string : toStringz;
+	import core.thread : Thread;
 
 	private {
 		static struct Lookup {
+			bool done;
 			DNSLookupCallback callback;
 			addrinfo* result;
 			int retcode;
 			string name;
+			Thread thread;
 		}
 		ChoppedVector!Lookup m_lookups;
 		Events m_events;
@@ -69,28 +72,52 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 		Lookup* l = () @trusted { return &m_lookups[handle]; } ();
 		l.name = name;
 		l.callback = on_lookup_finished;
+		l.done = false;
 		auto events = () @trusted { return cast(shared)m_events; } ();
-		auto t = task!taskFun(l, AddressFamily.UNSPEC, events, m_event);
-		try t.executeInNewThread();//taskPool.put(t);
-		catch (Exception e) return DNSLookupID.invalid;
+
+		try {
+			auto thr = new class(l, AddressFamily.UNSPEC, events, m_event) Thread {
+				Lookup* m_lookup;
+				AddressFamily m_family;
+				shared(Events) m_events;
+				EventID m_event;
+
+				this(Lookup* l, AddressFamily af, shared(Events) events, EventID event)
+				{
+					m_lookup = l;
+					m_family = af;
+					m_events = events;
+					m_event = event;
+					super(&perform);
+					this.name = "Eventcore DNS Lookup";
+					l.thread = this;
+				}
+
+				void perform()
+				nothrow {
+					debug (EventCoreLogDNS) print("lookup %s start", m_lookup.name);
+					addrinfo hints;
+					hints.ai_flags = AI_ADDRCONFIG;
+					version (linux) hints.ai_flags |= AI_V4MAPPED;
+					hints.ai_family = m_family;
+					() @trusted { m_lookup.retcode = getaddrinfo(m_lookup.name.toStringz(), null, m_family == AddressFamily.UNSPEC ? null : &hints, &m_lookup.result); } ();
+					if (m_lookup.retcode == -1)
+						version (CRuntime_Glibc) version (linux) __res_init();
+
+					m_lookup.done = true;
+					m_events.trigger(m_event, true);
+					debug (EventCoreLogDNS) print("lookup %s finished", m_lookup.name);
+				}
+			};
+
+			() @trusted { thr.start(); } ();
+		} catch (Exception e) {
+			return DNSLookupID.invalid;
+		}
+
 		debug (EventCoreLogDNS) print("lookup handle: %s", handle);
 		m_events.loop.m_waiterCount++;
 		return handle;
-	}
-
-	/// public
-	static void taskFun(Lookup* lookup, int af, shared(Events) events, EventID event)
-	{
-		debug (EventCoreLogDNS) print("lookup %s start", lookup.name);
-		addrinfo hints;
-		hints.ai_flags = AI_ADDRCONFIG;
-		version (linux) hints.ai_flags |= AI_V4MAPPED;
-		hints.ai_family = af;
-		() @trusted { lookup.retcode = getaddrinfo(lookup.name.toStringz(), null, af == AddressFamily.UNSPEC ? null : &hints, &lookup.result); } ();
-		if (lookup.retcode == -1)
-			version (CRuntime_Glibc) version (linux) __res_init();
-		events.trigger(event, true);
-		debug (EventCoreLogDNS) print("lookup %s finished", lookup.name);
 	}
 
 	override void cancelLookup(DNSLookupID handle)
@@ -107,6 +134,15 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 		size_t lastmax;
 		foreach (i, ref l; m_lookups) {
 			if (i > m_maxHandle) break;
+			if (!l.done) continue;
+
+			try {
+				l.thread.join();
+				destroy(l.thread);
+			} catch (Exception e) {
+				debug (EventCoreLogDNS) print("Failed to join DNS thread: %s", e.msg);
+			}
+
 			if (l.callback) {
 				if (l.result || l.retcode) {
 					debug (EventCoreLogDNS) print("found finished lookup %s for %s", i, l.name);
