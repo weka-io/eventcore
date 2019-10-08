@@ -36,6 +36,7 @@ environment:
   - DC: ldc
     DVersion: 1.17.0
     arch: x64
+    config: winapi
   - DC: ldc
     DVersion: 1.16.0
     arch: x64
