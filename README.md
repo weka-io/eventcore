@@ -31,12 +31,13 @@ The following compilers are tested and supported:
 - DMD 2.086.1
 - DMD 2.085.1
 - DMD 2.084.1
-- DMD 2.076.1
+- DMD 2.079.0
+- LDC 1.17.0
 - LDC 1.16.0
 - LDC 1.15.0
 - LDC 1.14.0
 - LDC 1.13.0
-- LDC 1.6.0
+- LDC 1.9.0
 
 
 Driver development status

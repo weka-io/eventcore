@@ -30,7 +30,11 @@ environment:
     arch: x64
     config: winapi
   - DC: dmd
-    DVersion: 2.076.1
+    DVersion: 2.079.0
+    arch: x64
+    config: winapi
+  - DC: ldc
+    DVersion: 1.17.0
     arch: x64
     config: winapi
   - DC: ldc
@@ -46,11 +50,7 @@ environment:
     arch: x86
     config: winapi
   - DC: ldc
-    DVersion: 1.13.0
-    arch: x64
-    config: winapi
-  - DC: ldc
-    DVersion: 1.6.0
+    DVersion: 1.9.0
     arch: x64
     config: winapi
 
