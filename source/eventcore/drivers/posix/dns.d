@@ -67,6 +67,8 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 		auto handle = getFreeHandle();
 		if (handle > m_maxHandle) m_maxHandle = handle;
 
+		assert(on_lookup_finished !is null, "Null callback passed to lookupHost");
+
 		setupEvent();
 
 		assert(!m_lookups[handle].result);
@@ -105,6 +107,8 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 					if (m_lookup.retcode == -1)
 						version (CRuntime_Glibc) version (linux) __res_init();
 
+					assert(m_lookup.retcode != 0 || m_lookup.result !is null);
+
 					atomicStore(m_lookup.done, true);
 					atomicFence(); // synchronize the other fields in m_lookup with the main thread
 					m_events.trigger(m_event, true);
@@ -141,11 +145,14 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 			// synchronize the other fields in m_lookup with the lookup thread
 			atomicFence();
 
-			try {
-				l.thread.join();
-				destroy(l.thread);
-			} catch (Exception e) {
-				debug (EventCoreLogDNS) print("Failed to join DNS thread: %s", e.msg);
+			if (l.thread !is null) {
+				try {
+					l.thread.join();
+					destroy(l.thread);
+				} catch (Exception e) {
+					debug (EventCoreLogDNS) print("Failed to join DNS thread: %s", e.msg);
+				}
+				l.thread = null;
 			}
 
 			if (l.callback) {
@@ -161,6 +168,7 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 					l.callback = null;
 					l.result = null;
 					l.retcode = 0;
+					l.done = false;
 					if (i == m_maxHandle) m_maxHandle = lastmax;
 					m_events.loop.m_waiterCount--;
 					passToDNSCallback(cast(DNSLookupID)cast(int)i, cb, status, ai);
