@@ -28,6 +28,7 @@ void main()
 	eventDriver.timers.wait(tm, (tm) {
 		assert(eventDriver.sockets.getConnectionState(sock) == ConnectionState.connecting);
 		eventDriver.sockets.cancelConnectStream(sock);
+		eventDriver.sockets.releaseRef(sock);
 		s_done = true;
 	});
 

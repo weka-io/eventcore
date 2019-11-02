@@ -85,7 +85,6 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			}
 
 			m_core.addWaiter();
-			addRef(sock);
 			return sock;
 		} else {
 			clearSocketSlot(sock);
@@ -103,8 +102,9 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			assert(state == ConnectionState.connecting,
 				"Must be in 'connecting' state when calling cancelConnection.");
 
-			clearSocketSlot(sock);
-			() @trusted { closesocket(sock); } ();
+			state = ConnectionState.closed;
+			connectCallback = null;
+			m_core.removeWaiter();
 		}
 	}
 
@@ -845,6 +845,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 							default: break;
 							case FD_CONNECT:
 								auto cb = slot.streamSocket.connectCallback;
+								if (!cb) break; // cancelled connect?
+
 								slot.streamSocket.connectCallback = null;
 								slot.common.driver.m_core.removeWaiter();
 								if (err) {
