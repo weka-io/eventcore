@@ -18,20 +18,18 @@ void print(ARGS...)(string str, ARGS args)
 }
 
 T mallocT(T, ARGS...)(ARGS args)
-@trusted @nogc {
+{
 	import core.stdc.stdlib : malloc;
 	import std.conv : emplace;
 
-	enum size = __traits(classInstanceSize, T);
-	auto ret = cast(T)malloc(size);
-	static if (hasIndirections!T)
-		GC.addRange(cast(void*)ret, __traits(classInstanceSize, T));
-	scope doit = { emplace!T((cast(void*)ret)[0 .. size], args); };
-	static if (__traits(compiles, () nothrow { typeof(doit).init(); })) // NOTE: doing the typeof thing here, because LDC 1.7.0 otherwise thinks doit gets escaped here
-		(cast(void delegate() @nogc nothrow)doit)();
-	else
-		(cast(void delegate() @nogc)doit)();
-	return ret;
+    T ret = () @trusted {
+        enum size = __traits(classInstanceSize, T);
+        T r = cast(T)malloc(size);
+        static if (hasIndirections!T)
+            GC.addRange(cast(void*)r, size);
+        return r;
+    }();
+	return emplace!T(ret, args);
 }
 
 void freeT(T)(ref T inst) @nogc
