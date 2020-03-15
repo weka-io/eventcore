@@ -7,7 +7,7 @@ import eventcore.driver;
 import eventcore.internal.consumablequeue;
 import eventcore.internal.dlist;
 import eventcore.internal.utils : mallocT, freeT, nogc_assert;
-
+import core.time : Duration, MonoTime, hnsecs;
 
 final class LoopTimeoutTimerDriver : EventDriverTimers {
 	import std.experimental.allocator.building_blocks.free_list;
@@ -17,7 +17,6 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 	import std.container.array;
 	import std.datetime : Clock;
 	import std.range : SortedRange, assumeSorted, take;
-	import core.time : hnsecs, Duration;
 	import core.memory : GC;
 
 	private {
@@ -46,24 +45,22 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 
 	package @property size_t pendingCount() const @safe nothrow { return m_timerQueue.length; }
 
-	final package Duration getNextTimeout(long stdtime)
+	final package Duration getNextTimeout(MonoTime time)
 	@safe nothrow {
 		if (m_timerQueue.empty) return Duration.max;
-		return (m_timerQueue.front.timeout - stdtime).hnsecs;
+		return m_timerQueue.front.timeout - time;
 	}
 
-	final package bool process(long stdtime)
+	final package bool process(MonoTime time)
 	@trusted nothrow {
 		assert(m_firedTimers.length == 0);
 		if (m_timerQueue.empty) return false;
 
-		TimerSlot ts = void;
-		ts.timeout = stdtime+1;
 		foreach (tm; m_timerQueue[]) {
-			if (tm.timeout > stdtime) break;
-			if (tm.repeatDuration > 0) {
+			if (tm.timeout > time) break;
+			if (tm.repeatDuration > Duration.zero) {
 				do tm.timeout += tm.repeatDuration;
-				while (tm.timeout <= stdtime);
+				while (tm.timeout <= time);
 			} else tm.pending = false;
 			m_firedTimers.put(tm);
 		}
@@ -72,7 +69,7 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 
 		foreach (tm; processed_timers) {
 			m_timerQueue.remove(tm);
-			if (tm.repeatDuration > 0)
+			if (tm.repeatDuration > Duration.zero)
 				enqueueTimer(tm);
 		}
 
@@ -98,7 +95,7 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		GC.addRange(tm, TimerSlot.sizeof, typeid(TimerSlot));
 		tm.id = id;
 		tm.refCount = 1;
-		tm.timeout = long.max;
+		tm.timeout = MonoTime.max;
 		m_timers[id] = tm;
 		return id;
 	}
@@ -108,8 +105,8 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 		scope (failure) assert(false);
 		auto tm = m_timers[timer];
 		if (tm.pending) stop(timer);
-		tm.timeout = Clock.currStdTime + timeout.total!"hnsecs";
-		tm.repeatDuration = repeat.total!"hnsecs";
+		tm.timeout = MonoTime.currTime + timeout;
+		tm.repeatDuration = repeat;
 		tm.pending = true;
 		enqueueTimer(tm);
 	}
@@ -137,7 +134,7 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 
 	final override bool isPeriodic(TimerID descriptor)
 	{
-		return m_timers[descriptor].repeatDuration > 0;
+		return m_timers[descriptor].repeatDuration > Duration.zero;
 	}
 
 	final override void wait(TimerID timer, TimerCallback2 callback)
@@ -239,8 +236,8 @@ struct TimerSlot {
 	TimerID id;
 	uint refCount;
 	bool pending;
-	long timeout; // stdtime
-	long repeatDuration;
+	MonoTime timeout;
+	Duration repeatDuration;
 	TimerCallback2 callback; // TODO: use a list with small-value optimization
 
 	DataInitializer userDataDestructor;

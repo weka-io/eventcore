@@ -19,6 +19,7 @@ import eventcore.drivers.threadedfile;
 import eventcore.internal.consumablequeue : ConsumableQueue;
 import eventcore.internal.utils;
 
+import core.time : MonoTime;
 import std.algorithm.comparison : among, min, max;
 
 version (Posix) {
@@ -221,17 +222,17 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 
 		if (timeout <= 0.seconds) {
 			got_events = m_loop.doProcessEvents(0.seconds);
-			m_timers.process(currStdTime);
+			m_timers.process(MonoTime.currTime);
 		} else {
-			long now = currStdTime;
+			auto now = MonoTime.currTime;
 			do {
 				auto nextto = max(min(m_timers.getNextTimeout(now), timeout), 0.seconds);
 				got_events = m_loop.doProcessEvents(nextto);
-				long prev_step = now;
-				now = currStdTime;
+				auto prev_step = now;
+				now = MonoTime.currTime;
 				got_events |= m_timers.process(now);
 				if (timeout != Duration.max)
-					timeout -= (now - prev_step).hnsecs;
+					timeout -= now - prev_step;
 			} while (timeout > 0.seconds && !m_exit && !got_events);
 		}
 
