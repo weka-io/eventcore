@@ -14,11 +14,7 @@ bool s_done;
 
 void main()
 {
-	version (OSX) {
-		import std.stdio;
-		writeln("This doesn't work on macOS. Skipping this test until it is determined that this special case should stay supported.");
-		return;
-	} else {
+	version (Linux) {
 
 	static ubyte[] pack1 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
@@ -68,5 +64,9 @@ void main()
 	assert(s_done);
 	s_done = false;
 
+	} else {
+		import std.stdio;
+		writeln("This doesn't work on macOS/Windows. Skipping this test until it is determined that this special case should stay supported.");
+		return;
 	}
 }

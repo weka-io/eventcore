@@ -153,3 +153,4 @@ test_script:
  - echo %PATH%
  - '%DC% --version'
  - dub test --arch=%Darch% --compiler=%DC% --config=%CONFIG%
+ - for %%i in (tests\*.d) do echo %%i && dub --single %%i --arch=%Darch% --compiler=%DC% --override-config eventcore/%CONFIG% || exit /B 1
