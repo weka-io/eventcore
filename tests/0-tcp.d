@@ -38,12 +38,16 @@ void main()
 			assert(bts == pack1.length);
 			assert(s_rbuf[0 .. pack1.length] == pack1);
 
-			print("Second write");
-			client.write!((status, bytes) {
-				print("Second write done");
-				assert(status == IOStatus.ok);
-				assert(bytes == pack2.length);
-			})(pack2, IOMode.once);
+			auto tmw = eventDriver.timers.create();
+			eventDriver.timers.set(tmw, 20.msecs, 0.msecs);
+			eventDriver.timers.wait(tmw, (tmw) {
+				print("Second write");
+				client.write!((status, bytes) {
+					print("Second write done");
+					assert(status == IOStatus.ok);
+					assert(bytes == pack2.length);
+				})(pack2, IOMode.once);
+			});
 
 			print("Second read");
 			incoming.read!((status, bts) {
