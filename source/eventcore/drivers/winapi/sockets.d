@@ -552,8 +552,11 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			}
 		}
 
-		if (mode == IOMode.immediate)
+		if (mode == IOMode.immediate) {
 			() @trusted { CancelIoEx(cast(HANDLE)cast(SOCKET)socket, cast(LPOVERLAPPED)&slot.read.overlapped); } ();
+			on_read_finish(socket, IOStatus.wouldBlock, 0, null);
+			return;
+		}
 
 		slot.read.callback = on_read_finish;
 		addRef(socket);
@@ -646,8 +649,11 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			}
 		}
 
-		if (mode == IOMode.immediate)
+		if (mode == IOMode.immediate) {
 			() @trusted { CancelIoEx(cast(HANDLE)cast(SOCKET)socket, cast(LPOVERLAPPED)&slot.write.overlapped); } ();
+			on_write_finish(socket, IOStatus.wouldBlock, 0, null);
+			return;
+		}
 
 		slot.write.callback = on_write_finish;
 		addRef(socket);
