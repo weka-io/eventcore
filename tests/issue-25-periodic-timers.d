@@ -44,7 +44,7 @@ void main()
 
 			auto dur = MonoTime.currTime() - s_startTime;
 			s_cnt++;
-			assert(dur > 300.msecs * s_cnt, (dur - 300.msecs * s_cnt).toString());
+			assert(dur > 300.msecs * s_cnt - 2.msecs, (dur - 300.msecs * s_cnt).toString());
 			assert(dur < 300.msecs * s_cnt + 100.msecs, (dur - 300.msecs * s_cnt).toString());
 			assert(s_cnt <= 5);
 

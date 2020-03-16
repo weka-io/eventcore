@@ -26,7 +26,7 @@ void main()
 		}
 
 		try {
-			assert(dur > 1200.msecs, (dur - 1200.msecs).toString());
+			assert(dur > 1200.msecs - 2.msecs, (dur - 1200.msecs).toString());
 			assert(dur < 1300.msecs, (dur - 1200.msecs).toString());
 		} catch (Exception e) assert(false, e.msg);
 
@@ -38,7 +38,7 @@ void main()
 			try {
 				auto dur = MonoTime.currTime() - s_startTime;
 				s_cnt++;
-				assert(dur > 300.msecs * s_cnt, (dur - 300.msecs * s_cnt).toString());
+				assert(dur > 300.msecs * s_cnt - 2.msecs, (dur - 300.msecs * s_cnt).toString());
 				assert(dur < 300.msecs * s_cnt + 100.msecs, (dur - 300.msecs * s_cnt).toString());
 				assert(s_cnt <= 3);
 

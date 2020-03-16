@@ -20,6 +20,11 @@ void main()
 	static ubyte[] pack1 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 	static ubyte[] pack2 = [4, 3, 2, 1, 0];
 
+	// Windows can not provide "immediate" semantics using the overlapped
+	// I/O API that is used
+	version (Windows) enum mode_immediate = IOMode.once;
+	else enum mode_immediate = IOMode.immediate;
+
 	auto baddr = new InternetAddress(0x7F000001, 40001);
 	auto anyaddr = new InternetAddress(0x7F000001, 0);
 	s_baseSocket = createDatagramSocket(baddr);
@@ -55,14 +60,14 @@ void main()
 				destroy(s_connectedSocket);
 				s_done = true;
 				log("done.");
-			})(s_rbuf, IOMode.immediate);
+			})(s_rbuf, mode_immediate);
 		});
 	})(s_rbuf, IOMode.once);
 	s_connectedSocket.send!((status, bytes) {
 		log("send1: %s %s", status, bytes);
 		assert(status == IOStatus.ok);
 		assert(bytes == 10);
-	})(pack1, IOMode.immediate);
+	})(pack1, mode_immediate);
 
 	ExitReason er;
 	do er = eventDriver.core.processEvents(Duration.max);

@@ -85,7 +85,6 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			}
 
 			m_core.addWaiter();
-			addRef(sock);
 			return sock;
 		} else {
 			clearSocketSlot(sock);
@@ -103,8 +102,9 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			assert(state == ConnectionState.connecting,
 				"Must be in 'connecting' state when calling cancelConnection.");
 
-			clearSocketSlot(sock);
-			() @trusted { closesocket(sock); } ();
+			state = ConnectionState.closed;
+			connectCallback = null;
+			m_core.removeWaiter();
 		}
 	}
 
@@ -249,6 +249,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	{
 		auto slot = () @trusted { return &m_sockets[socket].streamSocket(); } ();
 		slot.read.buffer = buffer;
+		slot.read.bytesTransferred = 0;
 		slot.read.mode = mode;
 		slot.read.wsabuf[0].len = buffer.length;
 		slot.read.wsabuf[0].buf = () @trusted { return buffer.ptr; } ();
@@ -306,7 +307,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		}
 
 		if (slot.streamSocket.read.mode == IOMode.once || !slot.streamSocket.read.buffer.length) {
-			invokeCallback(IOStatus.ok, cbTransferred);
+			invokeCallback(IOStatus.ok, slot.streamSocket.read.bytesTransferred);
 			return;
 		}
 
@@ -332,6 +333,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	{
 		auto slot = () @trusted { return &m_sockets[socket].streamSocket(); } ();
 		slot.write.buffer = buffer;
+		slot.write.bytesTransferred = 0;
 		slot.write.mode = mode;
 		slot.write.wsabuf[0].len = buffer.length;
 		slot.write.wsabuf[0].buf = () @trusted { return cast(ubyte*)buffer.ptr; } ();
@@ -381,7 +383,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		}
 
 		if (slot.streamSocket.write.mode == IOMode.once || !slot.streamSocket.write.buffer.length) {
-			invokeCallback(IOStatus.ok, cbTransferred);
+			invokeCallback(IOStatus.ok, slot.streamSocket.write.bytesTransferred);
 			return;
 		}
 
@@ -550,8 +552,11 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			}
 		}
 
-		if (mode == IOMode.immediate)
+		if (mode == IOMode.immediate) {
 			() @trusted { CancelIoEx(cast(HANDLE)cast(SOCKET)socket, cast(LPOVERLAPPED)&slot.read.overlapped); } ();
+			on_read_finish(socket, IOStatus.wouldBlock, 0, null);
+			return;
+		}
 
 		slot.read.callback = on_read_finish;
 		addRef(socket);
@@ -644,8 +649,11 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			}
 		}
 
-		if (mode == IOMode.immediate)
+		if (mode == IOMode.immediate) {
 			() @trusted { CancelIoEx(cast(HANDLE)cast(SOCKET)socket, cast(LPOVERLAPPED)&slot.write.overlapped); } ();
+			on_write_finish(socket, IOStatus.wouldBlock, 0, null);
+			return;
+		}
 
 		slot.write.callback = on_write_finish;
 		addRef(socket);
@@ -845,6 +853,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 							default: break;
 							case FD_CONNECT:
 								auto cb = slot.streamSocket.connectCallback;
+								if (!cb) break; // cancelled connect?
+
 								slot.streamSocket.connectCallback = null;
 								slot.common.driver.m_core.removeWaiter();
 								if (err) {
@@ -852,8 +862,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 									cb(cast(StreamSocketFD)sock, ConnectStatus.refused);
 								} else {
 									slot.streamSocket.state = ConnectionState.connected;
-									if (slot.common.driver.releaseRef(cast(StreamSocketFD)sock))
-										cb(cast(StreamSocketFD)sock, ConnectStatus.connected);
+									cb(cast(StreamSocketFD)sock, ConnectStatus.connected);
 								}
 								break;
 							case FD_READ:

@@ -96,7 +96,7 @@ final class WinAPIEventDriverCore : EventDriverCore {
 	override ExitReason processEvents(Duration timeout = Duration.max)
 	{
 		import std.algorithm : min;
-		import core.time : hnsecs, seconds;
+		import core.time : MonoTime, seconds;
 
 		if (m_exit) {
 			m_exit = false;
@@ -106,12 +106,12 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		if (!waiterCount) return ExitReason.outOfWaiters;
 
 		bool got_event;
-		long now = currStdTime;
+		auto now = MonoTime.currTime;
 		do {
 			auto nextto = min(m_timers.getNextTimeout(now), timeout);
 			got_event |= doProcessEvents(nextto);
-			long prev_step = now;
-			now = currStdTime;
+			auto prev_step = now;
+			now = MonoTime.currTime;
 			got_event |= m_timers.process(now);
 
 			if (m_exit) {
@@ -119,7 +119,7 @@ final class WinAPIEventDriverCore : EventDriverCore {
 				return ExitReason.exited;
 			} else if (got_event) break;
 			if (timeout != Duration.max)
-				timeout -= (now - prev_step).hnsecs;
+				timeout -= now - prev_step;
 		} while (timeout > 0.seconds);
 
 		if (!waiterCount) return ExitReason.outOfWaiters;
