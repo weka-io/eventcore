@@ -455,31 +455,37 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			assert(m_loop.m_fds[socket].common.refCount > 0);
 		}
 
-		sizediff_t ret = 0;
-		() @trusted { ret = .recv(cast(sock_t)socket, slot.readBuffer.ptr, min(slot.readBuffer.length, int.max), 0); } ();
-		if (ret < 0) {
-			auto err = getSocketError();
-			if (!err.among!(EAGAIN, EINPROGRESS)) {
-				auto st = handleReadError(err, *slot);
-				finalize(st);
+		while (true) {
+			sizediff_t ret = 0;
+			() @trusted { ret = .recv(cast(sock_t)socket, slot.readBuffer.ptr, min(slot.readBuffer.length, int.max), 0); } ();
+			if (ret < 0) {
+				auto err = getSocketError();
+				if (!err.among!(EAGAIN, EINPROGRESS)) {
+					auto st = handleReadError(err, *slot);
+					finalize(st);
+					return;
+				}
+			}
+
+			if (ret == 0 && slot.readBuffer.length) {
+				// treat as if the connection read end was shut down
+				handleReadError(ESHUTDOWN, m_loop.m_fds[socket].streamSocket);
+				finalize(IOStatus.disconnected);
 				return;
 			}
-		}
 
-		if (ret == 0 && slot.readBuffer.length) {
-			// treat as if the connection read end was shut down
-			handleReadError(ESHUTDOWN, m_loop.m_fds[socket].streamSocket);
-			finalize(IOStatus.disconnected);
-			return;
-		}
-
-		if (ret > 0 || !slot.readBuffer.length) {
-			slot.bytesRead += ret;
-			slot.readBuffer = slot.readBuffer[ret .. $];
-			if (slot.readMode != IOMode.all || slot.readBuffer.length == 0) {
-				finalize(IOStatus.ok);
-				return;
+			if (ret > 0 || !slot.readBuffer.length) {
+				slot.bytesRead += ret;
+				slot.readBuffer = slot.readBuffer[ret .. $];
+				if (slot.readMode != IOMode.all || slot.readBuffer.length == 0) {
+					finalize(IOStatus.ok);
+					return;
+				}
 			}
+
+			// retry if this was just a partial read, as it could mean that
+			// the connection was closed by the remove peer
+			if (ret <= 0 || !slot.readBuffer.length) break;
 		}
 	}
 
