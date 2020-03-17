@@ -17,7 +17,7 @@ version (Posix) {
 	import core.sys.posix.netinet.tcp;
 	import core.sys.posix.sys.un;
 	import core.sys.posix.unistd : close, read, write;
-	import core.stdc.errno : errno, EAGAIN, EINPROGRESS, ECONNREFUSED;
+	import core.stdc.errno;
 	import core.sys.posix.fcntl;
 	import core.sys.posix.sys.socket;
 
@@ -87,11 +87,20 @@ version (Windows) {
 	import core.sys.windows.windows;
 	import core.sys.windows.winsock2;
 	alias sockaddr_storage = SOCKADDR_STORAGE;
+
 	alias EAGAIN = WSAEWOULDBLOCK;
 	alias ECONNREFUSED = WSAECONNREFUSED;
+	alias EPIPE = WSAECONNABORTED;
+	alias ECONNRESET = WSAECONNRESET;
+	alias ENETRESET = WSAENETRESET;
+	alias ENOTCONN = WSAENOTCONN;
+	alias ETIMEDOUT = WSAETIMEDOUT;
+	alias ESHUTDOWN = WSAESHUTDOWN;
+
 	enum SHUT_RDWR = SD_BOTH;
 	enum SHUT_RD = SD_RECEIVE;
 	enum SHUT_WR = SD_SEND;
+
 	extern (C) int read(int fd, void *buffer, uint count) nothrow;
 	extern (C) int write(int fd, const(void) *buffer, uint count) nothrow;
 	extern (C) int close(int fd) nothrow @safe;
@@ -380,20 +389,23 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 		if (ret < 0) {
 			auto err = getSocketError();
-			if (!err.among!(EAGAIN, EINPROGRESS)) {
+			if (err.among!(EAGAIN, EINPROGRESS)) {
+				if (mode == IOMode.immediate) {
+					on_read_finish(socket, IOStatus.wouldBlock, 0);
+					return;
+				}
+			} else {
+				auto st = handleReadError(err, m_loop.m_fds[socket].streamSocket);
 				print("sock error %s!", err);
-				on_read_finish(socket, IOStatus.error, 0);
+				on_read_finish(socket, st, 0);
 				return;
 			}
 		}
 
 		if (ret == 0 && buffer.length > 0) {
+			// treat as if the connection read end was shut down
+			handleReadError(ESHUTDOWN, m_loop.m_fds[socket].streamSocket);
 			on_read_finish(socket, IOStatus.disconnected, 0);
-			return;
-		}
-
-		if (ret < 0 && mode == IOMode.immediate) {
-			on_read_finish(socket, IOStatus.wouldBlock, 0);
 			return;
 		}
 
@@ -448,13 +460,15 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		if (ret < 0) {
 			auto err = getSocketError();
 			if (!err.among!(EAGAIN, EINPROGRESS)) {
-				finalize(IOStatus.error);
+				auto st = handleReadError(err, *slot);
+				finalize(st);
 				return;
 			}
 		}
 
 		if (ret == 0 && slot.readBuffer.length) {
-			slot.state = ConnectionState.passiveClose;
+			// treat as if the connection read end was shut down
+			handleReadError(ESHUTDOWN, m_loop.m_fds[socket].streamSocket);
 			finalize(IOStatus.disconnected);
 			return;
 		}
@@ -469,6 +483,24 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		}
 	}
 
+	private static IOStatus handleReadError(int err, ref StreamSocketSlot slot)
+	@safe nothrow {
+		switch (err) {
+			case 0: return IOStatus.ok;
+			case EPIPE, ECONNRESET, ENETRESET, ENOTCONN, ETIMEDOUT:
+				slot.state = ConnectionState.closed;
+				return IOStatus.disconnected;
+			case ESHUTDOWN:
+				if (slot.state == ConnectionState.activeClose)
+					slot.state = ConnectionState.closed;
+				else if (slot.state != ConnectionState.closed)
+					slot.state = ConnectionState.passiveClose;
+				return IOStatus.disconnected;
+			default: return IOStatus.error;
+		}
+	}
+
+
 	final override void write(StreamSocketFD socket, const(ubyte)[] buffer, IOMode mode, IOCallback on_write_finish)
 	{
 		if (buffer.length == 0) {
@@ -481,13 +513,14 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 		if (ret < 0) {
 			auto err = getSocketError();
-			if (!err.among!(EAGAIN, EINPROGRESS)) {
-				on_write_finish(socket, IOStatus.error, 0);
-				return;
-			}
-
-			if (mode == IOMode.immediate) {
-				on_write_finish(socket, IOStatus.wouldBlock, 0);
+			if (err.among!(EAGAIN, EINPROGRESS)) {
+				if (mode == IOMode.immediate) {
+					on_write_finish(socket, IOStatus.wouldBlock, 0);
+					return;
+				}
+			} else {
+				auto st = handleWriteError(err, m_loop.m_fds[socket].streamSocket);
+				on_write_finish(socket, st, 0);
 				return;
 			}
 		}
@@ -537,7 +570,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			if (!err.among!(EAGAIN, EINPROGRESS)) {
 				auto l = lockHandle(socket);
 				m_loop.setNotifyCallback!(EventType.write)(socket, null);
-				slot.writeCallback(socket, IOStatus.error, slot.bytesRead);
+				auto st = handleWriteError(err, *slot);
+				slot.writeCallback(socket, st, slot.bytesRead);
 				return;
 			}
 		}
@@ -553,6 +587,24 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			}
 		}
 	}
+
+	private static IOStatus handleWriteError(int err, ref StreamSocketSlot slot)
+	@safe nothrow {
+		switch (err) {
+			case 0: return IOStatus.ok;
+			case EPIPE, ECONNRESET, ENETRESET, ENOTCONN, ETIMEDOUT:
+				slot.state = ConnectionState.closed;
+				return IOStatus.disconnected;
+			case ESHUTDOWN:
+				if (slot.state == ConnectionState.passiveClose)
+					slot.state = ConnectionState.closed;
+				else if (slot.state != ConnectionState.closed)
+					slot.state = ConnectionState.activeClose;
+				return IOStatus.disconnected;
+			default: return IOStatus.error;
+		}
+	}
+
 
 	final override void waitForData(StreamSocketFD socket, IOCallback on_data_available)
 	{
