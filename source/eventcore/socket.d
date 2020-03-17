@@ -64,7 +64,7 @@ void read(alias callback)(ref StreamSocket socket, ubyte[] buffer, IOMode mode)
 	}
 	eventDriver.sockets.read(socket.m_fd, buffer, mode, &cb);
 }
-void cancelRead(ref StreamSocket socket) { eventDriver.sockets.cancelRead(socket.m_fd); }
+void cancelRead(ref StreamSocket socket) @safe nothrow  { eventDriver.sockets.cancelRead(socket.m_fd); }
 void waitForData(alias callback)(ref StreamSocket socket)
 {
 	void cb(StreamSocketFD, IOStatus status, size_t nbytes) @safe nothrow {
@@ -79,8 +79,11 @@ void write(alias callback)(ref StreamSocket socket, const(ubyte)[] buffer, IOMod
 	}
 	eventDriver.sockets.write(socket.m_fd, buffer, mode, &cb);
 }
-void cancelWrite(ref StreamSocket socket) { eventDriver.sockets.cancelWrite(socket.m_fd); }
-void shutdown(ref StreamSocket socket, bool shut_read = true, bool shut_write = true) { eventDriver.sockets.shutdown(socket.m_fd, shut_read, shut_write); }
+void cancelWrite(ref StreamSocket socket) @safe nothrow { eventDriver.sockets.cancelWrite(socket.m_fd); }
+void shutdown(ref StreamSocket socket, bool shut_read = true, bool shut_write = true)
+@safe nothrow {
+	eventDriver.sockets.shutdown(socket.m_fd, shut_read, shut_write);
+}
 
 
 struct StreamListenSocket {

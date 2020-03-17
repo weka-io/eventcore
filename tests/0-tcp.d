@@ -15,6 +15,15 @@ bool s_done;
 
 void main()
 {
+	testBasicExchange();
+	testShutdown();
+}
+
+void testBasicExchange()
+{
+	print("Basic test:");
+	print("");
+
 	// watchdog timer in case of starvation/deadlocks
 	auto tm = eventDriver.timers.create();
 	eventDriver.timers.set(tm, 10000.msecs, 0.msecs);
@@ -83,6 +92,101 @@ void main()
 			assert(wstatus == IOStatus.ok);
 			assert(bytes == 10);
 		})(pack1, IOMode.all);
+	})(baddr);
+
+	ExitReason er;
+	do er = eventDriver.core.processEvents(Duration.max);
+	while (er == ExitReason.idle);
+	assert(er == ExitReason.outOfWaiters);
+	assert(s_done);
+	s_done = false;
+}
+
+void testShutdown()
+{
+	static ubyte[10] srbuf, crbuf;
+
+	print("");
+	print("Shutdown test:");
+	print("");
+
+	// watchdog timer in case of starvation/deadlocks
+	auto tm = eventDriver.timers.create();
+	eventDriver.timers.set(tm, 10000.msecs, 0.msecs);
+	eventDriver.timers.wait(tm, (tm) { assert(false, "Test hung."); });
+
+	auto baddr 	= new InternetAddress(0x7F000001, 40001);
+	auto server = listenStream(baddr);
+
+	StreamSocket client;
+	StreamSocket incoming;
+
+	server.waitForConnections!((sock, addr) {
+		incoming = sock;
+		assert(incoming.state == ConnectionState.connected);
+
+		print("Server read");
+		ubyte[10] buf;
+		incoming.read!((rstatus, bytes) {
+			print("Server read done %s", bytes);
+			assert(rstatus == IOStatus.disconnected);
+			assert(bytes == 4);
+			assert(srbuf[0 .. 4] == [1, 2, 3, 4]);
+			assert(incoming.state == ConnectionState.passiveClose);
+
+			print("Server write 4 bytes");
+			incoming.write!((wstatus, bytes) {
+				print("Server write done");
+				assert(wstatus == IOStatus.ok);
+				assert(bytes == 4);
+				print("Shutdown server write");
+				incoming.shutdown(false, true);
+				assert(incoming.state == ConnectionState.closed);
+				print("Attempt server write after shutdown");
+				incoming.write!((wstatus, bytes) {
+					print("Attempted server write done");
+					assert(wstatus == IOStatus.disconnected);
+					assert(bytes == 0);
+				})([1], IOMode.all);
+			})([5, 6, 7, 8], IOMode.all);
+		})(srbuf, IOMode.all);
+	});
+
+	print("Connect...");
+	connectStream!((sock, status) {
+		client = sock;
+		assert(client.state == ConnectionState.connected);
+
+		print("Client write 4 bytes");
+		client.write!((wstatus, bytes) {
+			print("Client write done");
+			assert(wstatus == IOStatus.ok);
+			assert(bytes == 4);
+			print("Shutdown client write");
+			client.shutdown(false, true);
+			assert(client.state == ConnectionState.activeClose);
+			print("Attempt client write after shutdown");
+			client.write!((wstatus, bytes) {
+				print("Attempted client write done");
+				assert(wstatus == IOStatus.disconnected);
+				assert(bytes == 0);
+
+				print("Client read");
+				client.read!((rstatus, bytes) {
+					print("Client read done");
+					assert(rstatus == IOStatus.disconnected);
+					assert(bytes == 4);
+					assert(crbuf[0 .. 4] == [5, 6, 7, 8]);
+					assert(client.state == ConnectionState.closed);
+
+					destroy(client);
+					destroy(incoming);
+					destroy(server);
+					s_done = true;
+					eventDriver.timers.stop(tm);
+				})(crbuf, IOMode.all);
+			})([1], IOMode.all);
+		})([1, 2, 3, 4], IOMode.all);
 	})(baddr);
 
 	ExitReason er;
