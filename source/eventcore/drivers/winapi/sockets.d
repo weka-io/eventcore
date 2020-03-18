@@ -245,6 +245,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	override void setUserTimeout(StreamSocketFD socket, Duration timeout) {}
 
+
 	override void read(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish)
 	{
 		auto slot = () @trusted { return &m_sockets[socket].streamSocket(); } ();
@@ -270,7 +271,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 				}
 			} else {
 				resetBuffers();
-				on_read_finish(socket, IOStatus.error, 0);
+				auto st = handleReadError(err, *slot);
+				on_read_finish(socket, st, 0);
 				return;
 			}
 		}
@@ -278,7 +280,6 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		addRef(socket);
 		m_core.addWaiter();
 	}
-
 
 	private static nothrow
 	void onIOReadCompleted(DWORD dwError, DWORD cbTransferred, OVERLAPPED_CORE* lpOverlapped)
@@ -302,7 +303,14 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		slot.streamSocket.read.buffer = slot.streamSocket.read.buffer[cbTransferred .. $];
 
 		if (dwError) {
-			invokeCallback(IOStatus.error, 0);
+			auto st = handleReadError(dwError, slot.streamSocket);
+			invokeCallback(st, slot.streamSocket.read.bytesTransferred);
+			return;
+		}
+
+		if (!cbTransferred) {
+			handleReadError(WSAEDISCON, slot.streamSocket);
+			invokeCallback(IOStatus.disconnected, slot.streamSocket.read.bytesTransferred);
 			return;
 		}
 
@@ -324,10 +332,29 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 					invokeCallback(IOStatus.wouldBlock, 0);
 				}
 			} else {
-				invokeCallback(IOStatus.error, 0);
+				auto st = handleReadError(err, slot.streamSocket);
+				invokeCallback(st, slot.streamSocket.read.bytesTransferred);
 			}
 		}
 	}
+
+	private static IOStatus handleReadError(DWORD err, ref StreamSocketSlot slot)
+	@safe nothrow {
+		switch (err) {
+			case 0: return IOStatus.ok;
+			case WSAEDISCON, WSAESHUTDOWN:
+				if (slot.state == ConnectionState.activeClose)
+					slot.state = ConnectionState.closed;
+				else if (slot.state != ConnectionState.closed)
+					slot.state = ConnectionState.passiveClose;
+				return IOStatus.disconnected;
+			case WSAECONNABORTED, WSAECONNRESET, WSAENETRESET, WSAETIMEDOUT:
+				slot.state = ConnectionState.closed;
+				return IOStatus.disconnected;
+			default: return IOStatus.error;
+		}
+	}
+
 
 	override void write(StreamSocketFD socket, const(ubyte)[] buffer, IOMode mode, IOCallback on_write_finish)
 	{
@@ -349,7 +376,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 					return;
 				}
 			} else {
-				on_write_finish(socket, IOStatus.error, 0);
+				auto st = handleWriteError(err, *slot);
+				on_write_finish(socket, st, 0);
 				return;
 			}
 		}
@@ -378,7 +406,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		slot.streamSocket.write.buffer = slot.streamSocket.write.buffer[cbTransferred .. $];
 
 		if (dwError) {
-			invokeCallback(IOStatus.error, 0);
+			auto st = handleWriteError(dwError, slot.streamSocket);
+			invokeCallback(st, slot.streamSocket.write.bytesTransferred);
 			return;
 		}
 
@@ -399,10 +428,29 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 					invokeCallback(IOStatus.wouldBlock, 0);
 				}
 			} else {
-				invokeCallback(IOStatus.error, 0);
+				auto st = handleWriteError(err, slot.streamSocket);
+				invokeCallback(st, slot.streamSocket.write.bytesTransferred);
 			}
 		}
 	}
+
+	private static IOStatus handleWriteError(DWORD err, ref StreamSocketSlot slot)
+	@safe nothrow {
+		switch (err) {
+			case 0: return IOStatus.ok;
+			case WSAEDISCON, WSAESHUTDOWN:
+				if (slot.state == ConnectionState.passiveClose)
+					slot.state = ConnectionState.closed;
+				else if (slot.state != ConnectionState.closed)
+					slot.state = ConnectionState.activeClose;
+				return IOStatus.disconnected;
+			case WSAECONNABORTED, WSAECONNRESET, WSAENETRESET, WSAETIMEDOUT:
+				slot.state = ConnectionState.closed;
+				return IOStatus.disconnected;
+			default: return IOStatus.error;
+		}
+	}
+
 
 	override void waitForData(StreamSocketFD socket, IOCallback on_data_available)
 	{
@@ -413,7 +461,9 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	{
 		() @trusted { WSASendDisconnect(socket, null); } ();
 		with (m_sockets[socket].streamSocket) {
-			state = ConnectionState.closed;
+			if (state == ConnectionState.passiveClose)
+				state = ConnectionState.closed;
+			else state = ConnectionState.activeClose;
 		}
 	}
 
