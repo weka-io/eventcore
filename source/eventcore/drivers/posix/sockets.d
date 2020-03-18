@@ -69,6 +69,8 @@ version(OSX) {
 		enum IP_ADD_MEMBERSHIP = 12;
 		enum IP_MULTICAST_LOOP = 11;
 	} else import core.sys.darwin.netinet.in_ : IP_ADD_MEMBERSHIP, IP_MULTICAST_LOOP;
+
+	static if (!is(typeof(ESHUTDOWN))) enum ESHUTDOWN = 58;
 }
 version(FreeBSD) {
 	static if (__VERSION__ < 2077) {
