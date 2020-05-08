@@ -16,12 +16,12 @@
 		cancellation function returns, or afterwards.
 */
 module eventcore.driver;
-@safe: /*@nogc:*/ nothrow:
 
 import core.time : Duration;
 import std.process : StdProcessConfig = Config;
 import std.socket : Address;
 import std.stdint : intptr_t;
+import std.typecons : Tuple;
 import std.variant : Algebraic;
 
 
@@ -71,14 +71,13 @@ interface EventDriver {
 /** Provides generic event loop control.
 */
 interface EventDriverCore {
-@safe: /*@nogc:*/ nothrow:
 	/** The number of pending callbacks.
 
 		When this number drops to zero, the event loop can safely be quit. It is
 		guaranteed that no callbacks will be made anymore, unless new callbacks
 		get registered.
 	*/
-	size_t waiterCount();
+	size_t waiterCount() @safe nothrow;
 
 	/** Runs the event loop to process a chunk of events.
 
@@ -92,7 +91,7 @@ interface EventDriverCore {
 				duration of `Duration.max`, if necessary, will wait indefinitely
 				until an event arrives.
 	*/
-	ExitReason processEvents(Duration timeout);
+	ExitReason processEvents(Duration timeout) @safe nothrow;
 
 	/** Causes `processEvents` to return with `ExitReason.exited` as soon as
 		possible.
@@ -101,7 +100,7 @@ interface EventDriverCore {
 		so that it returns immediately. If no call is in progress, the next call
 		to `processEvents` will immediately return with `ExitReason.exited`.
 	*/
-	void exit();
+	void exit() @safe nothrow;
 
 	/** Resets the exit flag.
 
@@ -110,26 +109,28 @@ interface EventDriverCore {
 		`processEvents`, the next call to `processEvents` will return with
 		`ExitCode.exited` immediately. This function can be used to avoid this.
 	*/
-	void clearExitFlag();
+	void clearExitFlag() @safe nothrow;
 
 	/** Executes a callback in the thread owning the driver.
 	*/
-	void runInOwnerThread(ThreadCallback2 fun, intptr_t param1, intptr_t param2) shared;
+	void runInOwnerThread(ThreadCallbackGen fun, ref ThreadCallbackGenParams params) shared @safe nothrow;
 	/// ditto
-	final void runInOwnerThread(ThreadCallback1 fun, intptr_t param1)
-	shared {
-		runInOwnerThread((p1, p2) {
-			auto f = () @trusted { return cast(ThreadCallback1)p2; } ();
-			f(p1);
-		}, param1, cast(intptr_t)fun);
-	}
-	/// ditto
-	final void runInOwnerThread(ThreadCallback0 fun)
-	shared {
-		runInOwnerThread((p1, p2) {
-			auto f = () @trusted { return cast(ThreadCallback0)p2; } ();
-			f();
-		}, 0, cast(intptr_t)fun);
+	final void runInOwnerThread(ARGS...)(void function(ARGS) @safe nothrow fun, ARGS args) shared
+		if (ARGS.length != 1 || !is(ARGS[0] == ThreadCallbackGenParams))
+	{
+		alias F = void function(ARGS) @safe nothrow;
+		alias T = Tuple!ARGS;
+		static assert(F.sizeof + T.sizeof <= ThreadCallbackGenParams.length,
+			"Parameters take up too much space.");
+
+		ThreadCallbackGenParams params;
+		() @trusted { (cast(F[])params[0 .. F.sizeof])[0] = fun; } ();
+		(cast(T[])params[F.sizeof .. F.sizeof + T.sizeof])[0] = T(args);
+		runInOwnerThread((ref ThreadCallbackGenParams p) {
+			auto f = () @trusted { return cast(F[])p[0 .. F.sizeof]; } ()[0];
+			auto pt = () @trusted { return cast(T[])p[F.sizeof .. F.sizeof + T.sizeof]; } ();
+			f(pt[0].expand);
+		}, params);
 	}
 
 	/// Low-level user data access. Use `getUserData` instead.
@@ -141,7 +142,7 @@ interface EventDriverCore {
 	*/
 	deprecated("Use `EventDriverSockets.userData` instead.")
 	@property final ref T userData(T, FD)(FD descriptor)
-	@trusted {
+	@trusted nothrow {
 		import std.conv : emplace;
 		static void init(void* ptr) { emplace(cast(T*)ptr); }
 		static void destr(void* ptr) { destroy(*cast(T*)ptr); }
@@ -460,12 +461,11 @@ interface EventDriverFiles {
 
 	/** Disallows any reads/writes and removes any exclusive locks.
 
-		Note that this function may not actually close the file handle. The
-		handle is only guaranteed to be closed one the reference count drops
-		to zero. However, the remaining effects of calling this function will
-		be similar to actually closing the file.
+		Note that the file handle may become invalid at any point after the
+		call to `close`, regardless of its current reference count. Any
+		operations on the handle will not have an effect.
 	*/
-	void close(FileFD file);
+	void close(FileFD file, FileCloseCallback on_closed);
 
 	ulong getSize(FileFD file);
 
@@ -882,8 +882,12 @@ interface EventDriverPipes {
 	void waitForData(PipeFD pipe, PipeIOCallback on_data_available);
 
 	/** Immediately close the pipe. Future read or write operations may fail.
+
+		Note that the file handle may become invalid at any point after the
+		call to `close`, regardless of its current reference count. Any
+		operations on the handle will not have an effect.
 	*/
-	void close(PipeFD pipe);
+	void close(PipeFD file, PipeCloseCallback on_closed);
 
 	/** Determines whether the given pipe handle is valid.
 
@@ -954,6 +958,7 @@ final class RefAddress : Address {
 	}
 }
 
+@safe: /*@nogc:*/ nothrow:
 
 alias ConnectCallback = void delegate(StreamSocketFD, ConnectStatus);
 alias AcceptCallback = void delegate(StreamListenSocketFD, StreamSocketFD, scope RefAddress remote_address);
@@ -961,7 +966,9 @@ alias IOCallback = void delegate(StreamSocketFD, IOStatus, size_t);
 alias DatagramIOCallback = void delegate(DatagramSocketFD, IOStatus, size_t, scope RefAddress);
 alias DNSLookupCallback = void delegate(DNSLookupID, DNSStatus, scope RefAddress[]);
 alias FileIOCallback = void delegate(FileFD, IOStatus, size_t);
+alias FileCloseCallback = void delegate(FileFD, CloseStatus);
 alias PipeIOCallback = void delegate(PipeFD, IOStatus, size_t);
+alias PipeCloseCallback = void delegate(PipeFD, CloseStatus);
 alias EventCallback = void delegate(EventID);
 alias SignalCallback = void delegate(SignalListenID, SignalStatus, int);
 alias TimerCallback = void delegate(TimerID);
@@ -982,6 +989,12 @@ enum ExitReason {
 	idle,
 	outOfWaiters,
 	exited
+}
+
+enum CloseStatus {
+	ok,
+	ioError,
+	invalidHandle,
 }
 
 enum ConnectStatus {
@@ -1150,10 +1163,9 @@ mixin template Handle(string NAME, T, T invalid_value = T.init) {
 	alias value this;
 }
 
-alias ThreadCallback0 = void function() @safe nothrow;
-alias ThreadCallback1 = void function(intptr_t param1) @safe nothrow;
-alias ThreadCallback2 = void function(intptr_t param1, intptr_t param2) @safe nothrow;
-alias ThreadCallback = ThreadCallback1;
+alias ThreadCallbackGenParams = ubyte[8 * intptr_t.sizeof];
+alias ThreadCallbackGen = void function(ref ThreadCallbackGenParams param3) @safe nothrow;
+deprecated alias ThreadCallback = void function(intptr_t param1) @safe nothrow;
 
 struct FD { mixin Handle!("fd", size_t, size_t.max); }
 struct SocketFD { mixin Handle!("socket", FD); }

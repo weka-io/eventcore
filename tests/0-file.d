@@ -36,13 +36,15 @@ void main()
 					assert(status == IOStatus.ok);
 					assert(nbytes == data.length - 5);
 					assert(dst == data);
-					eventDriver.files.close(f);
-					() @trusted {
-						scope (failure) assert(false);
-						remove("test.txt");
-					} ();
-					eventDriver.files.releaseRef(f);
-					s_done = true;
+					eventDriver.files.close(f, (f, s) {
+						assert(s == CloseStatus.ok);
+						() @trusted {
+							scope (failure) assert(false);
+							remove("test.txt");
+						} ();
+						eventDriver.files.releaseRef(f);
+						s_done = true;
+					});
 				});
 			});
 		});

@@ -31,7 +31,7 @@ void main()
 
 void threadFunc(shared(NativeEventDriver) drv)
 {
-	drv.core.runInOwnerThread((id) {
+	drv.core.runInOwnerThread((int id) {
 		s_id = id;
 	}, 42);
 }

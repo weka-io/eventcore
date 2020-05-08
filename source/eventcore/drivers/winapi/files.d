@@ -4,6 +4,7 @@ version (Windows):
 
 import eventcore.driver;
 import eventcore.drivers.winapi.core;
+import eventcore.internal.ioworker;
 import eventcore.internal.win32;
 
 private extern(Windows) @trusted nothrow @nogc {
@@ -14,6 +15,7 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 @safe /*@nogc*/ nothrow:
 	private {
 		WinAPIEventDriverCore m_core;
+		IOWorkerPool m_workerPool;
 	}
 
 	this(WinAPIEventDriverCore core)
@@ -71,15 +73,41 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		return FileFD(cast(size_t)handle, m_core.m_handles[handle].validationCounter);
 	}
 
-	override void close(FileFD file)
+	override void close(FileFD file, FileCloseCallback on_closed)
 	{
-		if (!isValid(file)) return;
+		static void doCloseCleanup(CloseParams p)
+		{
+			p.core.removeWaiter();
+			if (p.callback) p.callback(p.file, p.status);
+		}
+
+		static void doClose(FileFD file, FileCloseCallback on_closed,
+			shared(WinAPIEventDriverCore) core)
+		{
+			CloseParams p;
+			CloseStatus st;
+			p.file = file;
+			p.callback = on_closed;
+			p.core = () @trusted { return cast(WinAPIEventDriverCore)core; } ();
+			if (CloseHandle(idToHandle(file))) p.status = CloseStatus.ok;
+			else p.status = CloseStatus.ioError;
+
+			() @trusted { core.runInOwnerThread(&doCloseCleanup, p); } ();
+		}
+
+		if (!isValid(file)) {
+			on_closed(file, CloseStatus.invalidHandle);
+			return;
+		}
 
 		auto h = idToHandle(file);
 		auto slot = () @trusted { return &m_core.m_handles[h]; } ();
-		if (slot.validationCounter != file.validationCounter) return;
 		if (slot.file.read.overlapped.hEvent != INVALID_HANDLE_VALUE)
 			slot.file.read.overlapped.hEvent = slot.file.write.overlapped.hEvent = INVALID_HANDLE_VALUE;
+		m_core.addWaiter();
+		m_core.discardEvents(&slot.file.read.overlapped, &slot.file.write.overlapped);
+		m_core.freeSlot(h);
+		workerPool.run!doClose(file, on_closed, () @trusted { return cast(shared)m_core; } ());
 	}
 
 	override ulong getSize(FileFD file)
@@ -213,11 +241,7 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 
 		auto h = idToHandle(descriptor);
 		auto slot = &m_core.m_handles[h];
-		return slot.releaseRef({
-			CloseHandle(h);
-			m_core.discardEvents(&slot.file.read.overlapped, &slot.file.write.overlapped);
-			m_core.freeSlot(h);
-		});
+		return slot.releaseRef({ close(descriptor, null); });
 	}
 
 	protected override void* rawUserData(FileFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
@@ -291,8 +315,22 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		}
 	}
 
+	private @property ref IOWorkerPool workerPool()
+	{
+		if (!m_workerPool)
+			m_workerPool = acquireIOWorkerPool();
+		return m_workerPool;
+	}
+
 	private static HANDLE idToHandle(FileFD id)
 	@trusted @nogc {
 		return cast(HANDLE)cast(size_t)id;
 	}
+}
+
+private static struct CloseParams {
+	FileFD file;
+	FileCloseCallback callback;
+	CloseStatus status;
+	WinAPIEventDriverCore core;
 }

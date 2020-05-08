@@ -160,7 +160,7 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 
 	protected alias ExtraEventsCallback = bool delegate(long);
 
-	private alias ThreadCallbackEntry = Tuple!(ThreadCallback2, intptr_t, intptr_t);
+	private alias ThreadCallbackEntry = Tuple!(ThreadCallbackGen, ThreadCallbackGenParams);
 
 	private {
 		Loop m_loop;
@@ -262,7 +262,8 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 		m_exit = false;
 	}
 
-	final override void runInOwnerThread(ThreadCallback2 del, intptr_t param1, intptr_t param2)
+	final override void runInOwnerThread(ThreadCallbackGen del,
+		ref ThreadCallbackGenParams params)
 	shared {
 		auto m = atomicLoad(m_threadCallbackMutex);
 		auto evt = atomicLoad(m_wakeupEvent);
@@ -275,7 +276,7 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 		try {
 			synchronized (m)
 				() @trusted { return (cast()this).m_threadCallbacks; } ()
-					.put(ThreadCallbackEntry(del, param1, param2));
+					.put(ThreadCallbackEntry(del, params));
 		} catch (Exception e) assert(false, e.msg);
 
 		m_events.trigger(m_wakeupEvent, false);
@@ -311,7 +312,7 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 					del = m_threadCallbacks.consumeOne;
 				}
 			} catch (Exception e) assert(false, e.msg);
-			del[0](del[1], del[2]);
+			del[0](del[1]);
 		}
 	}
 }

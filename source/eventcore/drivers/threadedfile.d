@@ -102,7 +102,6 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 		static struct FileInfo {
 			IOInfo read;
 			IOInfo write;
-			bool open = true;
 
 			uint validationCounter;
 
@@ -177,15 +176,22 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 		return FileFD(system_file_handle, vc + 1);
 	}
 
-	void close(FileFD file)
+	void close(FileFD file, FileCloseCallback on_closed)
 	{
-		if (!isValid(file)) return;
+		if (!isValid(file)) {
+			on_closed(file, CloseStatus.invalidHandle);
+			return;
+		}
 
-		// NOTE: The file descriptor itself must stay open until the reference
-		//       count drops to zero, or this would result in dangling handles.
-		//       In case of an exclusive file lock, the lock should be lifted
-		//       here.
-		m_files[file].open = false;
+		// TODO: close may block and should be executed in a worker thread
+		int res;
+		do res = .close(cast(int)file.value);
+		while (res != 0 && errno == EINTR);
+
+		m_files[file.value] = FileInfo.init;
+
+		if (on_closed)
+			on_closed(file, res == 0 ? CloseStatus.ok : CloseStatus.ioError);
 	}
 
 	ulong getSize(FileFD file)
@@ -230,11 +236,6 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 		//assert(this.writable);
 		auto f = () @trusted { return &m_files[file]; } ();
 
-		if (!f.open) {
-			on_write_finish(file, IOStatus.disconnected, 0);
-			return;
-		}
-
 		if (!safeCAS(f.write.status, ThreadedFileStatus.idle, ThreadedFileStatus.initiated))
 			assert(false, "Concurrent file writes are not allowed.");
 		assert(f.write.callback is null, "Concurrent file writes are not allowed.");
@@ -275,11 +276,6 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 		}
 
 		auto f = () @trusted { return &m_files[file]; } ();
-
-		if (!f.open) {
-			on_read_finish(file, IOStatus.disconnected, 0);
-			return;
-		}
 
 		if (!safeCAS(f.read.status, ThreadedFileStatus.idle, ThreadedFileStatus.initiated))
 			assert(false, "Concurrent file reads are not allowed.");
@@ -332,8 +328,7 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 
 		auto f = () @trusted { return &m_files[descriptor]; } ();
 		if (!--f.refCount) {
-			.close(cast(int)descriptor);
-			*f = FileInfo.init;
+			close(descriptor, null);
 			assert(!m_activeReads.contains(descriptor.value));
 			assert(!m_activeWrites.contains(descriptor.value));
 			return false;

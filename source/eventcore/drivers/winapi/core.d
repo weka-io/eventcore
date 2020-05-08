@@ -16,7 +16,7 @@ import std.typecons : Tuple, tuple;
 
 final class WinAPIEventDriverCore : EventDriverCore {
 @safe: /*@nogc:*/ nothrow:
-	private alias ThreadCallbackEntry = Tuple!(ThreadCallback2, intptr_t, intptr_t);
+	private alias ThreadCallbackEntry = Tuple!(ThreadCallbackGen, ThreadCallbackGenParams);
 
 	private {
 		bool m_exit;
@@ -141,7 +141,8 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		m_exit = false;
 	}
 
-	override void runInOwnerThread(ThreadCallback2 del, intptr_t param1, intptr_t param2)
+	override void runInOwnerThread(ThreadCallbackGen del,
+		ref ThreadCallbackGenParams params)
 	shared {
 		import core.atomic : atomicLoad;
 
@@ -155,7 +156,7 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		try {
 			synchronized (m)
 				() @trusted { return (cast()this).m_threadCallbacks; } ()
-					.put(ThreadCallbackEntry(del, param1, param2));
+					.put(ThreadCallbackEntry(del, params));
 		} catch (Exception e) assert(false, e.msg);
 
 		() @trusted { PostThreadMessageW(m_tid, WM_APP, 0, 0); } ();
@@ -279,8 +280,6 @@ final class WinAPIEventDriverCore : EventDriverCore {
 
 	private void executeThreadCallbacks()
 	{
-		import std.stdint : intptr_t;
-
 		while (true) {
 			ThreadCallbackEntry del;
 			try {
@@ -289,7 +288,7 @@ final class WinAPIEventDriverCore : EventDriverCore {
 					del = m_threadCallbacks.consumeOne;
 				}
 			} catch (Exception e) assert(false, e.msg);
-			del[0](del[1], del[2]);
+			del[0](del[1]);
 		}
 	}
 }
@@ -360,6 +359,7 @@ package struct FileSlot {
 	}
 	Direction!false read;
 	Direction!true write;
+	FileCloseCallback closeCallback;
 }
 
 package struct WatcherSlot {

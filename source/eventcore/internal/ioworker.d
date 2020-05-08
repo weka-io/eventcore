@@ -4,7 +4,7 @@ module eventcore.internal.ioworker;
 
 import eventcore.internal.utils;
 
-import std.parallelism : TaskPool;
+import std.parallelism : TaskPool, Task, task;
 
 
 IOWorkerPool acquireIOWorkerPool()
@@ -28,6 +28,14 @@ struct IOWorkerPool {
 	@property TaskPool pool() { return m_pool; }
 
 	alias pool this;
+
+	auto run(alias fun, ARGS...)(ARGS args)
+	{
+		auto t = task!(fun, ARGS)(args);
+		try m_pool.put(t);
+		catch (Exception e) assert(false, e.msg);
+		return t;
+	}
 }
 
 // Maintains a single thread pool shared by all driver instances (threads)
