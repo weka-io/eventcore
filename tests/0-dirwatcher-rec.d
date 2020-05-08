@@ -8,7 +8,7 @@ import eventcore.core;
 import eventcore.internal.utils : print;
 import core.thread : Thread;
 import core.time : Duration, MonoTime, msecs;
-import std.file : exists, remove, rename, rmdirRecurse, mkdir;
+import std.file : exists, remove, rename, rmdirRecurse, mkdir, isDir;
 import std.format : format;
 import std.functional : toDelegate;
 import std.path : baseName, buildPath, dirName;
@@ -97,6 +97,20 @@ void expectChange(FileChange ch, bool expect_change)
 			assert(!expect_change, format("Got no change, expected %s.", ch));
 			return;
 		}
+
+		// ignore different directory modification notifications on Windows as
+		// opposed to the other systems
+		while (pendingChanges.length) {
+			auto pch = pendingChanges[0];
+			if (pch.kind == FileChangeKind.modified) {
+				auto p = buildPath(pch.baseDirectory, pch.directory, pch.name);
+				if (!exists(p) || isDir(p)) {
+					pendingChanges = pendingChanges[1 .. $];
+					continue;
+				}
+			}
+			break;
+		}
 	}
 	assert(expect_change, "Got change although none was expected.");
 
@@ -119,43 +133,43 @@ void testFile(string name, bool expect_change = true)
 {
 print("test %s CREATE %s", name, expect_change);
 	auto fil = File(buildPath(testDir, name), "wt");
-	expectChange(fchange(FileChangeKind.added, name, false), expect_change);
+	expectChange(fchange(FileChangeKind.added, name), expect_change);
 
 print("test %s MODIFY %s", name, expect_change);
 	fil.write("test");
 	fil.close();
-	expectChange(fchange(FileChangeKind.modified, name, false), expect_change);
+	expectChange(fchange(FileChangeKind.modified, name), expect_change);
 
 print("test %s DELETE %s", name, expect_change);
 	remove(buildPath(testDir, name));
-	expectChange(fchange(FileChangeKind.removed, name, false), expect_change);
+	expectChange(fchange(FileChangeKind.removed, name), expect_change);
 }
 
 void testCreateDir(string name, bool expect_change = true)
 {
 print("test %s CREATEDIR %s", name, expect_change);
 	mkdir(buildPath(testDir, name));
-	expectChange(fchange(FileChangeKind.added, name, true), expect_change);
+	expectChange(fchange(FileChangeKind.added, name), expect_change);
 }
 
 void testRemoveDir(string name, bool expect_change = true)
 {
 print("test %s DELETEDIR %s", name, expect_change);
 	rmdirRecurse(buildPath(testDir, name));
-	expectChange(fchange(FileChangeKind.removed, name, true), expect_change);
+	expectChange(fchange(FileChangeKind.removed, name), expect_change);
 }
 
 void testRename(string from, string to, bool expect_change = true)
 {
 print("test %s RENAME %s %s", from, to, expect_change);
 	rename(buildPath(testDir, from), buildPath(testDir, to));
-	expectChange(fchange(FileChangeKind.removed, from, true), expect_change);
-	expectChange(fchange(FileChangeKind.added, to, true), expect_change);
+	expectChange(fchange(FileChangeKind.removed, from), expect_change);
+	expectChange(fchange(FileChangeKind.added, to), expect_change);
 }
 
-FileChange fchange(FileChangeKind kind, string name, bool is_dir)
+FileChange fchange(FileChangeKind kind, string name)
 {
 	auto dn = dirName(name);
 	if (dn == ".") dn = "";
-	return FileChange(kind, testDir, dn, baseName(name), is_dir);
+	return FileChange(kind, testDir, dn, baseName(name));
 }

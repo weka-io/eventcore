@@ -1093,13 +1093,6 @@ struct FileChange {
 
 	/// Name of the changed file
 	const(char)[] name;
-
-	/** Determines if the changed entity is a file or a directory.
-
-		Note that depending on the platform this may not be accurate for
-		`FileChangeKind.removed`.
-	*/
-	bool isDirectory;
 }
 
 /** Describes a spawned process
