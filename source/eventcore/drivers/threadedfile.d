@@ -1,6 +1,7 @@
 module eventcore.drivers.threadedfile;
 
 import eventcore.driver;
+import eventcore.internal.ioworker;
 import eventcore.internal.utils;
 import core.atomic;
 import core.stdc.errno;
@@ -110,7 +111,7 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 			ubyte[16*size_t.sizeof] userData;
 		}
 
-		TaskPool m_fileThreadPool;
+		IOWorkerPool m_fileThreadPool;
 		ChoppedVector!FileInfo m_files; // TODO: use the one from the posix loop
 		SmallIntegerSet!size_t m_activeReads;
 		SmallIntegerSet!size_t m_activeWrites;
@@ -128,10 +129,7 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 
 	void dispose()
 	{
-		if (m_fileThreadPool) {
-			StaticTaskPool.releaseRef();
-			m_fileThreadPool = null;
-		}
+		m_fileThreadPool = IOWorkerPool.init;
 
 		if (m_readyEvent != EventID.invalid) {
 			log("finishing file events");
@@ -435,9 +433,9 @@ log("ready event");
 			log("create file event");
 			m_readyEvent = m_events.create();
 		}
-		if (m_fileThreadPool is null) {
+		if (!m_fileThreadPool) {
 			log("aquire thread pool");
-			m_fileThreadPool = StaticTaskPool.addRef();
+			m_fileThreadPool = acquireIOWorkerPool();
 		}
 	}
 }
@@ -454,65 +452,5 @@ private void log(ARGS...)(string fmt, ARGS args)
 		import std.stdio : writef, writefln;
 		writef("[%s] ", Thread.getThis().name);
 		writefln(fmt, args);
-	}
-}
-
-
-// Maintains a single thread pool shared by all driver instances (threads)
-private struct StaticTaskPool {
-	import core.sync.mutex : Mutex;
-	import std.parallelism : TaskPool;
-
-	private {
-		static shared Mutex m_mutex;
-		static __gshared TaskPool m_pool;
-		static __gshared int m_refCount = 0;
-	}
-
-	shared static this()
-	{
-		m_mutex = new shared Mutex;
-	}
-
-	static TaskPool addRef()
-	@trusted nothrow {
-		m_mutex.lock_nothrow();
-		scope (exit) m_mutex.unlock_nothrow();
-
-		if (!m_refCount++) {
-			try {
-				m_pool = mallocT!TaskPool(4);
-				m_pool.isDaemon = true;
-			} catch (Exception e) {
-				assert(false, e.msg);
-			}
-		}
-
-		return m_pool;
-	}
-
-	static void releaseRef()
-	@trusted nothrow {
-		TaskPool fin_pool;
-
-		{
-			m_mutex.lock_nothrow();
-			scope (exit) m_mutex.unlock_nothrow();
-
-			if (!--m_refCount) {
-				fin_pool = m_pool;
-				m_pool = null;
-			}
-		}
-
-		if (fin_pool) {
-			log("finishing thread pool");
-			try {
-				fin_pool.finish(true);
-				freeT(fin_pool);
-			} catch (Exception e) {
-				//log("Failed to shut down file I/O thread pool.");
-			}
-		}
 	}
 }
