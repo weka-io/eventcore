@@ -38,7 +38,9 @@ final class InotifyEventDriverWatchers(Events : EventDriverEvents) : EventDriver
 		auto handle = () @trusted { return inotify_init1(IN_NONBLOCK | IN_CLOEXEC); } ();
 		if (handle == -1) return WatcherID.invalid;
 
-		auto ret = WatcherID(handle);
+		auto ret = m_loop.initFD!WatcherID(handle, FDFlags.none, WatcherSlot(callback));
+		m_loop.registerFD(cast(FD)ret, EventMask.read);
+		m_loop.setNotifyCallback!(EventType.read)(cast(FD)ret, &onChanges);
 
 		m_watches[ret] = WatchState(null, path, recursive);
 
@@ -46,23 +48,28 @@ final class InotifyEventDriverWatchers(Events : EventDriverEvents) : EventDriver
 		if (recursive)
 			addSubWatches(ret, path, "");
 
-		m_loop.initFD(FD(handle), FDFlags.none, WatcherSlot(callback));
-		m_loop.registerFD(FD(handle), EventMask.read);
-		m_loop.setNotifyCallback!(EventType.read)(FD(handle), &onChanges);
-
-		processEvents(WatcherID(handle));
+		processEvents(ret);
 
 		return ret;
 	}
 
+	final override bool isValid(WatcherID handle)
+	const {
+		if (handle.value >= m_loop.m_fds.length) return false;
+		return m_loop.m_fds[handle.value].common.validationCounter == handle.validationCounter;
+	}
+
 	final override void addRef(WatcherID descriptor)
 	{
+		if (!isValid(descriptor)) return;
 		assert(m_loop.m_fds[descriptor].common.refCount > 0, "Adding reference to unreferenced event FD.");
 		m_loop.m_fds[descriptor].common.refCount++;
 	}
 
 	final override bool releaseRef(WatcherID descriptor)
 	{
+		if (!isValid(descriptor)) return true;
+
 		FD fd = cast(FD)descriptor;
 		auto slot = () @trusted { return &m_loop.m_fds[fd]; } ();
 		nogc_assert(slot.common.refCount > 0, "Releasing reference to unreferenced event FD.");
@@ -80,6 +87,7 @@ final class InotifyEventDriverWatchers(Events : EventDriverEvents) : EventDriver
 
 	final protected override void* rawUserData(WatcherID descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
 	@system {
+		if (!isValid(descriptor)) return null;
 		return m_loop.rawUserDataImpl(descriptor, size, initialize, destroy);
 	}
 
@@ -204,13 +212,22 @@ final class FSEventsEventDriverWatchers(Events : EventDriverEvents) : EventDrive
 		assert(false, "TODO!");
 	}
 
+	final override bool isValid(WatcherID handle)
+	const {
+		return false;
+	}
+
 	final override void addRef(WatcherID descriptor)
 	{
+		if (!isValid(descriptor)) return;
+
 		assert(false, "TODO!");
 	}
 
 	final override bool releaseRef(WatcherID descriptor)
 	{
+		if (!isValid(descriptor)) return true;
+
 		/*FSEventStreamStop
 		FSEventStreamUnscheduleFromRunLoop
 		FSEventStreamInvalidate
@@ -220,6 +237,8 @@ final class FSEventsEventDriverWatchers(Events : EventDriverEvents) : EventDrive
 
 	final protected override void* rawUserData(WatcherID descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
 	@system {
+		if (!isValid(descriptor)) return null;
+
 		return m_loop.rawUserDataImpl(descriptor, size, initialize, destroy);
 	}
 
@@ -283,9 +302,15 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 		return cast(WatcherID)evt;
 	}
 
+	final override bool isValid(WatcherID handle)
+	const {
+		return m_events.isValid(cast(EventID)handle);
+	}
+
 	final override void addRef(WatcherID descriptor)
 	{
-		assert(descriptor != WatcherID.invalid);
+		if (!isValid(descriptor)) return;
+
 		auto evt = cast(EventID)descriptor;
 		auto pt = evt in m_pollers;
 		assert(pt !is null);
@@ -294,7 +319,8 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 
 	final override bool releaseRef(WatcherID descriptor)
 	{
-		nogc_assert(descriptor != WatcherID.invalid, "Invalid directory watcher ID released");
+		if (!isValid(descriptor)) return true;
+
 		auto evt = cast(EventID)descriptor;
 		auto pt = evt in m_pollers;
 		nogc_assert(pt !is null, "Directory watcher polling thread does not exist");

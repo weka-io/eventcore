@@ -172,6 +172,18 @@ struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
 		return (*m_chunks[chunk])[subidx];
 	}
 
+	ref const(T) opIndex(size_t index)
+	const @nogc {
+		static immutable T emptySlot;
+
+		auto chunk = index / chunkSize;
+		auto subidx = index % chunkSize;
+		if (index >= m_length) return emptySlot;
+		auto c = m_chunks[chunk];
+		if (!c) return emptySlot;
+		return (*c)[subidx];
+	}
+
 	int opApply(scope int delegate(size_t idx, ref T) @safe nothrow del)
 	{
 		size_t idx = 0;

@@ -56,14 +56,16 @@ final class WinAPIEventDriverEvents : EventDriverEvents {
 
 	override EventID create()
 	{
-		auto id = EventID(m_idCounter++);
-		if (id == EventID.invalid) id = EventID(m_idCounter++);
+		auto id = EventID(m_idCounter++, 0);
+		if (id == EventID.invalid) id = EventID(m_idCounter++, 0);
 		m_events[id] = EventSlot(1, new ConsumableQueue!EventCallback); // FIXME: avoid GC allocation
 		return id;
 	}
 
 	override void trigger(EventID event, bool notify_all = true)
 	{
+		if (!isValid(event)) return;
+
 		auto pe = event in m_events;
 		assert(pe !is null, "Invalid event ID passed to triggerEvent.");
 		if (notify_all) {
@@ -82,13 +84,12 @@ final class WinAPIEventDriverEvents : EventDriverEvents {
 	override void trigger(EventID event, bool notify_all = true) shared
 	{
 		import core.atomic : atomicStore;
-		auto pe = event in m_events;
-		assert(pe !is null, "Invalid event ID passed to shared triggerEvent.");
 
 		() @trusted {
 			auto thisus = cast(WinAPIEventDriverEvents)this;
 			EnterCriticalSection(&thisus.m_mutex);
-			thisus.m_pending.put(Trigger(event, notify_all));
+			if (thisus.isValid(event))
+				thisus.m_pending.put(Trigger(event, notify_all));
 			LeaveCriticalSection(&thisus.m_mutex);
 			SetEvent(thisus.m_event);
 		} ();
@@ -96,6 +97,8 @@ final class WinAPIEventDriverEvents : EventDriverEvents {
 
 	override void wait(EventID event, EventCallback on_event)
 	{
+		if (!isValid(event)) return;
+
 		m_core.addWaiter();
 		return m_events[event].waiters.put(on_event);
 	}
@@ -105,18 +108,29 @@ final class WinAPIEventDriverEvents : EventDriverEvents {
 		import std.algorithm.searching : countUntil;
 		import std.algorithm.mutation : remove;
 
+		if (!isValid(event)) return;
+
 		m_events[event].waiters.removePending(on_event);
 		m_core.removeWaiter();
 	}
 
+	override bool isValid(EventID handle)
+	const {
+		return (handle in m_events) !is null;
+	}
+
 	override void addRef(EventID descriptor)
 	{
+		if (!isValid(descriptor)) return;
+
 		assert(m_events[descriptor].refCount > 0);
 		m_events[descriptor].refCount++;
 	}
 
 	override bool releaseRef(EventID descriptor)
 	{
+		if (!isValid(descriptor)) return true;
+
 		auto pe = descriptor in m_events;
 		nogc_assert(pe.refCount > 0, "Releasing unreference event.");
 		if (--pe.refCount == 0) {
@@ -156,7 +170,7 @@ final class WinAPIEventDriverEvents : EventDriverEvents {
 	}
 
 	private static HANDLE idToHandle(EventID event)
-	@trusted {
+	@trusted @nogc {
 		return cast(HANDLE)cast(size_t)event;
 	}
 }

@@ -45,9 +45,8 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 		version (linux) {
 			auto eid = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
 			if (eid == -1) return EventID.invalid;
-			auto id = cast(EventID)eid;
 			// FIXME: avoid dynamic memory allocation for the queue
-			m_loop.initFD(id, FDFlags.internal,
+			auto id = m_loop.initFD!EventID(eid, FDFlags.internal,
 				EventSlot(mallocT!(ConsumableQueue!EventCallback), is_internal));
 			m_loop.registerFD(id, EventMask.read);
 			m_loop.setNotifyCallback!(EventType.read)(id, &onEvent);
@@ -101,19 +100,20 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 
 			// use the second socket as the event ID and as the sending end for
 			// other threads
-			auto id = cast(EventID)fd[1];
-			try m_sockets.userData!EventID(s) = id;
-			catch (Exception e) assert(false, e.msg);
 			// FIXME: avoid dynamic memory allocation for the queue
-			m_loop.initFD(id, FDFlags.internal,
+			auto id = m_loop.initFD!EventID(fd[1], FDFlags.internal,
 				EventSlot(mallocT!(ConsumableQueue!EventCallback), is_internal, s));
 			assert(getRC(id) == 1);
+			try m_sockets.userData!EventID(s) = id;
+			catch (Exception e) assert(false, e.msg);
 			return id;
 		}
 	}
 
 	final override void trigger(EventID event, bool notify_all)
 	{
+		if (!isValid(event)) return;
+
 		auto slot = getSlot(event);
 		if (notify_all) {
 			//log("emitting only for this thread (%s waiters)", m_fds[event].waiters.length);
@@ -141,6 +141,8 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 
 	final override void wait(EventID event, EventCallback on_event)
 	@nogc {
+		if (!isValid(event)) return;
+
 		if (!isInternal(event)) m_loop.m_waiterCount++;
 		getSlot(event).waiters.put(on_event);
 	}
@@ -149,6 +151,8 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 	{
 		import std.algorithm.searching : countUntil;
 		import std.algorithm.mutation : remove;
+
+		if (!isValid(event)) return;
 
 		if (!isInternal(event)) m_loop.m_waiterCount--;
 		getSlot(event).waiters.removePending(on_event);
@@ -176,14 +180,24 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 		}
 	}
 
+	override bool isValid(EventID handle)
+	const {
+		if (handle.value >= m_loop.m_fds.length) return false;
+		return m_loop.m_fds[handle.value].common.validationCounter == handle.validationCounter;
+	}
+
 	final override void addRef(EventID descriptor)
 	{
+		if (!isValid(descriptor)) return;
+
 		assert(getRC(descriptor) > 0, "Adding reference to unreferenced event FD.");
 		getRC(descriptor)++;
 	}
 
 	final override bool releaseRef(EventID descriptor)
 	@nogc {
+		if (!isValid(descriptor)) return true;
+
 		nogc_assert(getRC(descriptor) > 0, "Releasing reference to unreferenced event FD.");
 		if (--getRC(descriptor) == 0) {
 			if (!isInternal(descriptor))
@@ -209,6 +223,7 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 
 	final protected override void* rawUserData(EventID descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
 	@system {
+		if (!isValid(descriptor)) return null;
 		return m_loop.rawUserDataImpl(descriptor, size, initialize, destroy);
 	}
 

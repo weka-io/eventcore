@@ -35,6 +35,7 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 		static struct Lookup {
 			shared(bool) done;
 			DNSLookupCallback callback;
+			uint validationCounter;
 			addrinfo* result;
 			int retcode;
 			string name;
@@ -44,6 +45,7 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 		Events m_events;
 		EventID m_event = EventID.invalid;
 		size_t m_maxHandle;
+		uint m_validationCounter;
 	}
 
 	this(Events events, Signals signals)
@@ -64,7 +66,7 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 	override DNSLookupID lookupHost(string name, DNSLookupCallback on_lookup_finished)
 	{
 		debug (EventCoreLogDNS) print("lookup %s", name);
-		auto handle = getFreeHandle();
+		auto handle = allocateHandle();
 		if (handle > m_maxHandle) m_maxHandle = handle;
 
 		assert(on_lookup_finished !is null, "Null callback passed to lookupHost");
@@ -123,13 +125,20 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 
 		debug (EventCoreLogDNS) print("lookup handle: %s", handle);
 		m_events.loop.m_waiterCount++;
-		return handle;
+		return DNSLookupID(handle, l.validationCounter);
 	}
 
 	override void cancelLookup(DNSLookupID handle)
 	{
+		if (!isValid(handle)) return;
 		m_lookups[handle].callback = null;
 		m_events.loop.m_waiterCount--;
+	}
+
+	override bool isValid(DNSLookupID handle)
+	const {
+		if (handle.value >= m_lookups.length) return false;
+		return m_lookups[handle.value].validationCounter == handle.validationCounter;
 	}
 
 	private void onDNSSignal(EventID event)
@@ -171,20 +180,26 @@ final class EventDriverDNS_GAI(Events : EventDriverEvents, Signals : EventDriver
 					l.done = false;
 					if (i == m_maxHandle) m_maxHandle = lastmax;
 					m_events.loop.m_waiterCount--;
-					passToDNSCallback(cast(DNSLookupID)cast(int)i, cb, status, ai);
+					passToDNSCallback(DNSLookupID(i, l.validationCounter), cb, status, ai);
 				} else lastmax = i;
 			}
 		}
 		debug (EventCoreLogDNS) print("Max active DNS handle: %s", m_maxHandle);
 	}
 
-	private DNSLookupID getFreeHandle()
+	private DNSLookupID allocateHandle()
 	@safe nothrow {
 		assert(m_lookups.length <= int.max);
+		int id = cast(int)m_lookups.length;
 		foreach (i, ref l; m_lookups)
-			if (!l.callback)
-				return cast(DNSLookupID)cast(int)i;
-		return cast(DNSLookupID)cast(int)m_lookups.length;
+			if (!l.callback) {
+				id = cast(int)i;
+				break;
+			}
+
+		auto vc = ++m_validationCounter;
+		m_lookups[id].validationCounter = vc;
+		return DNSLookupID(cast(int)id, vc);
 	}
 
 	private void setupEvent()
@@ -204,12 +219,14 @@ final class EventDriverDNS_GAIA(Events : EventDriverEvents, Signals : EventDrive
 	private {
 		static struct Lookup {
 			gaicb ctx;
+			uint validationCounter;
 			DNSLookupCallback callback;
 		}
 		ChoppedVector!Lookup m_lookups;
 		Events m_events;
 		Signals m_signals;
 		int m_dnsSignal;
+		uint m_validationCounter;
 		SignalListenID m_sighandle;
 	}
 
@@ -232,7 +249,7 @@ final class EventDriverDNS_GAIA(Events : EventDriverEvents, Signals : EventDrive
 	{
 		import std.string : toStringz;
 
-		auto handle = getFreeHandle();
+		auto handle = allocateHandle();
 
 		sigevent evt;
 		evt.sigev_notify = SIGEV_SIGNAL;
@@ -260,6 +277,13 @@ final class EventDriverDNS_GAIA(Events : EventDriverEvents, Signals : EventDrive
 		m_events.loop.m_waiterCount--;
 	}
 
+	override bool isValid(DNSLookupID handle)
+	{
+		if (handle.value >= m_lookups.length)
+			return false;
+		return m_lookups[handle.value].validationCounter == handle.validationCounter;
+	}
+
 	private void onDNSSignal(SignalListenID, SignalStatus status, int signal)
 		@safe nothrow
 	{
@@ -284,11 +308,14 @@ final class EventDriverDNS_GAIA(Events : EventDriverEvents, Signals : EventDrive
 		}
 	}
 
-	private DNSLookupID getFreeHandle()
+	private DNSLookupID allocateHandle()
 	{
 		foreach (i, ref l; m_lookups)
-			if (!l.callback)
+			if (!l.callback) {
+				m_lookups[i].validationCounter = ++m_validationCounter;
 				return cast(DNSLookupID)cast(int)i;
+			}
+		m_lookups[m_lookups.length].validationCounter = ++m_validationCounter;
 		return cast(DNSLookupID)cast(int)m_lookups.length;
 	}
 }
@@ -344,7 +371,7 @@ final class EventDriverDNS_GHBN(Events : EventDriverEvents, Signals : EventDrive
 	{
 		import std.string : toStringz;
 
-		auto handle = DNSLookupID(m_maxHandle++);
+		auto handle = DNSLookupID(m_maxHandle++, 0);
 
 		auto he = () @trusted { return gethostbyname(name.toStringz); } ();
 		if (he is null) {
@@ -377,6 +404,11 @@ final class EventDriverDNS_GHBN(Events : EventDriverEvents, Signals : EventDrive
 	}
 
 	override void cancelLookup(DNSLookupID) {}
+
+	override bool isValid(DNSLookupID)
+	const {
+		return true;
+	}
 }
 
 package struct DNSSlot {

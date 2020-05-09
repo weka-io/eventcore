@@ -114,7 +114,23 @@ interface EventDriverCore {
 
 	/** Executes a callback in the thread owning the driver.
 	*/
-	void runInOwnerThread(ThreadCallback del, intptr_t param) shared;
+	void runInOwnerThread(ThreadCallback2 fun, intptr_t param1, intptr_t param2) shared;
+	/// ditto
+	final void runInOwnerThread(ThreadCallback1 fun, intptr_t param1)
+	shared {
+		runInOwnerThread((p1, p2) {
+			auto f = () @trusted { return cast(ThreadCallback1)p2; } ();
+			f(p1);
+		}, param1, cast(intptr_t)fun);
+	}
+	/// ditto
+	final void runInOwnerThread(ThreadCallback0 fun)
+	shared {
+		runInOwnerThread((p1, p2) {
+			auto f = () @trusted { return cast(ThreadCallback0)p2; } ();
+			f();
+		}, 0, cast(intptr_t)fun);
+	}
 
 	/// Low-level user data access. Use `getUserData` instead.
 	protected void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy) @system;
@@ -341,6 +357,18 @@ interface EventDriverSockets {
 	/// Cancels an ongoing wait for an outgoing datagram.
 	void cancelSend(DatagramSocketFD socket);
 
+	/** Determines whether the given socket handle is valid.
+
+		A handle that is invalid will result in no operations being carried out
+		when used. In particular `addRef`/`releaseRef` will have no effect, but
+		can safely be called and I/O operations will result in
+		`IOStatus.invalidHandle`.
+
+		A valid handle gets invalid when either the reference count drops to
+		zero, or after the socket was explicitly closed.
+	*/
+	bool isValid(SocketFD handle) const @nogc;
+
 	/** Increments the reference count of the given socket.
 	*/
 	void addRef(SocketFD descriptor);
@@ -352,6 +380,8 @@ interface EventDriverSockets {
 
 		Returns:
 			Returns `false` $(I iff) the last reference was removed by this call.
+
+			Passing an invalid handle will result in a return value of `true`.
 	*/
 	bool releaseRef(SocketFD descriptor);
 
@@ -411,6 +441,13 @@ interface EventDriverDNS {
 
 	/// Cancels an ongoing DNS lookup.
 	void cancelLookup(DNSLookupID handle);
+
+	/** Determines whether the given DNS lookup handle is valid.
+
+		A valid handle gets invalid when the lookup has completed or got
+		cancelled.
+	*/
+	bool isValid(DNSLookupID handle) const @nogc;
 }
 
 
@@ -447,6 +484,18 @@ interface EventDriverFiles {
 	void cancelWrite(FileFD file);
 	void cancelRead(FileFD file);
 
+	/** Determines whether the given file handle is valid.
+
+		A handle that is invalid will result in no operations being carried out
+		when used. In particular `addRef`/`releaseRef` will have no effect, but
+		can safely be called and I/O operations will result in
+		`IOStatus.invalidHandle`.
+
+		A valid handle gets invalid when either the reference count drops to
+		zero, or after the file was explicitly closed.
+	*/
+	bool isValid(FileFD handle) const @nogc;
+
 	/** Increments the reference count of the given file.
 	*/
 	void addRef(FileFD descriptor);
@@ -458,6 +507,8 @@ interface EventDriverFiles {
 
 		Returns:
 			Returns `false` $(I iff) the last reference was removed by this call.
+
+			Passing an invalid handle will result in a return value of `true`.
 	*/
 	bool releaseRef(FileFD descriptor);
 
@@ -505,6 +556,16 @@ interface EventDriverEvents {
 	/// Cancels an ongoing wait operation.
 	void cancelWait(EventID event, EventCallback on_event);
 
+	/** Determines whether the given event handle is valid.
+
+		A handle that is invalid will result in no operations being carried out
+		when used. In particular `addRef`/`releaseRef` will have no effect, but
+		can safely be called.
+
+		A valid handle gets invalid when the reference count drops to zero.
+	*/
+	bool isValid(EventID handle) const @nogc;
+
 	/** Increments the reference count of the given event.
 	*/
 	void addRef(EventID descriptor);
@@ -516,6 +577,8 @@ interface EventDriverEvents {
 
 		Returns:
 			Returns `false` $(I iff) the last reference was removed by this call.
+
+			Passing an invalid handle will result in a return value of `true`.
 	*/
 	bool releaseRef(EventID descriptor);
 
@@ -558,6 +621,16 @@ interface EventDriverSignals {
 	*/
 	SignalListenID listen(int sig, SignalCallback on_signal);
 
+	/** Determines whether the given signal handle is valid.
+
+		A handle that is invalid will result in no operations being carried out
+		when used. In particular `addRef`/`releaseRef` will have no effect, but
+		can safely be called.
+
+		A valid handle gets invalid when the reference count drops to zero.
+	*/
+	bool isValid(SignalListenID handle) const @nogc;
+
 	/** Increments the reference count of the given resource.
 	*/
 	void addRef(SignalListenID descriptor);
@@ -569,6 +642,8 @@ interface EventDriverSignals {
 
 		Returns:
 			Returns `false` $(I iff) the last reference was removed by this call.
+
+			Passing an invalid handle will result in a return value of `true`.
 	*/
 	bool releaseRef(SignalListenID descriptor);
 }
@@ -588,6 +663,16 @@ interface EventDriverTimers {
 	void wait(TimerID timer, TimerCallback2 callback);
 	void cancelWait(TimerID timer);
 
+	/** Determines whether the given timer handle is valid.
+
+		A handle that is invalid will result in no operations being carried out
+		when used. In particular `addRef`/`releaseRef` will have no effect, but
+		can safely be called.
+
+		A valid handle gets invalid when the reference count drops to zero.
+	*/
+	bool isValid(TimerID handle) const @nogc;
+
 	/** Increments the reference count of the given resource.
 	*/
 	void addRef(TimerID descriptor);
@@ -599,6 +684,8 @@ interface EventDriverTimers {
 
 		Returns:
 			Returns `false` $(I iff) the last reference was removed by this call.
+
+			Passing an invalid handle will result in a return value of `true`.
 	*/
 	bool releaseRef(TimerID descriptor);
 
@@ -624,6 +711,16 @@ interface EventDriverWatchers {
 	/// Watches a directory or a directory sub tree for changes.
 	WatcherID watchDirectory(string path, bool recursive, FileChangesCallback callback);
 
+	/** Determines whether the given watcher handle is valid.
+
+		A handle that is invalid will result in no operations being carried out
+		when used. In particular `addRef`/`releaseRef` will have no effect, but
+		can safely be called.
+
+		A valid handle gets invalid when the reference count drops to zero.
+	*/
+	bool isValid(WatcherID handle) const @nogc;
+
 	/** Increments the reference count of the given resource.
 	*/
 	void addRef(WatcherID descriptor);
@@ -635,6 +732,8 @@ interface EventDriverWatchers {
 
 		Returns:
 			Returns `false` $(I iff) the last reference was removed by this call.
+
+			Passing an invalid handle will result in a return value of `true`.
 	*/
 	bool releaseRef(WatcherID descriptor);
 
@@ -688,13 +787,25 @@ interface EventDriverProcesses {
 	*/
 	void kill(ProcessID pid, int signal);
 
-	/** Wait for the process to exit. Returns an identifier that can be used to cancel the wait.
+	/** Wait for the process to exit.
+
+		Returns an identifier that can be used to cancel the wait.
 	*/
 	size_t wait(ProcessID pid, ProcessWaitCallback on_process_exit);
 
 	/** Cancel a wait for the given identifier returned by wait.
 	*/
 	void cancelWait(ProcessID pid, size_t waitId);
+
+	/** Determines whether the given process handle is valid.
+
+		A handle that is invalid will result in no operations being carried out
+		when used. In particular `addRef`/`releaseRef` will have no effect, but
+		can safely be called.
+
+		A valid handle gets invalid when the reference count drops to zero.
+	*/
+	bool isValid(ProcessID handle) const @nogc;
 
 	/** Increments the reference count of the given resource.
 	*/
@@ -708,6 +819,8 @@ interface EventDriverProcesses {
 
 		Returns:
 			Returns `false` $(I iff) the last reference was removed by this call.
+
+			Passing an invalid handle will result in a return value of `true`.
 	*/
 	bool releaseRef(ProcessID pid);
 
@@ -772,6 +885,18 @@ interface EventDriverPipes {
 	*/
 	void close(PipeFD pipe);
 
+	/** Determines whether the given pipe handle is valid.
+
+		A handle that is invalid will result in no operations being carried out
+		when used. In particular `addRef`/`releaseRef` will have no effect, but
+		can safely be called and I/O operations will result in
+		`IOStatus.invalidHandle`.
+
+		A valid handle gets invalid when either the reference count drops to
+		zero, or the pipe is explicitly closed.
+	*/
+	bool isValid(PipeFD handle) const @nogc;
+
 	/** Increments the reference count of the given resource.
 	*/
 	void addRef(PipeFD pid);
@@ -783,6 +908,8 @@ interface EventDriverPipes {
 
 		Returns:
 			Returns `false` $(I iff) the last reference was removed by this call.
+
+			Passing an invalid handle will result in a return value of `true`.
 	*/
 	bool releaseRef(PipeFD pid);
 
@@ -919,7 +1046,8 @@ enum IOStatus {
 	ok,           /// The data has been transferred normally
 	disconnected, /// The connection was closed before all data could be transterred
 	error,        /// An error occured while transferring the data
-	wouldBlock    /// Returned for `IOMode.immediate` when no data is readily readable/writable
+	wouldBlock,    /// Returned for `IOMode.immediate` when no data is readily readable/writable
+	invalidHandle, /// The passed handle is not valid
 }
 
 enum DNSStatus {
@@ -986,9 +1114,6 @@ struct Process {
 }
 
 mixin template Handle(string NAME, T, T invalid_value = T.init) {
-	static if (is(T.BaseType)) alias BaseType = T.BaseType;
-	else alias BaseType = T;
-
 	alias name = NAME;
 
 	enum invalid = typeof(this).init;
@@ -997,23 +1122,45 @@ mixin template Handle(string NAME, T, T invalid_value = T.init) {
 
 	T value = invalid_value;
 
-	this(BaseType value) { this.value = T(value); }
+	static if (is(T.BaseType)) {
+		alias BaseType = T.BaseType;
 
-	U opCast(U : Handle!(V, M), V, int M)()
-	const {
-		// TODO: verify that U derives from typeof(this)!
-		return U(value);
+		this(BaseType value, uint validation_counter)
+		{
+			this.value = T(value, validation_counter);
+		}
+	} else {
+		alias BaseType = T;
+
+		uint validationCounter;
+
+		this(BaseType value, uint validation_counter)
+		{
+			this.value = value;
+			this.validationCounter = validation_counter;
+		}
 	}
 
-	U opCast(U : BaseType)()
-	const {
+	U opCast(U)() const
+		if (is(U.BaseType) && is(typeof(U.value)))
+	{
+		// TODO: verify that U derives from typeof(this)!
+		return U(cast(U.BaseType)value, validationCounter);
+	}
+
+	U opCast(U)() const
+		if (is(typeof(U(BaseType.init))))
+	{
 		return cast(U)value;
 	}
 
 	alias value this;
 }
 
-alias ThreadCallback = void function(intptr_t param) @safe nothrow;
+alias ThreadCallback0 = void function() @safe nothrow;
+alias ThreadCallback1 = void function(intptr_t param1) @safe nothrow;
+alias ThreadCallback2 = void function(intptr_t param1, intptr_t param2) @safe nothrow;
+alias ThreadCallback = ThreadCallback1;
 
 struct FD { mixin Handle!("fd", size_t, size_t.max); }
 struct SocketFD { mixin Handle!("socket", FD); }

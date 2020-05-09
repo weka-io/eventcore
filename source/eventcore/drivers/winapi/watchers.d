@@ -37,8 +37,6 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 		if (handle == INVALID_HANDLE_VALUE)
 			return WatcherID.invalid;
 
-		auto id = WatcherID(cast(size_t)handle);
-
 		auto slot = m_core.setupSlot!WatcherSlot(handle);
 		slot.directory = path;
 		slot.recursive = recursive;
@@ -48,6 +46,9 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 			try return Mallocator.instance.makeArray!ubyte(16384);
 			catch (Exception e) assert(false, "Failed to allocate directory watcher buffer.");
 		} ();
+
+		auto id = WatcherID(cast(size_t)handle, m_core.m_handles[handle].validationCounter);
+
 		if (!triggerRead(handle, *slot)) {
 			releaseRef(id);
 			return WatcherID.invalid;
@@ -61,18 +62,31 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 		return id;
 	}
 
+	override bool isValid(WatcherID handle)
+	const {
+		if (auto ph = idToHandle(handle) in m_core.m_handles)
+			return ph.validationCounter == handle.validationCounter;
+		return false;
+	}
+
 	override void addRef(WatcherID descriptor)
 	{
+		if (!isValid(descriptor)) return;
+
 		m_core.m_handles[idToHandle(descriptor)].addRef();
 	}
 
 	override bool releaseRef(WatcherID descriptor)
 	{
+		if (!isValid(descriptor)) return true;
+
 		return doReleaseRef(idToHandle(descriptor));
 	}
 
 	protected override void* rawUserData(WatcherID descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
 	@system {
+		if (!isValid(descriptor)) return null;
+
 		return m_core.rawUserDataImpl(idToHandle(descriptor), size, initialize, destroy);
 	}
 
@@ -117,10 +131,9 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 		import std.path : dirName, baseName, buildPath;
 
 		auto handle = overlapped.hEvent; // *file* handle
-		auto id = WatcherID(cast(size_t)handle);
-
 		auto gslot = () @trusted { return &WinAPIEventDriver.threadInstance.core.m_handles[handle]; } ();
 		auto slot = () @trusted { return &gslot.watcher(); } ();
+		auto id = WatcherID(cast(size_t)handle, gslot.validationCounter);
 
 		if (dwError != 0 || gslot.refCount == 1) {
 			// FIXME: error must be propagated to the caller (except for ABORTED
@@ -220,5 +233,5 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 		return true;
 	}
 
-	static private HANDLE idToHandle(WatcherID id) @trusted { return cast(HANDLE)cast(size_t)id; }
+	static private HANDLE idToHandle(WatcherID id) @trusted @nogc { return cast(HANDLE)cast(size_t)id.value; }
 }

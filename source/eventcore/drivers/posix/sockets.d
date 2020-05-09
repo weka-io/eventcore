@@ -135,21 +135,17 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			return StreamSocketFD.invalid;
 		}
 
-		auto sock = cast(StreamSocketFD)sockfd;
-
-		void invalidateSocket() @nogc @trusted nothrow { closeSocket(sockfd); sock = StreamSocketFD.invalid; }
-
 		int bret;
 		if (bind_address !is null)
-			() @trusted { bret = bind(cast(sock_t)sock, bind_address.name, bind_address.nameLen); } ();
+			() @trusted { bret = bind(sockfd, bind_address.name, bind_address.nameLen); } ();
 
 		if (bret != 0) {
-			invalidateSocket();
-			on_connect(sock, ConnectStatus.bindFailure);
-			return sock;
+			closeSocket(sockfd);
+			on_connect(StreamSocketFD.invalid, ConnectStatus.bindFailure);
+			return StreamSocketFD.invalid;
 		}
 
-		m_loop.initFD(sock, FDFlags.none, StreamSocketSlot.init);
+		auto sock = m_loop.initFD!StreamSocketFD(sockfd, FDFlags.none, StreamSocketSlot.init);
 		m_loop.registerFD(sock, EventMask.read|EventMask.write);
 
 		auto ret = () @trusted { return connect(cast(sock_t)sock, address.name, address.nameLen); } ();
@@ -167,7 +163,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			} else {
 				m_loop.unregisterFD(sock, EventMask.read|EventMask.write);
 				m_loop.clearFD!StreamSocketSlot(sock);
-				invalidateSocket();
+				closeSocket(sockfd);
 				on_connect(StreamSocketFD.invalid, determineConnectStatus(err));
 				return StreamSocketFD.invalid;
 			}
@@ -178,7 +174,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override void cancelConnectStream(StreamSocketFD sock)
 	{
-		assert(sock != StreamSocketFD.invalid, "Invalid socket descriptor");
+		if (!isValid(sock)) return;
+
 		with (m_loop.m_fds[sock].streamSocket)
 		{
 			assert(state == ConnectionState.connecting,
@@ -191,11 +188,10 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override StreamSocketFD adoptStream(int socket)
 	{
-		auto fd = StreamSocketFD(socket);
-		if (m_loop.m_fds[fd].common.refCount) // FD already in use?
+		if (m_loop.m_fds[socket].common.refCount) // FD already in use?
 			return StreamSocketFD.invalid;
-		setSocketNonBlocking(fd);
-		m_loop.initFD(fd, FDFlags.none, StreamSocketSlot.init);
+		setSocketNonBlocking(socket);
+		auto fd = m_loop.initFD!StreamSocketFD(socket, FDFlags.none, StreamSocketSlot.init);
 		m_loop.registerFD(fd, EventMask.read|EventMask.write);
 		return fd;
 	}
@@ -240,39 +236,35 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		auto sockfd = createSocket(address.addressFamily, SOCK_STREAM);
 		if (sockfd == -1) return StreamListenSocketFD.invalid;
 
-		auto sock = cast(StreamListenSocketFD)sockfd;
-
-		void invalidateSocket() @nogc @trusted nothrow { closeSocket(sockfd); sock = StreamSocketFD.invalid; }
-
-		() @trusted {
+		auto succ = () @trusted {
 			int tmp_reuse = 1;
 			// FIXME: error handling!
 			if (options & StreamListenOptions.reuseAddress) {
-				if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &tmp_reuse, tmp_reuse.sizeof) != 0) {
-					invalidateSocket();
-					return;
-				}
+				if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &tmp_reuse, tmp_reuse.sizeof) != 0)
+					return false;
 			}
-			version (Windows) {} else {
-				if ((options & StreamListenOptions.reusePort) && setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &tmp_reuse, tmp_reuse.sizeof) != 0) {
-					invalidateSocket();
-					return;
-				}
+
+			version (Windows) {}
+			else {
+				if ((options & StreamListenOptions.reusePort) && setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &tmp_reuse, tmp_reuse.sizeof) != 0)
+					return false;
 			}
-			if (bind(sockfd, address.name, address.nameLen) != 0) {
-				invalidateSocket();
-				return;
-			}
-			if (listen(sockfd, getBacklogSize()) != 0) {
-				invalidateSocket();
-				return;
-			}
+
+			if (bind(sockfd, address.name, address.nameLen) != 0)
+				return false;
+
+			if (listen(sockfd, getBacklogSize()) != 0)
+				return false;
+
+			return true;
 		} ();
 
-		if (sock == StreamListenSocketFD.invalid)
-			return sock;
+		if (!succ) {
+			closeSocket(sockfd);
+			return StreamListenSocketFD.invalid;
+		}
 
-		m_loop.initFD(sock, FDFlags.none, StreamListenSocketSlot.init);
+		auto sock = m_loop.initFD!StreamListenSocketFD(sockfd, FDFlags.none, StreamListenSocketSlot.init);
 
 		if (on_accept) waitForConnections(sock, on_accept);
 
@@ -281,6 +273,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override void waitForConnections(StreamListenSocketFD sock, AcceptCallback on_accept)
 	{
+		if (!isValid(sock)) return;
+
 		m_loop.registerFD(sock, EventMask.read, false);
 		m_loop.m_fds[sock].streamListen.acceptCallback = on_accept;
 		m_loop.setNotifyCallback!(EventType.read)(sock, &onAccept);
@@ -298,10 +292,9 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		} else {
 			() @trusted { sockfd = accept(cast(sock_t)listenfd, () @trusted { return cast(sockaddr*)&addr; } (), &addr_len); } ();
 			if (sockfd == -1) return;
-			setSocketNonBlocking(cast(SocketFD)sockfd, true);
+			setSocketNonBlocking(sockfd, true);
 		}
-		auto fd = cast(StreamSocketFD)sockfd;
-		m_loop.initFD(fd, FDFlags.none, StreamSocketSlot.init);
+		auto fd = m_loop.initFD!StreamSocketFD(sockfd, FDFlags.none, StreamSocketSlot.init);
 		m_loop.m_fds[fd].streamSocket.state = ConnectionState.connected;
 		m_loop.registerFD(fd, EventMask.read|EventMask.write);
 		//print("accept %d", sockfd);
@@ -311,11 +304,14 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	ConnectionState getConnectionState(StreamSocketFD sock)
 	{
+		if (!isValid(sock)) return ConnectionState.closed;
 		return m_loop.m_fds[sock].streamSocket.state;
 	}
 
 	final override bool getLocalAddress(SocketFD sock, scope RefAddress dst)
 	{
+		if (!isValid(sock)) return false;
+
 		socklen_t addr_len = dst.nameLen;
 		if (() @trusted { return getsockname(cast(sock_t)sock, dst.name, &addr_len); } () != 0)
 			return false;
@@ -325,6 +321,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override bool getRemoteAddress(SocketFD sock, scope RefAddress dst)
 	{
+		if (!isValid(sock)) return false;
+
 		socklen_t addr_len = dst.nameLen;
 		if (() @trusted { return getpeername(cast(sock_t)sock, dst.name, &addr_len); } () != 0)
 			return false;
@@ -334,12 +332,16 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override void setTCPNoDelay(StreamSocketFD socket, bool enable)
 	{
+		if (!isValid(socket)) return;
+
 		int opt = enable;
 		() @trusted { setsockopt(cast(sock_t)socket, IPPROTO_TCP, TCP_NODELAY, cast(char*)&opt, opt.sizeof); } ();
 	}
 
 	override void setKeepAlive(StreamSocketFD socket, bool enable) @trusted
 	{
+		if (!isValid(socket)) return;
+
 		int opt = enable;
 		int err = setsockopt(cast(sock_t)socket, SOL_SOCKET, SO_KEEPALIVE, &opt, int.sizeof);
 		if (err != 0)
@@ -348,6 +350,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	override void setKeepAliveParams(StreamSocketFD socket, Duration idle, Duration interval, int probeCount) @trusted
 	{
+		if (!isValid(socket)) return;
+
 		// dunnno about BSD\OSX, maybe someone should fix it for them later
 		version (linux) {
 			setKeepAlive(socket, true);
@@ -371,6 +375,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	override void setUserTimeout(StreamSocketFD socket, Duration timeout) @trusted
 	{
+		if (!isValid(socket)) return;
+
 		version (linux) {
 			uint tmsecs = cast(uint) timeout.total!"msecs";
 			int err = setsockopt(cast(sock_t)socket, SOL_TCP, TCP_USER_TIMEOUT, &tmsecs, uint.sizeof);
@@ -381,6 +387,11 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override void read(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish)
 	{
+		if (!isValid(socket)) {
+			on_read_finish(socket, IOStatus.invalidHandle, 0);
+			return;
+		}
+
 		/*if (buffer.length == 0) {
 			on_read_finish(socket, IOStatus.ok, 0);
 			return;
@@ -435,6 +446,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	override void cancelRead(StreamSocketFD socket)
 	{
+		if (!isValid(socket)) return;
+
 		assert(m_loop.m_fds[socket].streamSocket.readCallback !is null, "Cancelling read when there is no read in progress.");
 		m_loop.setNotifyCallback!(EventType.read)(socket, null);
 		with (m_loop.m_fds[socket].streamSocket) {
@@ -511,6 +524,11 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override void write(StreamSocketFD socket, const(ubyte)[] buffer, IOMode mode, IOCallback on_write_finish)
 	{
+		if (!isValid(socket)) {
+			on_write_finish(socket, IOStatus.invalidHandle, 0);
+			return;
+		}
+
 		if (buffer.length == 0) {
 			on_write_finish(socket, IOStatus.ok, 0);
 			return;
@@ -560,6 +578,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	override void cancelWrite(StreamSocketFD socket)
 	{
+		if (!isValid(socket)) return;
+
 		assert(m_loop.m_fds[socket].streamSocket.writeCallback !is null, "Cancelling write when there is no write in progress.");
 		m_loop.setNotifyCallback!(EventType.write)(socket, null);
 		m_loop.m_fds[socket].streamSocket.writeBuffer = null;
@@ -616,6 +636,11 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override void waitForData(StreamSocketFD socket, IOCallback on_data_available)
 	{
+		if (!isValid(socket)) {
+			on_data_available(socket, IOStatus.invalidHandle, 0);
+			return;
+		}
+
 		sizediff_t ret;
 		ubyte dummy;
 		() @trusted { ret = recv(cast(sock_t)socket, &dummy, 1, MSG_PEEK); } ();
@@ -674,6 +699,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override void shutdown(StreamSocketFD socket, bool shut_read, bool shut_write)
 	{
+		if (!isValid(socket)) return;
+
 		auto st = m_loop.m_fds[socket].streamSocket.state;
 		() @trusted { .shutdown(cast(sock_t)socket, shut_read ? shut_write ? SHUT_RDWR : SHUT_RD : shut_write ? SHUT_WR : 0); } ();
 		if (st == ConnectionState.passiveClose) shut_read = true;
@@ -690,7 +717,6 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	{
 		auto sockfd = createSocket(bind_address.addressFamily, SOCK_DGRAM);
 		if (sockfd == -1) return DatagramSocketFD.invalid;
-		auto sock = cast(DatagramSocketFD)sockfd;
 
 		if (bind_address && () @trusted { return bind(sockfd, bind_address.name, bind_address.nameLen); } () != 0) {
 			closeSocket(sockfd);
@@ -718,9 +744,9 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 			}
 		}
 
-		m_loop.initFD(sock, is_internal ? FDFlags.internal : FDFlags.none, DgramSocketSlot.init);
+		auto flags = is_internal ? FDFlags.internal : FDFlags.none;
+		auto sock = m_loop.initFD!DatagramSocketFD(sockfd, flags, DgramSocketSlot.init);
 		m_loop.registerFD(sock, EventMask.read|EventMask.write);
-
 		return sock;
 	}
 
@@ -731,28 +757,34 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	package DatagramSocketFD adoptDatagramSocketInternal(int socket, bool is_internal = true, bool close_on_exec = false)
 	@nogc {
-		auto fd = DatagramSocketFD(socket);
-		if (m_loop.m_fds[fd].common.refCount) // FD already in use?
+		if (m_loop.m_fds[socket].common.refCount) // FD already in use?
 			return DatagramSocketFD.init;
-		setSocketNonBlocking(fd, close_on_exec);
-		m_loop.initFD(fd, is_internal ? FDFlags.internal : FDFlags.none, DgramSocketSlot.init);
+		setSocketNonBlocking(socket, close_on_exec);
+		auto flags = is_internal ? FDFlags.internal : FDFlags.none;
+		auto fd = m_loop.initFD!DatagramSocketFD(socket, flags, DgramSocketSlot.init);
 		m_loop.registerFD(fd, EventMask.read|EventMask.write);
 		return fd;
 	}
 
 	final override void setTargetAddress(DatagramSocketFD socket, scope Address target_address)
 	{
+		if (!isValid(socket)) return;
+
 		() @trusted { connect(cast(sock_t)socket, target_address.name, target_address.nameLen); } ();
 	}
 
 	final override bool setBroadcast(DatagramSocketFD socket, bool enable)
 	{
+		if (!isValid(socket)) return false;
+
 		int tmp_broad = enable;
 		return () @trusted { return setsockopt(cast(sock_t)socket, SOL_SOCKET, SO_BROADCAST, &tmp_broad, tmp_broad.sizeof); } () == 0;
 	}
 
 	final override bool joinMulticastGroup(DatagramSocketFD socket, scope Address multicast_address, uint interface_index = 0)
 	{
+		if (!isValid(socket)) return false;
+
 		switch (multicast_address.addressFamily) {
 			default: assert(false, "Multicast only supported for IPv4/IPv6 sockets.");
 			case AddressFamily.INET:
@@ -783,6 +815,12 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	void receive(DatagramSocketFD socket, ubyte[] buffer, IOMode mode, DatagramIOCallback on_receive_finish)
 	@safe {
 		assert(mode != IOMode.all, "Only IOMode.immediate and IOMode.once allowed for datagram sockets.");
+
+		if (!isValid(socket)) {
+			RefAddress addr;
+			on_receive_finish(socket, IOStatus.invalidHandle, 0, addr);
+			return;
+		}
 
 		sizediff_t ret;
 		sockaddr_storage src_addr;
@@ -826,6 +864,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	void cancelReceive(DatagramSocketFD socket)
 	@nogc {
+		if (!isValid(socket)) return;
+
 		assert(m_loop.m_fds[socket].datagramSocket.readCallback !is null, "Cancelling read when there is no read in progress.");
 		m_loop.setNotifyCallback!(EventType.read)(socket, null);
 		m_loop.m_fds[socket].datagramSocket.readBuffer = null;
@@ -860,6 +900,12 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	void send(DatagramSocketFD socket, const(ubyte)[] buffer, IOMode mode, Address target_address, DatagramIOCallback on_send_finish)
 	{
 		assert(mode != IOMode.all, "Only IOMode.immediate and IOMode.once allowed for datagram sockets.");
+
+		if (!isValid(socket)) {
+			RefAddress addr;
+			on_send_finish(socket, IOStatus.invalidHandle, 0, addr);
+			return;
+		}
 
 		sizediff_t ret;
 		if (target_address) {
@@ -897,6 +943,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	void cancelSend(DatagramSocketFD socket)
 	{
+		if (!isValid(socket)) return;
+
 		assert(m_loop.m_fds[socket].datagramSocket.writeCallback !is null, "Cancelling write when there is no write in progress.");
 		m_loop.setNotifyCallback!(EventType.write)(socket, null);
 		m_loop.m_fds[socket].datagramSocket.writeBuffer = null;
@@ -929,8 +977,16 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		() @trusted { return cast(DatagramIOCallback)slot.writeCallback; } ()(socket, IOStatus.ok, ret, null);
 	}
 
+	final override bool isValid(SocketFD handle)
+	const {
+		if (handle.value > m_loop.m_fds.length) return false;
+		return m_loop.m_fds[handle.value].common.validationCounter == handle.validationCounter;
+	}
+
 	final override void addRef(SocketFD fd)
 	{
+		if (!isValid(fd)) return;
+
 		auto slot = () @trusted { return &m_loop.m_fds[fd]; } ();
 		assert(slot.common.refCount > 0, "Adding reference to unreferenced socket FD.");
 		slot.common.refCount++;
@@ -939,6 +995,9 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	final override bool releaseRef(SocketFD fd)
 	@nogc {
 		import taggedalgebraic : hasType;
+
+		if (!isValid(fd)) return true;
+
 		auto slot = () @trusted { return &m_loop.m_fds[fd]; } ();
 		nogc_assert(slot.common.refCount > 0, "Releasing reference to unreferenced socket FD.");
 		// listening sockets have an incremented the reference count because of setNotifyCallback
@@ -966,6 +1025,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override bool setOption(DatagramSocketFD socket, DatagramSocketOption option, bool enable)
 	{
+		if (!isValid(socket)) return false;
+
 		int proto, opt;
 		final switch (option) {
 			case DatagramSocketOption.broadcast: proto = SOL_SOCKET; opt = SO_BROADCAST; break;
@@ -977,6 +1038,8 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final override bool setOption(StreamSocketFD socket, StreamSocketOption option, bool enable)
 	{
+		if (!isValid(socket)) return false;
+
 		int proto, opt;
 		final switch (option) {
 			case StreamSocketOption.noDelay: proto = IPPROTO_TCP; opt = TCP_NODELAY; break;
@@ -988,16 +1051,19 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 
 	final protected override void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
 	@system {
+		if (!isValid(descriptor)) return null;
 		return m_loop.rawUserDataImpl(descriptor, size, initialize, destroy);
 	}
 
 	final protected override void* rawUserData(StreamListenSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
 	@system {
+		if (!isValid(descriptor)) return null;
 		return m_loop.rawUserDataImpl(descriptor, size, initialize, destroy);
 	}
 
 	final protected override void* rawUserData(DatagramSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
 	@system {
+		if (!isValid(descriptor)) return null;
 		return m_loop.rawUserDataImpl(descriptor, size, initialize, destroy);
 	}
 
@@ -1010,7 +1076,7 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		} else {
 			() @trusted { sock = socket(family, type, 0); } ();
 			if (sock == -1) return -1;
-			setSocketNonBlocking(cast(SocketFD)sock, true);
+			setSocketNonBlocking(sock, true);
 
 			// Prevent SIGPIPE on failed send
 			version (OSX) {
@@ -1078,7 +1144,7 @@ private void closeSocket(sock_t sockfd)
 	else close(sockfd);
 }
 
-private void setSocketNonBlocking(SocketFD sockfd, bool close_on_exec = false)
+private void setSocketNonBlocking(SocketFD.BaseType sockfd, bool close_on_exec = false)
 @nogc nothrow {
 	version (Windows) {
 		uint enable = 1;
