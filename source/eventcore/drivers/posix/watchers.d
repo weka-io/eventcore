@@ -402,7 +402,8 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 				import core.stdc.stdio : fprintf, stderr;
 				import core.stdc.stdlib : abort;
 
-				fprintf(stderr, "Fatal error: %.*s\n", th.msg.length, th.msg.ptr);
+				fprintf(stderr, "Fatal error: %.*s\n",
+						cast(int) th.msg.length, th.msg.ptr);
 				abort();
 			}
 		}
