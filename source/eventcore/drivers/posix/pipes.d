@@ -28,7 +28,8 @@ final class PosixEventDriverPipes(Loop : PosixEventLoop) : EventDriverPipes {
         if (m_loop.m_fds[fd].common.refCount) // FD already in use?
             return PipeFD.invalid;
 
-        () @trusted { fcntl(system_fd, F_SETFL, fcntl(system_fd, F_GETFL) | O_NONBLOCK); } ();
+        // Suprisingly cannot use O_CLOEXEC here, so use FD_CLOEXEC instead.
+        () @trusted { fcntl(system_fd, F_SETFL, fcntl(system_fd, F_GETFL) | O_NONBLOCK | FD_CLOEXEC); } ();
 
         m_loop.initFD(fd, FDFlags.none, PipeSlot.init);
         m_loop.registerFD(fd, EventMask.read|EventMask.write|EventMask.status);
