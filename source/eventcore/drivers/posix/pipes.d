@@ -350,7 +350,6 @@ final class PosixEventDriverPipes(Loop : PosixEventLoop) : EventDriverPipes {
 	@system {
 		return m_loop.rawUserDataImpl(fd, size, initialize, destroy);
 	}
->>>>>>> 568465d... Make the API robust against using invalid handles. Fixes #105.
 }
 
 final class DummyEventDriverPipes(Loop : PosixEventLoop) : EventDriverPipes {
