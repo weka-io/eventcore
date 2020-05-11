@@ -14,7 +14,7 @@ final class WinAPIEventDriverDNS : EventDriverDNS {
 		import std.typecons : scoped;
 		import std.utf : toUTF16z;
 
-		auto id = DNSLookupID(0);
+		auto id = DNSLookupID(0, 0);
 
 		static immutable ushort[] addrfamilies = [AF_INET, AF_INET6];
 
@@ -100,6 +100,13 @@ final class WinAPIEventDriverDNS : EventDriverDNS {
 
 	void cancelLookup(DNSLookupID handle)
 	{
+		if (!isValid(handle)) return;
+
 		assert(false, "TODO!");
+	}
+
+	override bool isValid(DNSLookupID handle)
+	const {
+		return handle == DNSLookupID(0, 0);
 	}
 }

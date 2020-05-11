@@ -66,7 +66,7 @@ final class KqueueEventLoop : PosixEventLoop {
 			foreach (ref evt; m_events[0 .. ret]) {
 				//print("event %s %s", evt.ident, evt.filter, evt.flags);
 				assert(evt.ident <= uint.max);
-				auto fd = cast(FD)cast(int)evt.ident;
+				auto fd = cast(size_t)evt.ident;
 				if (evt.flags & (EV_EOF|EV_ERROR))
 					notify!(EventType.status)(fd);
 				switch (evt.filter) {

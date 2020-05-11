@@ -13,13 +13,22 @@ final class WinAPIEventDriverSignals : EventDriverSignals {
 		assert(false, "TODO!");
 	}
 
+	override bool isValid(SignalListenID handle)
+	const {
+		return false;
+	}
+
 	override void addRef(SignalListenID descriptor)
 	{
+		if (!isValid(descriptor)) return;
+
 		assert(false, "TODO!");
 	}
 
 	override bool releaseRef(SignalListenID descriptor)
 	{
+		if (!isValid(descriptor)) return true;
+
 		assert(false, "TODO!");
 	}
 }

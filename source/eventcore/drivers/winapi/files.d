@@ -68,19 +68,24 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 		s.write.overlapped.driver = m_core;
 		s.write.overlapped.hEvent = handle;
 
-		return FileFD(cast(size_t)handle);
+		return FileFD(cast(size_t)handle, m_core.m_handles[handle].validationCounter);
 	}
 
 	override void close(FileFD file)
 	{
+		if (!isValid(file)) return;
+
 		auto h = idToHandle(file);
-		auto slot = () @trusted { return &m_core.m_handles[h].file(); } ();
-		if (slot.read.overlapped.hEvent != INVALID_HANDLE_VALUE)
-			slot.read.overlapped.hEvent = slot.write.overlapped.hEvent = INVALID_HANDLE_VALUE;
+		auto slot = () @trusted { return &m_core.m_handles[h]; } ();
+		if (slot.validationCounter != file.validationCounter) return;
+		if (slot.file.read.overlapped.hEvent != INVALID_HANDLE_VALUE)
+			slot.file.read.overlapped.hEvent = slot.file.write.overlapped.hEvent = INVALID_HANDLE_VALUE;
 	}
 
 	override ulong getSize(FileFD file)
 	{
+		if (!isValid(file)) return ulong.max;
+
 		LARGE_INTEGER size;
 		auto succeeded = () @trusted { return GetFileSizeEx(idToHandle(file), &size); } ();
 		if (!succeeded || size.QuadPart < 0)
@@ -90,6 +95,11 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 
 	override void truncate(FileFD file, ulong size, FileIOCallback on_finish)
 	@trusted {
+		if (!isValid(file)) {
+			on_finish(file, IOStatus.invalidHandle, 0);
+			return;
+		}
+
 		auto h = idToHandle(file);
 
 		// FIXME: do this in a separate thread
@@ -110,6 +120,11 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 
 	override void write(FileFD file, ulong offset, const(ubyte)[] buffer, IOMode mode, FileIOCallback on_write_finish)
 	{
+		if (!isValid(file)) {
+			on_write_finish(file, IOStatus.invalidHandle, 0);
+			return;
+		}
+
 		auto h = idToHandle(file);
 		auto slot = &m_core.m_handles[h].file.write;
 
@@ -134,6 +149,11 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 
 	override void read(FileFD file, ulong offset, ubyte[] buffer, IOMode mode, FileIOCallback on_read_finish)
 	{
+		if (!isValid(file)) {
+			on_read_finish(file, IOStatus.invalidHandle, 0);
+			return;
+		}
+
 		auto h = idToHandle(file);
 		auto slot = &m_core.m_handles[h].file.read;
 
@@ -158,23 +178,39 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 
 	override void cancelWrite(FileFD file)
 	{
+		if (!isValid(file)) return;
+
 		auto h = idToHandle(file);
 		cancelIO!true(h, m_core.m_handles[h].file.write);
 	}
 
 	override void cancelRead(FileFD file)
 	{
+		if (!isValid(file)) return;
+
 		auto h = idToHandle(file);
 		cancelIO!false(h, m_core.m_handles[h].file.read);
 	}
 
+	override bool isValid(FileFD handle)
+	const {
+		auto h = idToHandle(handle);
+		if (auto ps = h in m_core.m_handles)
+			return ps.validationCounter == handle.validationCounter;
+		return false;
+	}
+
 	override void addRef(FileFD descriptor)
 	{
+		if (!isValid(descriptor)) return;
+
 		m_core.m_handles[idToHandle(descriptor)].addRef();
 	}
 
 	override bool releaseRef(FileFD descriptor)
 	{
+		if (!isValid(descriptor)) return true;
+
 		auto h = idToHandle(descriptor);
 		auto slot = &m_core.m_handles[h];
 		return slot.releaseRef({
@@ -222,13 +258,15 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 	private static nothrow
 	void onIOFinished(alias fun, bool RO)(DWORD error, DWORD bytes_transferred, OVERLAPPED_CORE* overlapped)
 	{
-		FileFD id = cast(FileFD)cast(size_t)overlapped.hEvent;
-		auto handle = idToHandle(id);
+		HANDLE handle = overlapped.hEvent;
 		if (handle == INVALID_HANDLE_VALUE) return;
+		auto cslot = () @trusted { return &overlapped.driver.m_handles[handle]; } ();
+		FileFD id = FileFD(cast(size_t)overlapped.hEvent, cslot.validationCounter);
+
 		static if (RO)
-			auto slot = () @trusted { return &overlapped.driver.m_handles[handle].file.write; } ();
+			auto slot = () @trusted { return &cslot.file.write; } ();
 		else
-			auto slot = () @trusted { return &overlapped.driver.m_handles[handle].file.read; } ();
+			auto slot = () @trusted { return &cslot.file.read; } ();
 		assert(slot !is null);
 
 		if (!slot.callback) {
@@ -254,7 +292,7 @@ final class WinAPIEventDriverFiles : EventDriverFiles {
 	}
 
 	private static HANDLE idToHandle(FileFD id)
-	@trusted {
+	@trusted @nogc {
 		return cast(HANDLE)cast(size_t)id;
 	}
 }

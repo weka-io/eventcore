@@ -87,7 +87,7 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 
 	final override TimerID create()
 	@trusted {
-		auto id = cast(TimerID)(++m_lastTimerID);
+		auto id = TimerID(++m_lastTimerID, 0);
 		TimerSlot* tm;
 		try tm = ms_allocator.make!TimerSlot;
 		catch (Exception e) return TimerID.invalid;
@@ -102,6 +102,8 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 
 	final override void set(TimerID timer, Duration timeout, Duration repeat)
 	@trusted {
+		if (!isValid(timer)) return;
+
 		scope (failure) assert(false);
 		auto tm = m_timers[timer];
 		if (tm.pending) stop(timer);
@@ -114,6 +116,8 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 	final override void stop(TimerID timer)
 	@trusted {
 		import std.algorithm.mutation : swap;
+
+		if (!isValid(timer)) return;
 
 		auto tm = m_timers[timer];
 		if (!tm.pending) return;
@@ -129,16 +133,22 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 
 	final override bool isPending(TimerID descriptor)
 	{
+		if (!isValid(descriptor)) return false;
+
 		return m_timers[descriptor].pending;
 	}
 
 	final override bool isPeriodic(TimerID descriptor)
 	{
+		if (!isValid(descriptor)) return false;
+
 		return m_timers[descriptor].repeatDuration > Duration.zero;
 	}
 
 	final override void wait(TimerID timer, TimerCallback2 callback)
 	{
+		if (!isValid(timer)) return;
+
 		assert(!m_timers[timer].callback, "Calling wait() on a timer that is already waiting.");
 		m_timers[timer].callback = callback;
 		addRef(timer);
@@ -147,26 +157,29 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 
 	final override void cancelWait(TimerID timer)
 	{
+		if (!isValid(timer)) return;
+
 		auto pt = m_timers[timer];
 		assert(pt.callback);
 		pt.callback = null;
 		releaseRef(timer);
 	}
 
+	override bool isValid(TimerID handle)
+	const {
+		return (handle in m_timers) !is null;
+	}
+
 	final override void addRef(TimerID descriptor)
 	{
-		assert(descriptor != TimerID.init, "Invalid timer ID.");
-		assert(descriptor in m_timers, "Unknown timer ID.");
-		if (descriptor !in m_timers) return;
+		if (!isValid(descriptor)) return;
 
 		m_timers[descriptor].refCount++;
 	}
 
 	final override bool releaseRef(TimerID descriptor)
 	{
-		nogc_assert(descriptor != TimerID.init, "Invalid timer ID.");
-		nogc_assert((descriptor in m_timers) !is null, "Unknown timer ID.");
-		if (descriptor !in m_timers) return true;
+		if (!isValid(descriptor)) return true;
 
 		auto tm = m_timers[descriptor];
 		tm.refCount--;
@@ -199,12 +212,15 @@ final class LoopTimeoutTimerDriver : EventDriverTimers {
 
 	final bool isUnique(TimerID descriptor)
 	const {
-		if (descriptor == TimerID.init) return false;
+		if (!isValid(descriptor)) return false;
+
 		return m_timers[descriptor].refCount == 1;
 	}
 
 	protected final override void* rawUserData(TimerID descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
 	@system {
+		if (!isValid(descriptor)) return null;
+
 		TimerSlot* fds = m_timers[descriptor];
 		assert(fds.userDataDestructor is null || fds.userDataDestructor is destroy,
 			"Requesting user data with differing type (destructor).");

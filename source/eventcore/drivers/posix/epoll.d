@@ -51,7 +51,7 @@ final class EpollEventLoop : PosixEventLoop {
 		if (ret > 0) {
 			foreach (ref evt; m_events[0 .. ret]) {
 				debug (EventCoreEpollDebug) print("Epoll event on %s: %s", evt.data.fd, evt.events);
-				auto fd = cast(FD)evt.data.fd;
+				auto fd = cast(size_t)evt.data.fd;
 				if (evt.events & (EPOLLERR|EPOLLHUP|EPOLLRDHUP)) notify!(EventType.status)(fd);
 				if (evt.events & EPOLLIN) notify!(EventType.read)(fd);
 				if (evt.events & EPOLLOUT) notify!(EventType.write)(fd);

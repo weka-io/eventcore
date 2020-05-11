@@ -96,7 +96,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	final override void cancelConnectStream(StreamSocketFD sock)
 	{
-		assert(sock != StreamSocketFD.invalid, "Invalid socket descriptor");
+		if (!isValid(sock)) return;
 
 		with (m_sockets[sock].streamSocket) {
 			assert(state == ConnectionState.connecting,
@@ -115,8 +115,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	private StreamSocketFD adoptStreamInternal(SOCKET socket, ConnectionState state)
 	{
-		auto fd = StreamSocketFD(socket);
-		if (m_sockets[fd].common.refCount) // FD already in use?
+		if (m_sockets[socket].common.refCount) // FD already in use?
 			return StreamSocketFD.invalid;
 
 		// done by wsaasyncselect
@@ -132,7 +131,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			overlapped.driver = m_core;
 		}
 
-		initSocketSlot(fd);
+		auto fd = initSocketSlot!StreamSocketFD(socket);
 		with (m_sockets[socket]) {
 			specific = StreamSocketSlot.init;
 			streamSocket.state = state;
@@ -178,8 +177,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		if (fd == INVALID_SOCKET)
 			return StreamListenSocketFD.invalid;
 
-		auto sock = cast(StreamListenSocketFD)fd;
-		initSocketSlot(sock);
+		auto sock = initSocketSlot!StreamListenSocketFD(fd);
 		m_sockets[sock].specific = StreamListenSocketSlot.init;
 
 		if (on_accept) waitForConnections(sock, on_accept);
@@ -189,6 +187,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	override void waitForConnections(StreamListenSocketFD sock, AcceptCallback on_accept)
 	{
+		if (!isValid(sock)) return;
+
 		assert(!m_sockets[sock].streamListen.acceptCallback);
 		m_sockets[sock].streamListen.acceptCallback = on_accept;
 		() @trusted { WSAAsyncSelect(sock, m_hwnd, WM_USER_SOCKET, FD_ACCEPT); } ();
@@ -197,13 +197,15 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	override ConnectionState getConnectionState(StreamSocketFD sock)
 	{
-		assert(sock != StreamSocketFD.invalid, "Invalid socket handle");
+		if (!isValid(sock)) return ConnectionState.closed;
+
 		return m_sockets[sock].streamSocket.state;
 	}
 
 	override bool getLocalAddress(SocketFD sock, scope RefAddress dst)
 	{
-		assert(sock != StreamSocketFD.invalid, "Invalid socket handle");
+		if (!isValid(sock)) return false;
+
 		socklen_t addr_len = dst.nameLen;
 		if (() @trusted { return getsockname(sock, dst.name, &addr_len); } () != 0)
 			return false;
@@ -213,7 +215,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	override bool getRemoteAddress(SocketFD sock, scope RefAddress dst)
 	{
-		assert(sock != StreamSocketFD.invalid, "Invalid socket handle");
+		if (!isValid(sock)) return false;
+
 		socklen_t addr_len = dst.nameLen;
 		if (() @trusted { return getpeername(sock, dst.name, &addr_len); } () != 0)
 			return false;
@@ -223,18 +226,24 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	override void setTCPNoDelay(StreamSocketFD socket, bool enable)
 	@trusted {
+		if (!isValid(socket)) return;
+
 		BOOL eni = enable;
 		setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &eni, eni.sizeof);
 	}
 
 	override void setKeepAlive(StreamSocketFD socket, bool enable)
 	@trusted {
+		if (!isValid(socket)) return;
+
 		BOOL eni = enable;
 		setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, &eni, eni.sizeof);
 	}
 
 	override void setKeepAliveParams(StreamSocketFD socket, Duration idle, Duration interval, int probeCount) @trusted
 	{
+		if (!isValid(socket)) return;
+
 		tcp_keepalive opts = tcp_keepalive(1, cast(c_ulong) idle.total!"msecs"(),
 			cast(c_ulong) interval.total!"msecs");
 		int result = WSAIoctl(socket, SIO_KEEPALIVE_VALS, &opts, cast(DWORD) tcp_keepalive.sizeof,
@@ -248,6 +257,11 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	override void read(StreamSocketFD socket, ubyte[] buffer, IOMode mode, IOCallback on_read_finish)
 	{
+		if (!isValid(socket)) {
+			on_read_finish(socket, IOStatus.invalidHandle, 0);
+			return;
+		}
+
 		auto slot = () @trusted { return &m_sockets[socket].streamSocket(); } ();
 		slot.read.buffer = buffer;
 		slot.read.bytesTransferred = 0;
@@ -358,6 +372,11 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	override void write(StreamSocketFD socket, const(ubyte)[] buffer, IOMode mode, IOCallback on_write_finish)
 	{
+		if (!isValid(socket)) {
+			on_write_finish(socket, IOStatus.invalidHandle, 0);
+			return;
+		}
+
 		auto slot = () @trusted { return &m_sockets[socket].streamSocket(); } ();
 		slot.write.buffer = buffer;
 		slot.write.bytesTransferred = 0;
@@ -454,11 +473,18 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	override void waitForData(StreamSocketFD socket, IOCallback on_data_available)
 	{
+		if (!isValid(socket)) {
+			on_data_available(socket, IOStatus.invalidHandle, 0);
+			return;
+		}
+
 		assert(false, "TODO!");
 	}
 
 	override void shutdown(StreamSocketFD socket, bool shut_read = true, bool shut_write = true)
 	{
+		if (!isValid(socket)) return;
+
 		() @trusted { WSASendDisconnect(socket, null); } ();
 		with (m_sockets[socket].streamSocket) {
 			if (state == ConnectionState.passiveClose)
@@ -469,6 +495,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	override void cancelRead(StreamSocketFD socket)
 	@trusted @nogc {
+		if (!isValid(socket)) return;
 		if (!m_sockets[socket].streamSocket.read.callback) return;
 		CancelIoEx(cast(HANDLE)cast(SOCKET)socket, cast(LPOVERLAPPED)&m_sockets[socket].streamSocket.read.overlapped);
 		m_sockets[socket].streamSocket.read.callback = null;
@@ -477,6 +504,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	override void cancelWrite(StreamSocketFD socket)
 	@trusted @nogc {
+		if (!isValid(socket)) return;
 		if (!m_sockets[socket].streamSocket.write.callback) return;
 		CancelIoEx(cast(HANDLE)cast(SOCKET)socket, cast(LPOVERLAPPED)&m_sockets[socket].streamSocket.write.overlapped);
 		m_sockets[socket].streamSocket.write.callback = null;
@@ -516,8 +544,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	private DatagramSocketFD adoptDatagramSocketInternal(SOCKET socket)
 	{
-		auto fd = DatagramSocketFD(socket);
-		if (m_sockets[fd].common.refCount) // FD already in use?
+		if (m_sockets[socket].common.refCount) // FD already in use?
 			return DatagramSocketFD.invalid;
 
 		void setupOverlapped(ref OVERLAPPED_CORE overlapped) @trusted @nogc nothrow {
@@ -529,7 +556,7 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 			overlapped.driver = m_core;
 		}
 
-		initSocketSlot(fd);
+		auto fd = initSocketSlot!DatagramSocketFD(socket);
 		with (m_sockets[socket]) {
 			specific = DatagramSocketSlot.init;
 			setupOverlapped(datagramSocket.write.overlapped);
@@ -543,11 +570,15 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	final override void setTargetAddress(DatagramSocketFD socket, scope Address target_address)
 	{
+		if (!isValid(socket)) return;
+
 		() @trusted { connect(cast(SOCKET)socket, target_address.name, target_address.nameLen); } ();
 	}
 
 	final override bool setBroadcast(DatagramSocketFD socket, bool enable)
 	{
+		if (!isValid(socket)) return false;
+
 		int tmp_broad = enable;
 		return () @trusted { return setsockopt(cast(SOCKET)socket, SOL_SOCKET, SO_BROADCAST, &tmp_broad, tmp_broad.sizeof); } () == 0;
 	}
@@ -555,6 +586,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	final override bool joinMulticastGroup(DatagramSocketFD socket, scope Address multicast_address, uint interface_index = 0)
 	{
 		import std.socket : AddressFamily;
+
+		if (!isValid(socket)) return false;
 
 		switch (multicast_address.addressFamily) {
 			default: assert(false, "Multicast only supported for IPv4/IPv6 sockets.");
@@ -583,6 +616,12 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	override void receive(DatagramSocketFD socket, ubyte[] buffer, IOMode mode, DatagramIOCallback on_read_finish)
 	{
+		if (!isValid(socket)) {
+			RefAddress addr;
+			on_read_finish(socket, IOStatus.invalidHandle, 0, addr);
+			return;
+		}
+
 		auto slot = () @trusted { return &m_sockets[socket].datagramSocket(); } ();
 		slot.read.buffer = buffer;
 		slot.read.wsabuf[0].buf = () @trusted { return buffer.ptr; } ();
@@ -678,6 +717,12 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	override void send(DatagramSocketFD socket, const(ubyte)[] buffer, IOMode mode, Address target_address, DatagramIOCallback on_write_finish)
 	{
+		if (!isValid(socket)) {
+			RefAddress addr;
+			on_write_finish(socket, IOStatus.invalidHandle, 0, addr);
+			return;
+		}
+
 		auto slot = () @trusted { return &m_sockets[socket].datagramSocket(); } ();
 		slot.write.buffer = buffer;
 		slot.write.wsabuf[0].len = buffer.length;
@@ -780,8 +825,16 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		}
 	}
 
+	override bool isValid(SocketFD handle)
+	const {
+		if (handle.value >= m_sockets.length) return false;
+		return handle.validationCounter == m_sockets[handle].common.validationCounter;
+	}
+
 	override void addRef(SocketFD fd)
 	{
+		if (!isValid(fd)) return;
+
 		assert(m_sockets[fd].common.refCount > 0, "Adding reference to unreferenced socket FD.");
 		m_sockets[fd].common.refCount++;
 	}
@@ -789,6 +842,9 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 	override bool releaseRef(SocketFD fd)
 	@nogc {
 		import taggedalgebraic : hasType;
+
+		if (!isValid(fd)) return true;
+
 		auto slot = () @trusted { return &m_sockets[fd]; } ();
 		nogc_assert(slot.common.refCount > 0, "Releasing reference to unreferenced socket FD.");
 		if (--slot.common.refCount == 0) {
@@ -819,6 +875,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	final override bool setOption(DatagramSocketFD socket, DatagramSocketOption option, bool enable)
 	{
+		if (!isValid(socket)) return false;
+
 		int proto, opt;
 		final switch (option) {
 			case DatagramSocketOption.broadcast: proto = SOL_SOCKET; opt = SO_BROADCAST; break;
@@ -830,6 +888,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 
 	final override bool setOption(StreamSocketFD socket, StreamSocketOption option, bool enable)
 	{
+		if (!isValid(socket)) return false;
+
 		int proto, opt;
 		final switch (option) {
 			case StreamSocketOption.noDelay: proto = IPPROTO_TCP; opt = TCP_NODELAY; break;
@@ -854,8 +914,10 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		return rawUserDataImpl(descriptor, size, initialize, destroy);
 	}
 
-	private void* rawUserDataImpl(FD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
+	private void* rawUserDataImpl(SocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
 	@system @nogc {
+		if (!isValid(descriptor)) return null;
+
 		SocketSlot* fds = &m_sockets[descriptor].common;
 		assert(fds.userDataDestructor is null || fds.userDataDestructor is destroy,
 			"Requesting user data with differing type (destructor).");
@@ -868,12 +930,16 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 		return fds.userData.ptr;
 	}
 
-	private void initSocketSlot(SocketFD fd)
+	private FDType initSocketSlot(FDType)(SOCKET socket)
 	{
 		m_socketCount++;
-		m_sockets[fd.value].common.refCount = 1;
-		m_sockets[fd.value].common.fd = fd;
-		m_sockets[fd.value].common.driver = this;
+		m_sockets[socket].common.refCount = 1;
+		auto vc = ++m_sockets[socket].common.validationCounter;
+		auto fd = FDType(socket, vc);
+		m_sockets[socket].common.fd = fd;
+		m_sockets[socket].common.driver = this;
+
+		return fd;
 	}
 
 	package void clearSocketSlot(FD fd)
@@ -905,14 +971,16 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 								auto cb = slot.streamSocket.connectCallback;
 								if (!cb) break; // cancelled connect?
 
+								auto fd = StreamSocketFD(sock, slot.common.validationCounter);
+
 								slot.streamSocket.connectCallback = null;
 								slot.common.driver.m_core.removeWaiter();
 								if (err) {
 									slot.streamSocket.state = ConnectionState.closed;
-									cb(cast(StreamSocketFD)sock, ConnectStatus.refused);
+									cb(fd, ConnectStatus.refused);
 								} else {
 									slot.streamSocket.state = ConnectionState.connected;
-									cb(cast(StreamSocketFD)sock, ConnectStatus.connected);
+									cb(fd, ConnectStatus.connected);
 								}
 								break;
 							case FD_READ:
@@ -948,7 +1016,8 @@ final class WinAPIEventDriverSockets : EventDriverSockets {
 							if (clientsockfd == INVALID_SOCKET) return 0;
 							auto clientsock = driver.adoptStreamInternal(clientsockfd, ConnectionState.connected);
 							scope RefAddress addrc = new RefAddress(() @trusted { return cast(sockaddr*)&addr; } (), addr_len);
-							slot.streamListen.acceptCallback(cast(StreamListenSocketFD)sock, clientsock, addrc);
+							auto fd = StreamListenSocketFD(sock, slot.common.validationCounter);
+							slot.streamListen.acceptCallback(fd, clientsock, addrc);
 						}
 						break;
 					case Kind.datagramSocket:
@@ -978,6 +1047,7 @@ static struct SocketSlot {
 	WinAPIEventDriverSockets driver; // redundant, but needed by the current IO Completion Routines based approach
 	@property inout(WinAPIEventDriverCore) core() @safe nothrow inout { return driver.m_core; }
 	int refCount;
+	uint validationCounter;
 	DataInitializer userDataDestructor;
 	ubyte[16*size_t.sizeof] userData;
 }

@@ -103,6 +103,8 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 			IOInfo write;
 			bool open = true;
 
+			uint validationCounter;
+
 			int refCount;
 			DataInitializer userDataDestructor;
 			ubyte[16*size_t.sizeof] userData;
@@ -110,8 +112,8 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 
 		TaskPool m_fileThreadPool;
 		ChoppedVector!FileInfo m_files; // TODO: use the one from the posix loop
-		SmallIntegerSet!FileFD m_activeReads;
-		SmallIntegerSet!FileFD m_activeWrites;
+		SmallIntegerSet!size_t m_activeReads;
+		SmallIntegerSet!size_t m_activeWrites;
 		EventID m_readyEvent = EventID.invalid;
 		bool m_waiting;
 		Events m_events;
@@ -170,13 +172,17 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 		}
 
 		if (m_files[system_file_handle].refCount > 0) return FileFD.invalid;
+		auto vc = m_files[system_file_handle].validationCounter;
 		m_files[system_file_handle] = FileInfo.init;
 		m_files[system_file_handle].refCount = 1;
-		return FileFD(system_file_handle);
+		m_files[system_file_handle].validationCounter = vc + 1;
+		return FileFD(system_file_handle, vc + 1);
 	}
 
 	void close(FileFD file)
 	{
+		if (!isValid(file)) return;
+
 		// NOTE: The file descriptor itself must stay open until the reference
 		//       count drops to zero, or this would result in dangling handles.
 		//       In case of an exclusive file lock, the lock should be lifted
@@ -186,6 +192,8 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 
 	ulong getSize(FileFD file)
 	{
+		if (!isValid(file)) return ulong.max;
+
 		version (linux) {
 			// stat_t seems to be defined wrong on linux/64
 			return .lseek(cast(int)file, 0, SEEK_END);
@@ -198,6 +206,8 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 
 	override void truncate(FileFD file, ulong size, FileIOCallback on_finish)
 	{
+		if (!isValid(file)) return;
+
 		version (Posix) {
 			// FIXME: do this in the thread pool
 
@@ -214,6 +224,11 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 
 	final override void write(FileFD file, ulong offset, const(ubyte)[] buffer, IOMode, FileIOCallback on_write_finish)
 	{
+		if (!isValid(file)) {
+			on_write_finish(file, IOStatus.invalidHandle, 0);
+			return;
+		}
+
 		//assert(this.writable);
 		auto f = () @trusted { return &m_files[file]; } ();
 
@@ -226,7 +241,7 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 			assert(false, "Concurrent file writes are not allowed.");
 		assert(f.write.callback is null, "Concurrent file writes are not allowed.");
 		f.write.callback = on_write_finish;
-		m_activeWrites.insert(file);
+		m_activeWrites.insert(file.value);
 		threadSetup();
 		log("start write task");
 		try {
@@ -235,7 +250,7 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 			m_fileThreadPool.put(task!(taskFun!("write", const(ubyte)))(thiss, fs, file, offset, buffer));
 			startWaiting();
 		} catch (Exception e) {
-			m_activeWrites.remove(file);
+			m_activeWrites.remove(file.value);
 			on_write_finish(file, IOStatus.error, 0);
 			return;
 		}
@@ -243,17 +258,24 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 
 	final override void cancelWrite(FileFD file)
 	{
-		assert(m_activeWrites.contains(file), "Cancelling write when no write is in progress.");
+		if (!isValid(file)) return;
+
+		assert(m_activeWrites.contains(file.value), "Cancelling write when no write is in progress.");
 
 		auto f = &m_files[file].write;
 		f.callback = null;
-		m_activeWrites.remove(file);
+		m_activeWrites.remove(file.value);
 		m_events.trigger(m_readyEvent, true); // ensure that no stale wait operation is left behind
 		safeCAS(f.status, ThreadedFileStatus.processing, ThreadedFileStatus.cancelling);
 	}
 
 	final override void read(FileFD file, ulong offset, ubyte[] buffer, IOMode, FileIOCallback on_read_finish)
 	{
+		if (!isValid(file)) {
+			on_read_finish(file, IOStatus.invalidHandle, 0);
+			return;
+		}
+
 		auto f = () @trusted { return &m_files[file]; } ();
 
 		if (!f.open) {
@@ -265,7 +287,7 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 			assert(false, "Concurrent file reads are not allowed.");
 		assert(f.read.callback is null, "Concurrent file reads are not allowed.");
 		f.read.callback = on_read_finish;
-		m_activeReads.insert(file);
+		m_activeReads.insert(file.value);
 		threadSetup();
 		log("start read task");
 		try {
@@ -274,7 +296,7 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 			m_fileThreadPool.put(task!(taskFun!("read", ubyte))(thiss, fs, file, offset, buffer));
 			startWaiting();
 		} catch (Exception e) {
-			m_activeReads.remove(file);
+			m_activeReads.remove(file.value);
 			on_read_finish(file, IOStatus.error, 0);
 			return;
 		}
@@ -282,28 +304,40 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 
 	final override void cancelRead(FileFD file)
 	{
-		assert(m_activeReads.contains(file), "Cancelling read when no read is in progress.");
+		if (!isValid(file)) return;
+
+		assert(m_activeReads.contains(file.value), "Cancelling read when no read is in progress.");
 
 		auto f = &m_files[file].read;
 		f.callback = null;
-		m_activeReads.remove(file);
+		m_activeReads.remove(file.value);
 		m_events.trigger(m_readyEvent, true); // ensure that no stale wait operation is left behind
 		safeCAS(f.status, ThreadedFileStatus.processing, ThreadedFileStatus.cancelling);
 	}
 
+	final override bool isValid(FileFD handle)
+	const {
+		if (handle.value >= m_files.length) return false;
+		return m_files[handle.value].validationCounter == handle.validationCounter;
+	}
+
 	final override void addRef(FileFD descriptor)
 	{
+		if (!isValid(descriptor)) return;
+
 		m_files[descriptor].refCount++;
 	}
 
 	final override bool releaseRef(FileFD descriptor)
 	{
+		if (!isValid(descriptor)) return true;
+
 		auto f = () @trusted { return &m_files[descriptor]; } ();
 		if (!--f.refCount) {
 			.close(cast(int)descriptor);
 			*f = FileInfo.init;
-			assert(!m_activeReads.contains(descriptor));
-			assert(!m_activeWrites.contains(descriptor));
+			assert(!m_activeReads.contains(descriptor.value));
+			assert(!m_activeWrites.contains(descriptor.value));
 			return false;
 		}
 		return true;
@@ -311,6 +345,8 @@ final class ThreadedFileEventDriver(Events : EventDriverEvents) : EventDriverFil
 
 	protected final override void* rawUserData(FileFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
 	@system {
+		if (!isValid(descriptor)) return null;
+
 		FileInfo* fds = &m_files[descriptor];
 		assert(fds.userDataDestructor is null || fds.userDataDestructor is destroy,
 			"Requesting user data with differing type (destructor).");
@@ -370,11 +406,15 @@ log("wait for status set");
 	private void onReady(EventID)
 	{
 log("ready event");
-		foreach (f; m_activeReads)
-			m_files[f].read.finalize(f, { m_activeReads.remove(f); });
+		foreach (f; m_activeReads) {
+			auto fd = FileFD(f, m_files[f].validationCounter);
+			m_files[f].read.finalize(fd, { m_activeReads.remove(f); });
+		}
 
-		foreach (f; m_activeWrites)
-			m_files[f].write.finalize(f, { m_activeWrites.remove(f); });
+		foreach (f; m_activeWrites) {
+			auto fd = FileFD(f, m_files[f].validationCounter);
+			m_files[f].write.finalize(fd, { m_activeWrites.remove(f); });
+		}
 
 		m_waiting = false;
 		startWaiting();

@@ -26,19 +26,19 @@ final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSigna
 
 	package SignalListenID listenInternal(int sig, SignalCallback on_signal, bool is_internal = true)
 	{
-		auto fd = () @trusted {
+		auto sigfd = () @trusted {
 			sigset_t sset;
 			sigemptyset(&sset);
 			sigaddset(&sset, sig);
 
 			if (sigprocmask(SIG_BLOCK, &sset, null) != 0)
-				return SignalListenID.invalid;
+				return -1;
 
-			return SignalListenID(signalfd(-1, &sset, SFD_NONBLOCK | SFD_CLOEXEC));
+			return signalfd(-1, &sset, SFD_NONBLOCK | SFD_CLOEXEC);
 		} ();
 
 
-		m_loop.initFD(cast(FD)fd, is_internal ? FDFlags.internal : FDFlags.none, SignalSlot(on_signal));
+		auto fd = m_loop.initFD!SignalListenID(sigfd, is_internal ? FDFlags.internal : FDFlags.none, SignalSlot(on_signal));
 		m_loop.registerFD(cast(FD)fd, EventMask.read);
 		m_loop.setNotifyCallback!(EventType.read)(cast(FD)fd, &onSignal);
 
@@ -47,14 +47,24 @@ final class SignalFDEventDriverSignals(Loop : PosixEventLoop) : EventDriverSigna
 		return fd;
 	}
 
+	override bool isValid(SignalListenID handle)
+	const {
+		if (handle.value >= m_loop.m_fds.length) return false;
+		return m_loop.m_fds[handle.value].common.validationCounter == handle.validationCounter;
+	}
+
 	override void addRef(SignalListenID descriptor)
 	{
+		if (!isValid(descriptor)) return;
+
 		assert(m_loop.m_fds[descriptor].common.refCount > 0, "Adding reference to unreferenced event FD.");
 		m_loop.m_fds[descriptor].common.refCount++;
 	}
 
 	override bool releaseRef(SignalListenID descriptor)
 	{
+		if (!isValid(descriptor)) return true;
+
 		FD fd = cast(FD)descriptor;
 		nogc_assert(m_loop.m_fds[fd].common.refCount > 0, "Releasing reference to unreferenced event FD.");
 		if (--m_loop.m_fds[fd].common.refCount == 1) { // NOTE: 1 because setNotifyCallback adds a second reference
@@ -102,6 +112,11 @@ final class DummyEventDriverSignals(Loop : PosixEventLoop) : EventDriverSignals 
 	package SignalListenID listenInternal(int sig, SignalCallback on_signal, bool is_internal = true)
 	{
 		assert(false);
+	}
+
+	override bool isValid(SignalListenID handle)
+	const {
+		return false;
 	}
 
 	override void addRef(SignalListenID descriptor)

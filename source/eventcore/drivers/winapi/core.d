@@ -16,6 +16,8 @@ import std.typecons : Tuple, tuple;
 
 final class WinAPIEventDriverCore : EventDriverCore {
 @safe: /*@nogc:*/ nothrow:
+	private alias ThreadCallbackEntry = Tuple!(ThreadCallback2, intptr_t, intptr_t);
+
 	private {
 		bool m_exit;
 		size_t m_waiterCount;
@@ -25,10 +27,11 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		void delegate() @safe nothrow[MAXIMUM_WAIT_OBJECTS] m_registeredEventCallbacks;
 		DWORD m_registeredEventCount = 0;
 		HANDLE m_fileCompletionEvent;
+		uint m_validationCounter;
 		ConsumableQueue!IOEvent m_ioEvents;
 
 		shared Mutex m_threadCallbackMutex;
-		ConsumableQueue!(Tuple!(ThreadCallback, intptr_t)) m_threadCallbacks;
+		ConsumableQueue!ThreadCallbackEntry m_threadCallbacks;
 	}
 
 	package {
@@ -48,7 +51,7 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		else {
 			() @trusted { m_threadCallbackMutex = cast(shared)mallocT!Mutex; } ();
 		}
-		m_threadCallbacks = mallocT!(ConsumableQueue!(Tuple!(ThreadCallback, intptr_t)));
+		m_threadCallbacks = mallocT!(ConsumableQueue!ThreadCallbackEntry);
 		m_threadCallbacks.reserve(1000);
 	}
 
@@ -138,7 +141,7 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		m_exit = false;
 	}
 
-	override void runInOwnerThread(ThreadCallback del, intptr_t param)
+	override void runInOwnerThread(ThreadCallback2 del, intptr_t param1, intptr_t param2)
 	shared {
 		import core.atomic : atomicLoad;
 
@@ -152,11 +155,13 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		try {
 			synchronized (m)
 				() @trusted { return (cast()this).m_threadCallbacks; } ()
-					.put(tuple(del, param));
+					.put(ThreadCallbackEntry(del, param1, param2));
 		} catch (Exception e) assert(false, e.msg);
 
 		() @trusted { PostThreadMessageW(m_tid, WM_APP, 0, 0); } ();
 	}
+
+	alias runInOwnerThread = EventDriverCore.runInOwnerThread;
 
 	package void* rawUserDataImpl(HANDLE handle, size_t size, DataInitializer initialize, DataInitializer destroy)
 	@system {
@@ -254,6 +259,7 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		assert(h !in m_handles, "Handle already in use.");
 		HandleSlot s;
 		s.refCount = 1;
+		s.validationCounter = ++m_validationCounter;
 		s.specific = SlotType.init;
 		m_handles[h] = s;
 		return () @trusted { return &m_handles[h].specific.get!SlotType(); } ();
@@ -276,14 +282,14 @@ final class WinAPIEventDriverCore : EventDriverCore {
 		import std.stdint : intptr_t;
 
 		while (true) {
-			Tuple!(ThreadCallback, intptr_t) del;
+			ThreadCallbackEntry del;
 			try {
 				synchronized (m_threadCallbackMutex) {
 					if (m_threadCallbacks.empty) break;
 					del = m_threadCallbacks.consumeOne;
 				}
 			} catch (Exception e) assert(false, e.msg);
-			del[0](del[1]);
+			del[0](del[1], del[2]);
 		}
 	}
 }
@@ -302,6 +308,7 @@ private struct HandleSlot {
 		WatcherSlot watcher;
 	}
 	int refCount;
+	uint validationCounter;
 	TaggedAlgebraic!SpecificTypes specific;
 
 	DataInitializer userDataDestructor;
@@ -344,7 +351,11 @@ package struct FileSlot {
 			auto cb = this.callback;
 			this.callback = null;
 			assert(cb !is null);
-			cb(cast(FileFD)cast(size_t)overlapped.hEvent, status, bytes_transferred);
+			if (auto ps = overlapped.hEvent in overlapped.driver.m_handles) {
+				auto vc = ps.validationCounter;
+				auto fd = FileFD(cast(size_t)overlapped.hEvent, vc);
+				cb(fd, status, bytes_transferred);
+			}
 		}
 	}
 	Direction!false read;

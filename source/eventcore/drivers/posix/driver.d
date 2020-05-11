@@ -160,6 +160,8 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 
 	protected alias ExtraEventsCallback = bool delegate(long);
 
+	private alias ThreadCallbackEntry = Tuple!(ThreadCallback2, intptr_t, intptr_t);
+
 	private {
 		Loop m_loop;
 		Timers m_timers;
@@ -169,7 +171,7 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 		EventID m_wakeupEvent;
 
 		shared Mutex m_threadCallbackMutex;
-		ConsumableQueue!(Tuple!(ThreadCallback, intptr_t)) m_threadCallbacks;
+		ConsumableQueue!ThreadCallbackEntry m_threadCallbacks;
 	}
 
 	this(Loop loop, Timers timers, Events events, Processes processes)
@@ -186,7 +188,7 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 			() @trusted { m_threadCallbackMutex = cast(shared)mallocT!Mutex; } ();
 		}
 
-		m_threadCallbacks = mallocT!(ConsumableQueue!(Tuple!(ThreadCallback, intptr_t)));
+		m_threadCallbacks = mallocT!(ConsumableQueue!ThreadCallbackEntry);
 		m_threadCallbacks.reserve(1000);
 	}
 
@@ -260,7 +262,7 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 		m_exit = false;
 	}
 
-	final override void runInOwnerThread(ThreadCallback del, intptr_t param)
+	final override void runInOwnerThread(ThreadCallback2 del, intptr_t param1, intptr_t param2)
 	shared {
 		auto m = atomicLoad(m_threadCallbackMutex);
 		auto evt = atomicLoad(m_wakeupEvent);
@@ -273,11 +275,13 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 		try {
 			synchronized (m)
 				() @trusted { return (cast()this).m_threadCallbacks; } ()
-					.put(tuple(del, param));
+					.put(ThreadCallbackEntry(del, param1, param2));
 		} catch (Exception e) assert(false, e.msg);
 
 		m_events.trigger(m_wakeupEvent, false);
 	}
+
+	alias runInOwnerThread = EventDriverCore.runInOwnerThread;
 
 
 	final protected override void* rawUserData(StreamSocketFD descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
@@ -300,14 +304,14 @@ final class PosixEventDriverCore(Loop : PosixEventLoop, Timers : EventDriverTime
 		import std.stdint : intptr_t;
 
 		while (true) {
-			Tuple!(ThreadCallback, intptr_t) del;
+			ThreadCallbackEntry del;
 			try {
 				synchronized (m_threadCallbackMutex) {
 					if (m_threadCallbacks.empty) break;
 					del = m_threadCallbacks.consumeOne;
 				}
 			} catch (Exception e) assert(false, e.msg);
-			del[0](del[1]);
+			del[0](del[1], del[2]);
 		}
 	}
 }
@@ -336,11 +340,13 @@ package class PosixEventLoop {
 	/// Updates the event mask to use for listening for notifications.
 	protected abstract void updateFD(FD fd, EventMask old_mask, EventMask new_mask, bool edge_triggered = true) @nogc;
 
-	final protected void notify(EventType evt)(FD fd)
+	final protected void notify(EventType evt)(size_t fd)
 	{
 		//assert(m_fds[fd].callback[evt] !is null, "Notifying FD which is not listening for event.");
-		if (m_fds[fd.value].common.callback[evt])
-			m_fds[fd.value].common.callback[evt](fd);
+		if (m_fds[fd].common.callback[evt]) {
+			auto vc = m_fds[fd].common.validationCounter;
+			m_fds[fd].common.callback[evt](FD(fd, vc));
+		}
 	}
 
 	final protected void enumerateFDs(EventType evt)(scope FDEnumerateCallback del)
@@ -348,7 +354,7 @@ package class PosixEventLoop {
 		// TODO: optimize!
 		foreach (i; 0 .. cast(int)m_fds.length)
 			if (m_fds[i].common.callback[evt])
-				del(cast(FD)i);
+				del(FD(i, m_fds[i].common.validationCounter));
 	}
 
 	package void setNotifyCallback(EventType evt)(FD fd, FDSlotCallback callback)
@@ -370,17 +376,23 @@ package class PosixEventLoop {
 		}
 	}
 
-	package void initFD(T)(FD fd, FDFlags flags, auto ref T slot_init)
+	package FDType initFD(FDType, T)(size_t fd, FDFlags flags, auto ref T slot_init)
 	{
-		with (m_fds[fd.value]) {
+		uint vc;
+
+		with (m_fds[fd]) {
 			assert(common.refCount == 0, "Initializing referenced file descriptor slot.");
 			assert(specific.kind == typeof(specific).Kind.none, "Initializing slot that has not been cleared.");
 			common.refCount = 1;
 			common.flags = flags;
 			specific = slot_init;
+			vc = common.validationCounter;
 		}
+
 		if (!(flags & FDFlags.internal))
 			m_handleCount++;
+
+		return FDType(fd, vc);
 	}
 
 	package void clearFD(T)(FD fd)
@@ -388,6 +400,7 @@ package class PosixEventLoop {
 		import taggedalgebraic : hasType;
 
 		auto slot = () @trusted { return &m_fds[fd.value]; } ();
+		assert(slot.common.validationCounter == fd.validationCounter, "Clearing FD slot for invalid FD");
 		assert(slot.common.refCount == 0, "Clearing referenced file descriptor slot.");
 		assert(slot.specific.hasType!T, "Clearing file descriptor slot with unmatched type.");
 
@@ -400,7 +413,10 @@ package class PosixEventLoop {
 			foreach (cb; slot.common.callback)
 				if (cb !is null)
 					m_waiterCount--;
+
+		auto vc = slot.common.validationCounter;
 		*slot = m_fds.FullField.init;
+		slot.common.validationCounter = vc + 1;
 	}
 
 	package final void* rawUserDataImpl(size_t descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
@@ -426,6 +442,7 @@ alias FDSlotCallback = void delegate(FD);
 private struct FDSlot {
 	FDSlotCallback[EventType.max+1] callback;
 	uint refCount;
+	uint validationCounter;
 	FDFlags flags;
 
 	DataInitializer userDataDestructor;

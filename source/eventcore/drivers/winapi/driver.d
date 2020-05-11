@@ -24,7 +24,7 @@ import eventcore.internal.utils : mallocT, freeT;
 import core.sys.windows.windows;
 
 static assert(HANDLE.sizeof <= FD.BaseType.sizeof);
-static assert(FD(cast(size_t)INVALID_HANDLE_VALUE) == FD.init);
+static assert(FD(cast(size_t)INVALID_HANDLE_VALUE, 0) == FD.init);
 
 
 final class WinAPIEventDriver : EventDriver {
