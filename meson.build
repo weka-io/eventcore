@@ -1,0 +1,15 @@
+project('eventcore', 'd',
+    meson_version: '>=0.50',
+    version: '0.8.50'
+)
+
+project_soversion      = '0'
+project_version_suffix = ''
+project_version        = meson.project_version()
+project_version_full   = project_version + project_version_suffix
+
+taggedalgebraic_dep = dependency('taggedalgebraic', version: ['>=0.10.12', '<0.12'])
+
+source_root = meson.source_root()
+build_root = meson.build_root()
+subdir('source/eventcore')
