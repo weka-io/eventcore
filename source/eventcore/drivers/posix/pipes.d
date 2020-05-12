@@ -10,7 +10,7 @@ import std.algorithm : min, max;
 
 final class PosixEventDriverPipes(Loop : PosixEventLoop) : EventDriverPipes {
 @safe: /*@nogc:*/ nothrow:
-	import core.stdc.errno : errno, EAGAIN;
+	import core.stdc.errno : errno, EAGAIN, EINTR;
 	import core.sys.posix.unistd : close, read, write;
 	import core.sys.posix.fcntl;
 	import core.sys.posix.poll;
@@ -304,12 +304,21 @@ final class PosixEventDriverPipes(Loop : PosixEventLoop) : EventDriverPipes {
 		return false;
 	}
 
-	final override void close(PipeFD pipe)
+	final override void close(PipeFD pipe, PipeCloseCallback on_closed)
 	{
-		if (!isValid(pipe)) return;
+		if (!isValid(pipe)) {
+			on_closed(pipe, CloseStatus.invalidHandle);
+			return;
+		}
 
-		// TODO: Maybe actually close here instead of waiting for releaseRef?
-		close(cast(int)pipe);
+		int res;
+		do res = close(cast(int)pipe);
+		while (res != 0 && errno == EINTR);
+		m_loop.unregisterFD(pipe, EventMask.read|EventMask.write|EventMask.status);
+		m_loop.clearFD!PipeSlot(pipe);
+
+		if (on_closed)
+			on_closed(pipe, res == 0 ? CloseStatus.ok : CloseStatus.ioError);
 	}
 
 	override bool isValid(PipeFD handle)
@@ -337,10 +346,7 @@ final class PosixEventDriverPipes(Loop : PosixEventLoop) : EventDriverPipes {
 		nogc_assert(slot.common.refCount > 0, "Releasing reference to unreferenced pipe FD.");
 
 		if (--slot.common.refCount == 0) {
-			m_loop.unregisterFD(pipe, EventMask.read|EventMask.write|EventMask.status);
-			m_loop.clearFD!PipeSlot(pipe);
-
-			close(cast(int)pipe);
+			close(pipe, null);
 			return false;
 		}
 		return true;
@@ -350,7 +356,6 @@ final class PosixEventDriverPipes(Loop : PosixEventLoop) : EventDriverPipes {
 	@system {
 		return m_loop.rawUserDataImpl(fd, size, initialize, destroy);
 	}
->>>>>>> 568465d... Make the API robust against using invalid handles. Fixes #105.
 }
 
 final class DummyEventDriverPipes(Loop : PosixEventLoop) : EventDriverPipes {
@@ -387,8 +392,13 @@ final class DummyEventDriverPipes(Loop : PosixEventLoop) : EventDriverPipes {
 		assert(false, "TODO!");
 	}
 
-	override void close(PipeFD pipe)
+	override void close(PipeFD pipe, PipeCloseCallback on_closed)
 	{
+		if (!isValid(pipe)) {
+			on_closed(pipe, CloseStatus.invalidHandle);
+			return;
+		}
+
 		assert(false, "TODO!");
 	}
 

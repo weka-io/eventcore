@@ -53,9 +53,13 @@ final class WinAPIEventDriverPipes : EventDriverPipes {
 		assert(false, "TODO!");
 	}
 
-	override void close(PipeFD pipe)
+	override void close(PipeFD pipe, PipeCloseCallback on_closed)
 	{
-		if (!isValid(pipe)) return;
+		if (!isValid(pipe)) {
+			if (on_closed)
+				on_closed(pipe, CloseStatus.invalidHandle);
+			return;
+		}
 
 		assert(false, "TODO!");
 	}

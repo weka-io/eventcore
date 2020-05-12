@@ -206,7 +206,7 @@ final class PosixEventDriverProcesses(Loop : PosixEventLoop) : EventDriverProces
 		m_driver.core.runInOwnerThread(&onLocalProcessExit, system_pid);
 	}
 
-	private static void onLocalProcessExit(intptr_t system_pid)
+	private static void onLocalProcessExit(int system_pid)
 	{
 		int exitCode;
 		ProcessWaitCallback[] callbacks;
@@ -214,12 +214,12 @@ final class PosixEventDriverProcesses(Loop : PosixEventLoop) : EventDriverProces
 		ProcessID pid;
 
 		PosixEventDriverProcesses driver;
-		lockedProcessInfoPlain(cast(int)system_pid, (info) {
+		lockedProcessInfoPlain(system_pid, (info) {
 			assert(info !is null);
 
 			exitCode = info.exitCode;
 			callbacks = info.callbacks;
-			pid = ProcessID(cast(int)system_pid, info.validationCounter);
+			pid = ProcessID(system_pid, info.validationCounter);
 			info.callbacks = null;
 
 			driver = info.driver;

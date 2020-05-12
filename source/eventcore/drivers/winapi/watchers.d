@@ -193,10 +193,7 @@ final class WinAPIEventDriverWatchers : EventDriverWatchers {
 			ch.directory = dirName(path);
 			if (ch.directory == ".") ch.directory = "";
 			ch.name = baseName(path);
-			try ch.isDirectory = isDir(fullpath);
-			catch (Exception e) {} // FIXME: can happen if the base path is relative and the CWD has changed
-			if (ch.kind != FileChangeKind.modified || !ch.isDirectory)
-				slot.callback(id, ch);
+			slot.callback(id, ch);
 			if (fni.NextEntryOffset == 0 || !slot.callback) break;
 		}
 

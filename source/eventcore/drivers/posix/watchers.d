@@ -150,7 +150,6 @@ final class InotifyEventDriverWatchers(Events : EventDriverEvents) : EventDriver
 
 				ch.baseDirectory = m_watches[id].basePath;
 				ch.directory = subdir;
-				ch.isDirectory = (ev.mask & IN_ISDIR) != 0;
 				ch.name = name;
 				addRef(id); // assure that the id doesn't get invalidated until after the callback
 				auto cb = m_loop.m_fds[id].watcher.callback;
@@ -487,9 +486,9 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 
 		@property size_t entryCount() const { return m_entryCount; }
 
-		private void addChange(FileChangeKind kind, Key key, bool is_dir)
+		private void addChange(FileChangeKind kind, Key key)
 		{
-			m_onChange(FileChange(kind, m_basePath, key.parent ? key.parent.path : "", key.name, is_dir));
+			m_onChange(FileChange(kind, m_basePath, key.parent ? key.parent.path : "", key.name));
 		}
 
 		private void scan(bool generate_changes)
@@ -506,12 +505,12 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 			foreach (e; m_entries.byKeyValue) {
 				if (!e.key.parent || Key(e.key.parent.parent, e.key.parent.name) !in m_entries) {
 					if (generate_changes)
-						addChange(FileChangeKind.removed, e.key, e.value.isDir);
+						addChange(FileChangeKind.removed, e.key);
 				}
 			}
 
 			foreach (e; added)
-				addChange(FileChangeKind.added, Key(e.parent, e.name), e.isDir);
+				addChange(FileChangeKind.added, Key(e.parent, e.name));
 
 			swap(m_entries, new_entries);
 			m_entryCount = ec;
@@ -539,7 +538,7 @@ final class PollEventDriverWatchers(Events : EventDriverEvents) : EventDriverWat
 					} else {
 						if ((*pe).size != de.size || (*pe).lastChange != modified_time) {
 							if (generate_changes)
-								addChange(FileChangeKind.modified, key, (*pe).isDir);
+								addChange(FileChangeKind.modified, key);
 							(*pe).size = de.size;
 							(*pe).lastChange = modified_time;
 						}

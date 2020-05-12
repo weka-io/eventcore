@@ -5,8 +5,9 @@
 module test;
 
 import eventcore.core;
+import std.file : exists, isDir, mkdir, remove, rmdirRecurse;
+import std.path : buildPath;
 import std.stdio : File, writefln;
-import std.file : exists, mkdir, remove, rmdirRecurse;
 import core.time : Duration, msecs;
 
 bool s_done;
@@ -23,6 +24,11 @@ void main()
 	scope (exit) rmdirRecurse(testDir);
 
 	auto id = eventDriver.watchers.watchDirectory(testDir, false, (id, ref change) {
+		try {
+			if (change.kind == FileChangeKind.modified && isDir(buildPath(change.baseDirectory, change.directory, change.name)))
+				return;
+		} catch (Exception e) assert(false, e.msg);
+
 		switch (s_cnt++) {
 			default:
 				import std.conv : to;
