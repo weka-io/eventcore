@@ -1,6 +1,6 @@
 project('eventcore', 'd',
     meson_version: '>=0.50',
-    version: '0.8.50'
+    version: '0.9.0'
 )
 
 project_soversion      = '0'
