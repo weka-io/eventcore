@@ -402,7 +402,6 @@ package class PosixEventLoop {
 
 		auto slot = () @trusted { return &m_fds[fd.value]; } ();
 		assert(slot.common.validationCounter == fd.validationCounter, "Clearing FD slot for invalid FD");
-		assert(slot.common.refCount == 0, "Clearing referenced file descriptor slot.");
 		assert(slot.specific.hasType!T, "Clearing file descriptor slot with unmatched type.");
 
 		if (!(slot.common.flags & FDFlags.internal))
