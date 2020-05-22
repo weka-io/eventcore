@@ -5,7 +5,7 @@
 	Windows. It has a good performance for small numbers of cuncurrently open
 	files/sockets, but is not suited for larger amounts.
 */
-module eventcore.drivers.posix.loop.select;
+module eventcore.drivers.posix.select;
 @safe: /*@nogc:*/ nothrow:
 
 public import eventcore.drivers.posix.driver;

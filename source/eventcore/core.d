@@ -2,10 +2,10 @@ module eventcore.core;
 
 public import eventcore.driver;
 
-import eventcore.drivers.posix.loop.cfrunloop;
-import eventcore.drivers.posix.loop.epoll;
-import eventcore.drivers.posix.loop.kqueue;
-import eventcore.drivers.posix.loop.select;
+import eventcore.drivers.posix.cfrunloop;
+import eventcore.drivers.posix.epoll;
+import eventcore.drivers.posix.kqueue;
+import eventcore.drivers.posix.select;
 import eventcore.drivers.libasync;
 import eventcore.drivers.winapi.driver;
 import eventcore.internal.utils : mallocT, freeT;

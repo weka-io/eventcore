@@ -1,12 +1,12 @@
 /**
 	`CFRunLoop` based event loop for macOS UI compatible operation.
 */
-module eventcore.drivers.posix.loop.cfrunloop;
+module eventcore.drivers.posix.cfrunloop;
 @safe: /*@nogc:*/ nothrow:
 
 version (EventcoreCFRunLoopDriver):
 
-import eventcore.drivers.posix.loop.kqueue;
+import eventcore.drivers.posix.kqueue;
 import eventcore.internal.corefoundation;
 import eventcore.internal.utils;
 import core.time;
