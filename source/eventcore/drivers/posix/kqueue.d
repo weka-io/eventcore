@@ -31,8 +31,16 @@ import core.sys.linux.epoll;
 
 alias KqueueEventDriver = PosixEventDriver!KqueueEventLoop;
 
-final class KqueueEventLoop : PosixEventLoop {
-	private {
+final class KqueueEventLoop : KqueueEventLoopBase {
+	override bool doProcessEvents(Duration timeout)
+	@trusted {
+		return doProcessEventsBase(timeout);
+	}
+}
+
+
+abstract class KqueueEventLoopBase : PosixEventLoop {
+	protected {
 		int m_queue;
 		size_t m_changeCount = 0;
 		kevent_t[100] m_changes;
@@ -45,8 +53,8 @@ final class KqueueEventLoop : PosixEventLoop {
 		assert(m_queue >= 0, "Failed to create kqueue.");
 	}
 
-	override bool doProcessEvents(Duration timeout)
-	@trusted {
+	protected bool doProcessEventsBase(Duration timeout)
+	@trusted nothrow {
 		import std.algorithm : min;
 		//assert(Fiber.getThis() is null, "processEvents may not be called from within a fiber!");
 

@@ -23,6 +23,13 @@ configuration "epoll-gaia" {
 	versions "EventcoreEpollDriver"
 }
 
+configuration "cfrunloop" {
+	platforms "osx"
+	versions "EventcoreCFRunLoopDriver"
+	lflags "-framework" "CoreFoundation"
+	lflags "-framework" "CoreServices"
+}
+
 configuration "kqueue" {
 	platforms "osx" "freebsd"
 	versions "EventcoreKqueueDriver"

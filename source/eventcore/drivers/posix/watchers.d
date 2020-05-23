@@ -196,51 +196,214 @@ final class InotifyEventDriverWatchers(Events : EventDriverEvents) : EventDriver
 	}
 }
 
-version (OSX)
+version (darwin)
 final class FSEventsEventDriverWatchers(Events : EventDriverEvents) : EventDriverWatchers {
 @safe: /*@nogc:*/ nothrow:
-	private Events m_events;
+	import eventcore.internal.corefoundation;
+	import eventcore.internal.coreservices;
+	import std.string : toStringz;
+
+	private {
+		static struct WatcherSlot {
+			FSEventStreamRef stream;
+			string path;
+			string fullPath;
+			FileChangesCallback callback;
+			WatcherID id;
+			int refCount = 1;
+			bool recursive;
+			FSEventStreamEventId lastEvent;
+			ubyte[16 * size_t.sizeof] userData;
+			DataInitializer userDataDestructor;
+		}
+		//HashMap!(void*, WatcherSlot) m_watches;
+		WatcherSlot[WatcherID] m_watches;
+		WatcherID[void*] m_streamMap;
+		Events m_events;
+		size_t m_handleCounter = 1;
+		uint m_validationCounter;
+	}
 
 	this(Events events) { m_events = events; }
 
 	final override WatcherID watchDirectory(string path, bool recursive, FileChangesCallback on_change)
-	{
-		/*FSEventStreamCreate
-		FSEventStreamScheduleWithRunLoop
-		FSEventStreamStart*/
-		assert(false, "TODO!");
+	@trusted {
+		import std.path : absolutePath;
+
+		FSEventStreamContext ctx;
+		ctx.info = () @trusted { return cast(void*)this; } ();
+
+		string abspath;
+		try abspath = absolutePath(path);
+		catch (Exception e) assert(false, e.msg);
+
+		if (m_handleCounter == 0) {
+			m_handleCounter++;
+			m_validationCounter++;
+		}
+		auto id = WatcherID(cast(size_t)m_handleCounter++, m_validationCounter);
+
+		WatcherSlot slot = {
+			path: path,
+			fullPath: abspath,
+			callback: on_change,
+			id: id,
+			recursive: recursive,
+			lastEvent: kFSEventStreamEventIdSinceNow
+		};
+
+		startStream(slot, kFSEventStreamEventIdSinceNow);
+
+		m_events.loop.m_waiterCount++;
+		m_watches[id] = slot;
+		return id;
 	}
 
 	final override bool isValid(WatcherID handle)
 	const {
-		return false;
+		return !!(handle in m_watches);
 	}
 
 	final override void addRef(WatcherID descriptor)
 	{
 		if (!isValid(descriptor)) return;
 
-		assert(false, "TODO!");
+		auto slot = descriptor in m_watches;
+		slot.refCount++;
 	}
 
 	final override bool releaseRef(WatcherID descriptor)
 	{
 		if (!isValid(descriptor)) return true;
 
-		/*FSEventStreamStop
-		FSEventStreamUnscheduleFromRunLoop
-		FSEventStreamInvalidate
-		FSEventStreamRelease*/
-		assert(false, "TODO!");
+		auto slot = descriptor in m_watches;
+		if (!--slot.refCount) {
+			destroyStream(slot.stream);
+			m_watches.remove(descriptor);
+			m_events.loop.m_waiterCount--;
+			return false;
+		}
+
+		return true;
 	}
 
 	final protected override void* rawUserData(WatcherID descriptor, size_t size, DataInitializer initialize, DataInitializer destroy)
 	@system {
 		if (!isValid(descriptor)) return null;
 
-		return m_loop.rawUserDataImpl(descriptor, size, initialize, destroy);
+		auto slot = descriptor in m_watches;
+
+		if (size > WatcherSlot.userData.length) assert(false);
+		if (!slot.userDataDestructor) {
+			initialize(slot.userData.ptr);
+			slot.userDataDestructor = destroy;
+		}
+		return slot.userData.ptr;
 	}
 
+	private static extern(C) void onFSEvent(ConstFSEventStreamRef streamRef,
+		void* clientCallBackInfo, size_t numEvents, void* eventPaths,
+		const(FSEventStreamEventFlags)* eventFlags,
+		const(FSEventStreamEventId)* eventIds)
+	{
+		import std.conv : to;
+		import std.path : asRelativePath, baseName, dirName;
+
+		if (!numEvents) return;
+
+		auto this_ = () @trusted { return cast(FSEventsEventDriverWatchers)clientCallBackInfo; } ();
+		auto h = () @trusted { return cast(void*)streamRef; } ();
+		auto ps = h in this_.m_streamMap;
+		if (!ps) return;
+		auto id = *ps;
+		auto slot = id in this_.m_watches;
+
+		auto patharr = () @trusted { return (cast(const(char)**)eventPaths)[0 .. numEvents]; } ();
+		auto flagsarr = () @trusted { return eventFlags[0 .. numEvents]; } ();
+		auto idarr = () @trusted { return eventIds[0 .. numEvents]; } ();
+
+		// A new stream needs to be created after every change, because events
+		// get coalesced per file (event flags get or'ed together) and it becomes
+		// impossible to determine the actual event
+		this_.startStream(*slot, idarr[$-1]);
+
+		foreach (i; 0 .. numEvents) {
+			auto pathstr = () @trusted { return to!string(patharr[i]); } ();
+			auto f = flagsarr[i];
+
+			string rp;
+			try rp = pathstr.asRelativePath(slot.fullPath).to!string;
+			catch (Exception e) assert(false, e.msg);
+
+			if (rp == "." || rp == "") continue;
+
+			FileChange ch;
+			ch.baseDirectory = slot.path;
+			ch.directory = dirName(rp);
+			ch.name = baseName(rp);
+
+			if (ch.directory == ".") ch.directory = "";
+
+			if (!slot.recursive && ch.directory != "") continue;
+
+			void emit(FileChangeKind k)
+			{
+				ch.kind = k;
+				slot.callback(id, ch);
+			}
+
+			import std.file : exists;
+			bool does_exist = exists(pathstr);
+
+			// The order of tests is important to properly lower the more
+			// complex flags system to the three event types provided by
+			// eventcore
+			if (f & kFSEventStreamEventFlagItemRenamed) {
+				if (f & kFSEventStreamEventFlagItemCreated)
+					emit(FileChangeKind.removed);
+				else emit(FileChangeKind.added);
+			} else if (f & kFSEventStreamEventFlagItemRemoved && !does_exist) {
+				emit(FileChangeKind.removed);
+			} else if (f & kFSEventStreamEventFlagItemModified && does_exist) {
+				emit(FileChangeKind.modified);
+			} else if (f & kFSEventStreamEventFlagItemCreated && does_exist) {
+				emit(FileChangeKind.added);
+			}
+		}
+	}
+
+	private void startStream(ref WatcherSlot slot, FSEventStreamEventId since_when)
+	@trusted {
+		if (slot.stream) {
+			destroyStream(slot.stream);
+			slot.stream = null;
+		}
+
+		FSEventStreamContext ctx;
+		ctx.info = () @trusted { return cast(void*)this; } ();
+
+		auto pstr = CFStringCreateWithBytes(null,
+			cast(const(ubyte)*)slot.path.ptr, slot.path.length,
+			kCFStringEncodingUTF8, false);
+		scope (exit) CFRelease(pstr);
+		auto paths = CFArrayCreate(null, cast(const(void)**)&pstr, 1, null);
+		scope (exit) CFRelease(paths);
+
+		slot.stream = FSEventStreamCreate(null, &onFSEvent, () @trusted { return &ctx; } (),
+			paths, since_when, 0.1, kFSEventStreamCreateFlagFileEvents|kFSEventStreamCreateFlagNoDefer);
+		FSEventStreamScheduleWithRunLoop(slot.stream, CFRunLoopGetMain(), kCFRunLoopDefaultMode);
+		FSEventStreamStart(slot.stream);
+
+		m_streamMap[cast(void*)slot.stream] = slot.id;
+	}
+
+	private void destroyStream(FSEventStreamRef stream)
+	@trusted {
+		FSEventStreamStop(stream);
+		FSEventStreamInvalidate(stream);
+		FSEventStreamRelease(stream);
+		m_streamMap.remove(cast(void*)stream);
+	}
 }
 
 

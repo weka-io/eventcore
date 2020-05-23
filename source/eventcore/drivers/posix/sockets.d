@@ -866,9 +866,12 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 	@nogc {
 		if (!isValid(socket)) return;
 
-		assert(m_loop.m_fds[socket].datagramSocket.readCallback !is null, "Cancelling read when there is no read in progress.");
+		auto slot = () @trusted { return &m_loop.m_fds[socket].datagramSocket(); } ();
+		if (slot.readCallback is null) return;
+
 		m_loop.setNotifyCallback!(EventType.read)(socket, null);
-		m_loop.m_fds[socket].datagramSocket.readBuffer = null;
+		slot.readCallback = null;
+		slot.readBuffer = null;
 	}
 
 	private void onDgramRead(FD fd)
@@ -894,7 +897,9 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		auto l = lockHandle(socket);
 		m_loop.setNotifyCallback!(EventType.read)(socket, null);
 		scope src_addrc = new RefAddress(() @trusted { return cast(sockaddr*)&src_addr; } (), src_addr.sizeof);
-		() @trusted { return cast(DatagramIOCallback)slot.readCallback; } ()(socket, IOStatus.ok, ret, src_addrc);
+		auto cb = () @trusted { return cast(DatagramIOCallback)slot.readCallback; } ();
+		slot.readCallback = null;
+		cb(socket, IOStatus.ok, ret, src_addrc);
 	}
 
 	void send(DatagramSocketFD socket, const(ubyte)[] buffer, IOMode mode, Address target_address, DatagramIOCallback on_send_finish)

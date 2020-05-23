@@ -114,6 +114,10 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 	{
 		if (!isValid(event)) return;
 
+		// make sure the event stays alive until all waiters have been notified.
+		addRef(event);
+		scope (exit) releaseRef(event);
+
 		auto slot = getSlot(event);
 		if (notify_all) {
 			//log("emitting only for this thread (%s waiters)", m_fds[event].waiters.length);
@@ -167,9 +171,12 @@ final class PosixEventDriverEvents(Loop : PosixEventLoop, Sockets : EventDriverS
 			trigger(event, cnt > 0);
 		}
 	} else {
-		private void onSocketData(DatagramSocketFD s, IOStatus, size_t, scope RefAddress)
+		private void onSocketData(DatagramSocketFD s, IOStatus st, size_t, scope RefAddress)
 		@nogc {
-			m_sockets.receiveNoGC(s, m_buf, IOMode.once, &onSocketData);
+			// avoid infinite recursion in case of errors
+			if (st == IOStatus.ok)
+				m_sockets.receiveNoGC(s, m_buf, IOMode.once, &onSocketData);
+
 			try {
 				EventID evt = m_sockets.userData!EventID(s);
 				scope doit = {

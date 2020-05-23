@@ -26,18 +26,22 @@ d:
 env:
     - CONFIG=select
     - CONFIG=epoll
-    - CONFIG=kqueue
+    - CONFIG=cfrunloop
     - CONFIG=libasync
 
 matrix:
   allow_failures:
     - d: dmd-beta
+  include:
+    - os: osx
+      d: ldc
+      env: CONFIG=kqueue
   exclude:
     - env: CONFIG=libasync
     - os: osx
       env: CONFIG=epoll
     - os: linux
-      env: CONFIG=kqueue
+      env: CONFIG=cfrunloop
     - os: osx
       d: dmd-beta
 
