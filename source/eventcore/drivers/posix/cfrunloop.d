@@ -25,6 +25,11 @@ final class CFRunLoopEventLoop : KqueueEventLoopBase {
 	@trusted @nogc {
 		super();
 
+		// Edge-triggred mode is not fully reliable w.r.t. the CFFileDescriptor
+		// firing the callback for some reason. Always using level-triggered
+		// kqueue events avoids possible hangs during CFRunLoopInMode
+		m_forceLevelTriggered = true;
+
 		CFFileDescriptorContext ctx;
 		ctx.info = cast(void*)this;
 
