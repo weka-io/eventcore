@@ -93,6 +93,7 @@ static if (!is(CFRunLoopRef)) {
 	extern const CFStringRef kCFRunLoopCommonModes;
 
 	CFRunLoopRef CFRunLoopGetMain() @nogc;
+	CFRunLoopRef CFRunLoopGetCurrent() @nogc;
 	void CFRunLoopAddSource(CFRunLoopRef rl, CFRunLoopSourceRef source, CFRunLoopMode mode) @nogc;
 	CFRunLoopRunResult CFRunLoopRunInMode(CFRunLoopMode mode, CFTimeInterval seconds, Boolean returnAfterSourceHandled);
 }
