@@ -45,6 +45,7 @@ abstract class KqueueEventLoopBase : PosixEventLoop {
 		size_t m_changeCount = 0;
 		kevent_t[100] m_changes;
 		kevent_t[100] m_events;
+		bool m_forceLevelTriggered = false;
 	}
 
 	this()
@@ -101,7 +102,7 @@ abstract class KqueueEventLoopBase : PosixEventLoop {
 		kevent_t ev;
 		ev.ident = fd;
 		ev.flags = EV_ADD|EV_ENABLE;
-		if (edge_triggered) ev.flags |= EV_CLEAR;
+		if (edge_triggered && !m_forceLevelTriggered) ev.flags |= EV_CLEAR;
 		if (mask & EventMask.read) {
 			ev.filter = EVFILT_READ;
 			putChange(ev);
@@ -130,14 +131,14 @@ abstract class KqueueEventLoopBase : PosixEventLoop {
 		if (changes & EventMask.read) {
 			ev.filter = EVFILT_READ;
 			ev.flags = new_mask & EventMask.read ? EV_ADD : EV_DELETE;
-			if (edge_triggered) ev.flags |= EV_CLEAR;
+			if (edge_triggered && !m_forceLevelTriggered) ev.flags |= EV_CLEAR;
 			putChange(ev);
 		}
 
 		if (changes & EventMask.write) {
 			ev.filter = EVFILT_WRITE;
 			ev.flags = new_mask & EventMask.write ? EV_ADD : EV_DELETE;
-			if (edge_triggered) ev.flags |= EV_CLEAR;
+			if (edge_triggered && !m_forceLevelTriggered) ev.flags |= EV_CLEAR;
 			putChange(ev);
 		}
 
