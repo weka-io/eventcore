@@ -391,7 +391,7 @@ final class FSEventsEventDriverWatchers(Events : EventDriverEvents) : EventDrive
 
 		slot.stream = FSEventStreamCreate(null, &onFSEvent, () @trusted { return &ctx; } (),
 			paths, since_when, 0.1, kFSEventStreamCreateFlagFileEvents|kFSEventStreamCreateFlagNoDefer);
-		FSEventStreamScheduleWithRunLoop(slot.stream, CFRunLoopGetMain(), kCFRunLoopDefaultMode);
+		FSEventStreamScheduleWithRunLoop(slot.stream, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
 		FSEventStreamStart(slot.stream);
 
 		m_streamMap[cast(void*)slot.stream] = slot.id;

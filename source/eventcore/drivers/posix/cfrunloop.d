@@ -38,7 +38,7 @@ final class CFRunLoopEventLoop : KqueueEventLoopBase {
 
 		CFFileDescriptorEnableCallBacks(m_kqueueDescriptor, CFOptionFlags.kCFFileDescriptorReadCallBack);
 		m_kqueueSource = CFFileDescriptorCreateRunLoopSource(kCFAllocatorDefault, m_kqueueDescriptor, 0);
-		CFRunLoopAddSource(CFRunLoopGetMain(), m_kqueueSource, kCFRunLoopDefaultMode);
+		CFRunLoopAddSource(CFRunLoopGetCurrent(), m_kqueueSource, kCFRunLoopDefaultMode);
 	}
 
 	override bool doProcessEvents(Duration timeout)

@@ -851,7 +851,11 @@ final class PosixEventDriverSockets(Loop : PosixEventLoop) : EventDriverSockets 
 		}
 
 		scope src_addrc = new RefAddress(() @trusted { return cast(sockaddr*)&src_addr; } (), src_addr_len);
-		on_receive_finish(socket, IOStatus.ok, ret, src_addrc);
+		if (ret == 0) {
+			on_receive_finish(socket, IOStatus.disconnected, 0, src_addrc);
+		} else {
+			on_receive_finish(socket, IOStatus.ok, ret, src_addrc);
+		}
 	}
 
 	package void receiveNoGC(DatagramSocketFD socket, ubyte[] buffer, IOMode mode, void delegate(DatagramSocketFD, IOStatus, size_t, scope RefAddress) @safe nothrow @nogc on_receive_finish)
