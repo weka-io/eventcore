@@ -228,14 +228,30 @@ final class FSEventsEventDriverWatchers(Events : EventDriverEvents) : EventDrive
 
 	final override WatcherID watchDirectory(string path, bool recursive, FileChangesCallback on_change)
 	@trusted {
-		import std.path : absolutePath;
+		import std.file : isSymlink, readLink;
+		import std.path : absolutePath, buildPath, buildNormalizedPath, dirName, pathSplitter;
 
 		FSEventStreamContext ctx;
 		ctx.info = () @trusted { return cast(void*)this; } ();
 
+		static string resolveSymlinks(string path)
+		{
+			string res;
+			foreach (ps; path.pathSplitter) {
+				if (!res.length) res = ps;
+				else res = buildPath(res, ps);
+				if (isSymlink(res)) {
+					res = readLink(res).absolutePath(dirName(res));
+				}
+			}
+			return res.buildNormalizedPath;
+		}
+
 		string abspath;
-		try abspath = absolutePath(path);
-		catch (Exception e) assert(false, e.msg);
+		try abspath = resolveSymlinks(absolutePath(path));
+		catch (Exception e) {
+			return WatcherID.invalid;
+		}
 
 		if (m_handleCounter == 0) {
 			m_handleCounter++;
@@ -322,6 +338,13 @@ final class FSEventsEventDriverWatchers(Events : EventDriverEvents) : EventDrive
 		auto flagsarr = () @trusted { return eventFlags[0 .. numEvents]; } ();
 		auto idarr = () @trusted { return eventIds[0 .. numEvents]; } ();
 
+		if (flagsarr[0] & kFSEventStreamEventFlagHistoryDone) {
+			if (!--numEvents) return;
+			patharr = patharr[1 .. $];
+			flagsarr = flagsarr[1 .. $];
+			idarr = idarr[1 .. $];
+		}
+
 		// A new stream needs to be created after every change, because events
 		// get coalesced per file (event flags get or'ed together) and it becomes
 		// impossible to determine the actual event
@@ -359,8 +382,7 @@ final class FSEventsEventDriverWatchers(Events : EventDriverEvents) : EventDrive
 			// complex flags system to the three event types provided by
 			// eventcore
 			if (f & kFSEventStreamEventFlagItemRenamed) {
-				if (f & kFSEventStreamEventFlagItemCreated)
-					emit(FileChangeKind.removed);
+				if (!does_exist) emit(FileChangeKind.removed);
 				else emit(FileChangeKind.added);
 			} else if (f & kFSEventStreamEventFlagItemRemoved && !does_exist) {
 				emit(FileChangeKind.removed);
