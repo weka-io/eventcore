@@ -382,8 +382,7 @@ final class FSEventsEventDriverWatchers(Events : EventDriverEvents) : EventDrive
 			// complex flags system to the three event types provided by
 			// eventcore
 			if (f & kFSEventStreamEventFlagItemRenamed) {
-				if (f & kFSEventStreamEventFlagItemCreated)
-					emit(FileChangeKind.removed);
+				if (!does_exist) emit(FileChangeKind.removed);
 				else emit(FileChangeKind.added);
 			} else if (f & kFSEventStreamEventFlagItemRemoved && !does_exist) {
 				emit(FileChangeKind.removed);
