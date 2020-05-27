@@ -338,6 +338,13 @@ final class FSEventsEventDriverWatchers(Events : EventDriverEvents) : EventDrive
 		auto flagsarr = () @trusted { return eventFlags[0 .. numEvents]; } ();
 		auto idarr = () @trusted { return eventIds[0 .. numEvents]; } ();
 
+		if (flagsarr[0] & kFSEventStreamEventFlagHistoryDone) {
+			if (!--numEvents) return;
+			patharr = patharr[1 .. $];
+			flagsarr = flagsarr[1 .. $];
+			idarr = idarr[1 .. $];
+		}
+
 		// A new stream needs to be created after every change, because events
 		// get coalesced per file (event flags get or'ed together) and it becomes
 		// impossible to determine the actual event
