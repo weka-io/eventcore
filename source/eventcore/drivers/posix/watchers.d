@@ -228,14 +228,30 @@ final class FSEventsEventDriverWatchers(Events : EventDriverEvents) : EventDrive
 
 	final override WatcherID watchDirectory(string path, bool recursive, FileChangesCallback on_change)
 	@trusted {
-		import std.path : absolutePath;
+		import std.file : isSymlink, readLink;
+		import std.path : absolutePath, buildPath, buildNormalizedPath, dirName, pathSplitter;
 
 		FSEventStreamContext ctx;
 		ctx.info = () @trusted { return cast(void*)this; } ();
 
+		static string resolveSymlinks(string path)
+		{
+			string res;
+			foreach (ps; path.pathSplitter) {
+				if (!res.length) res = ps;
+				else res = buildPath(res, ps);
+				if (isSymlink(res)) {
+					res = readLink(res).absolutePath(dirName(res));
+				}
+			}
+			return res.buildNormalizedPath;
+		}
+
 		string abspath;
-		try abspath = absolutePath(path);
-		catch (Exception e) assert(false, e.msg);
+		try abspath = resolveSymlinks(absolutePath(path));
+		catch (Exception e) {
+			return WatcherID.invalid;
+		}
 
 		if (m_handleCounter == 0) {
 			m_handleCounter++;
