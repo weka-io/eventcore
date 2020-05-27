@@ -38,12 +38,36 @@ final class CFRunLoopEventLoop : KqueueEventLoopBase {
 
 	override bool doProcessEvents(Duration timeout)
 	@trusted {
+		import std.algorithm.comparison : min;
+
 		// submit changes and process pending events
 		auto kres = doProcessEventsBase(0.seconds);
+		if (kres) timeout = 0.seconds;
 
-		CFTimeInterval to = kres ? 0.0 : 1e-7 * timeout.total!"hnsecs";
-		auto res = CFRunLoopRunInMode(kCFRunLoopDefaultMode, to, true);
-		return kres || res == CFRunLoopRunResult.kCFRunLoopRunHandledSource;
+		// NOTE: the timeout per CFRunLoopRunInMode call is limited to one
+		//       second to work around the issue that the kqueue CFFileDescriptor
+		//       sometimes does not fire. There seems to be some kind of race-
+		//       condition, between the edge-triggered kqueue events and
+		//       CFFileDescriptorEnableCallBacks/CFRunLoopRunInMode.
+		//
+		//       Even changing the order of calls in processKqueue to first
+		//       re-enable the callbacks and *then* process the already pending
+		//       events does not help (and is also eplicitly discouraged in
+		//       Apple's documentation).
+		while (timeout > 0.seconds) {
+			auto tol = min(timeout, 1.seconds);
+			timeout -= tol;
+			CFTimeInterval to = 1e-7 * tol.total!"hnsecs";
+			auto res = CFRunLoopRunInMode(kCFRunLoopDefaultMode, to, true);
+			if (res != CFRunLoopRunResult.kCFRunLoopRunTimedOut) {
+				return kres || res == CFRunLoopRunResult.kCFRunLoopRunHandledSource;
+			}
+
+			kres = doProcessEventsBase(0.seconds);
+			if (kres) break;
+		}
+
+		return kres;
 	}
 
 	override void dispose()
