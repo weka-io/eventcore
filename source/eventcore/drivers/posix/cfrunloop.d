@@ -31,7 +31,6 @@ final class CFRunLoopEventLoop : KqueueEventLoopBase {
 		m_kqueueDescriptor = CFFileDescriptorCreate(kCFAllocatorDefault,
 			m_queue, false, &processKqueue, &ctx);
 
-		CFFileDescriptorEnableCallBacks(m_kqueueDescriptor, CFOptionFlags.kCFFileDescriptorReadCallBack);
 		m_kqueueSource = CFFileDescriptorCreateRunLoopSource(kCFAllocatorDefault, m_kqueueDescriptor, 0);
 		CFRunLoopAddSource(CFRunLoopGetCurrent(), m_kqueueSource, kCFRunLoopDefaultMode);
 	}
@@ -39,6 +38,8 @@ final class CFRunLoopEventLoop : KqueueEventLoopBase {
 	override bool doProcessEvents(Duration timeout)
 	@trusted {
 		import std.algorithm.comparison : min;
+
+		CFFileDescriptorEnableCallBacks(m_kqueueDescriptor, CFOptionFlags.kCFFileDescriptorReadCallBack);
 
 		// submit changes and process pending events
 		auto kres = doProcessEventsBase(0.seconds);
@@ -55,7 +56,7 @@ final class CFRunLoopEventLoop : KqueueEventLoopBase {
 		//       events does not help (and is also eplicitly discouraged in
 		//       Apple's documentation).
 		while (timeout > 0.seconds) {
-			auto tol = min(timeout, 1.seconds);
+			auto tol = min(timeout, 5.seconds);
 			timeout -= tol;
 			CFTimeInterval to = 1e-7 * tol.total!"hnsecs";
 			auto res = CFRunLoopRunInMode(kCFRunLoopDefaultMode, to, true);
@@ -63,6 +64,7 @@ final class CFRunLoopEventLoop : KqueueEventLoopBase {
 				return kres || res == CFRunLoopRunResult.kCFRunLoopRunHandledSource;
 			}
 
+			CFFileDescriptorEnableCallBacks(m_kqueueDescriptor, CFOptionFlags.kCFFileDescriptorReadCallBack);
 			kres = doProcessEventsBase(0.seconds);
 			if (kres) break;
 		}
@@ -83,7 +85,6 @@ final class CFRunLoopEventLoop : KqueueEventLoopBase {
 		CFOptionFlags callBackTypes, void* info)
 	{
 		auto this_ = () @trusted { return cast(CFRunLoopEventLoop)info; } ();
-		auto res = this_.doProcessEventsBase(0.seconds);
-		() @trusted { CFFileDescriptorEnableCallBacks(this_.m_kqueueDescriptor, CFOptionFlags.kCFFileDescriptorReadCallBack); } ();
+		this_.doProcessEventsBase(0.seconds);
 	}
 }
