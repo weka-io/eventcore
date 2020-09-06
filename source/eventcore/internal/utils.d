@@ -187,11 +187,15 @@ struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
 	int opApply(scope int delegate(size_t idx, ref T) @safe nothrow del)
 	{
 		size_t idx = 0;
+		outer: 
 		foreach (c; m_chunks) {
 			if (c) {
-				foreach (i, ref t; *c)
+				foreach (i, ref t; *c) {
 					if (auto ret = del(idx+i, t))
 						return ret;
+					if (i + idx >= length)
+						break outer;
+				}
 			}
 			idx += chunkSize;
 		}
@@ -201,11 +205,15 @@ struct ChoppedVector(T, size_t CHUNK_SIZE = 16*64*1024/nextPOT(T.sizeof)) {
 	int opApply(scope int delegate(size_t idx, ref const(T)) @safe nothrow del)
 	const {
 		size_t idx = 0;
+		outer: 
 		foreach (c; m_chunks) {
 			if (c) {
-				foreach (i, ref t; *c)
+				foreach (i, ref t; *c) {
 					if (auto ret = del(idx+i, t))
 						return ret;
+					if (i + idx >= length)
+						break outer;
+				}
 			}
 			idx += chunkSize;
 		}
