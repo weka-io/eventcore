@@ -141,6 +141,10 @@ final class InotifyEventDriverWatchers(Events : EventDriverEvents) : EventDriver
 
 				auto subdir = w.watcherPaths[ev.wd];
 
+				// IN_MODIFY for directories reports the added/removed file instead of the directory itself
+				if (ev.mask == (IN_MODIFY|IN_ISDIR))
+					name = null;
+
 				if (w.recursive && ev.mask & (IN_CREATE|IN_MOVED_TO) && ev.mask & IN_ISDIR) {
 					auto subpath = subdir == "" ? name.idup : buildPath(subdir, name);
 					addWatch(id, w.basePath, subpath);
