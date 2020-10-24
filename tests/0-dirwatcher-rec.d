@@ -80,6 +80,8 @@ void testCallback(WatcherID w, in ref FileChange ch)
 @safe nothrow {
 	assert(w == watcher, "Wrong watcher generated a change");
 	pendingChanges ~= ch;
+	// the name is accesible scope-only!
+	pendingChanges[$-1].name = pendingChanges[$-1].name.dup;
 }
 
 void dropChanges(Duration dur)
@@ -101,8 +103,27 @@ void dropChanges(Duration dur)
 	pendingChanges = null;
 }
 
+void skipDirectoryChanges()
+{
+	// ignore different directory modification notifications on Windows as
+	// opposed to the other systems
+	while (pendingChanges.length) {
+		auto pch = pendingChanges[0];
+		if (pch.kind == FileChangeKind.modified) {
+			auto p = buildPath(pch.baseDirectory, pch.directory, pch.name);
+			if (!exists(p) || isDir(p)) {
+				pendingChanges = pendingChanges[1 .. $];
+				continue;
+			}
+		}
+		break;
+	}
+}
+
 void expectChange(FileChange ch, bool expect_change)
 {
+	skipDirectoryChanges();
+
 	auto starttime = MonoTime.currTime();
 	again: while (!pendingChanges.length) {
 		auto er = eventDriver.core.processEvents(100.msecs);
@@ -121,19 +142,7 @@ void expectChange(FileChange ch, bool expect_change)
 			return;
 		}
 
-		// ignore different directory modification notifications on Windows as
-		// opposed to the other systems
-		while (pendingChanges.length) {
-			auto pch = pendingChanges[0];
-			if (pch.kind == FileChangeKind.modified) {
-				auto p = buildPath(pch.baseDirectory, pch.directory, pch.name);
-				if (!exists(p) || isDir(p)) {
-					pendingChanges = pendingChanges[1 .. $];
-					continue;
-				}
-			}
-			break;
-		}
+		skipDirectoryChanges();
 	}
 	assert(expect_change, "Got change although none was expected.");
 
