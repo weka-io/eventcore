@@ -9,7 +9,7 @@ The API documentation is part of vibe.d:
 - [Experimental `eventcore.socket`](https://vibed.org/api/eventcore.socket/)
 
 [![DUB Package](https://img.shields.io/dub/v/eventcore.svg)](https://code.dlang.org/packages/eventcore)
-[![Posix Build Status](https://travis-ci.org/vibe-d/eventcore.svg?branch=master)](https://travis-ci.org/vibe-d/eventcore)
+[![Posix Build Status](https://api.travis-ci.com/vibe-d/eventcore.svg?branch=master)](https://travis-ci.com/github/vibe-d/eventcore)
 [![Windows Build Status](https://ci.appveyor.com/api/projects/status/1a9r8sypyy9fq2j8/branch/master?svg=true)](https://ci.appveyor.com/project/s-ludwig/eventcore)
 
 
